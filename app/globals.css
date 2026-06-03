@@ -1,0 +1,408 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   ROOT DESIGN TOKENS — Luxury Monochrome with Depth
+   ========================================================= */
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --muted: 213 4% 42%;
+    --muted-foreground: 0 0% 80%;
+    --accent: 180 2% 80%;
+    --accent-foreground: 0 0% 0%;
+    --border: 0 0% 100% / 0.08;
+    --ring: 180 2% 80%;
+
+    --radius-sm: 6px;
+    --radius:    12px;
+    --radius-lg: 20px;
+
+    /* Page-wide vertical depth gradient (vh-relative anchors) */
+    --depth-deep:  #000000;  /* obsidian       — hero,  cta */
+    --depth-mid:   #06070a;  /* deep navy-grey — stats, services */
+    --depth-warm:  #0a0807;  /* charcoal warm  — why,   projects */
+    --depth-cool:  #07080c;  /* steel ink      — offers, testimonials */
+  }
+
+  * {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  html {
+    background-color: #000000;
+    color: #ffffff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  /* ──────────────────────────────────────────────────────
+     BODY — multi-layer cinematic background
+     ────────────────────────────────────────────────────── */
+  body {
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+    color: #ffffff;
+    background-color: #000000;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+
+    /* Vertical depth gradient — page scrolls through 4 tonal zones */
+    background-image:
+      /* Top — slight platinum bloom from hero */
+      radial-gradient(ellipse 90% 40% at 50% 0%, rgba(203,205,205,0.07), transparent 70%),
+
+      /* Right side — cool steel pool */
+      radial-gradient(ellipse 50% 30% at 95% 35%, rgba(102,106,110,0.06), transparent 70%),
+
+      /* Left side — warm subtle bloom */
+      radial-gradient(ellipse 50% 30% at 0% 65%, rgba(140,120,100,0.04), transparent 70%),
+
+      /* Bottom — fade back to deep platinum hint */
+      radial-gradient(ellipse 90% 40% at 50% 100%, rgba(203,205,205,0.05), transparent 70%),
+
+      /* Vertical wash that creates the section-to-section tonal shift */
+      linear-gradient(
+        180deg,
+        #000000 0%,
+        #050608 20%,
+        #07080b 40%,
+        #08070a 60%,
+        #060708 80%,
+        #000000 100%
+      );
+    background-attachment: fixed;
+  }
+
+  /* Ambient floating noise layer over entire page (very subtle) */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+  }
+
+  ::selection {
+    background-color: #cbcdcd;
+    color: #000000;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #666a6e, #cbcdcd);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #cbcdcd; }
+
+  [dir="rtl"] { font-family: var(--font-arabic), system-ui, sans-serif; }
+  [dir="rtl"] .reversible-icon { transform: scaleX(-1); }
+
+  /* Lenis smooth scroll integration */
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth { scroll-behavior: auto !important; }
+  .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+  .lenis.lenis-stopped { overflow: hidden; }
+  .lenis.lenis-scrolling iframe { pointer-events: none; }
+}
+
+/* =========================================================
+   COMPONENT LAYER — Reusable luxury primitives
+   ========================================================= */
+@layer components {
+
+  /* GLASS PANELS */
+  .glass {
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.06),
+      0 8px 40px -12px rgba(0,0,0,0.6);
+  }
+
+  .glass-strong {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    backdrop-filter: blur(32px) saturate(160%);
+    -webkit-backdrop-filter: blur(32px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+
+  /* METALLIC TEXT */
+  .text-metallic {
+    background: linear-gradient(110deg, #cbcdcd 0%, #ffffff 35%, #666a6e 55%, #cbcdcd 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 6s linear infinite;
+  }
+
+  .hairline {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    height: 1px;
+  }
+
+  /* ──────────────────────────────────────────────────────
+     SECTION — vertical rhythm + transparent so body bg
+     gradient bleeds through. NO solid bg-obsidian!
+     ────────────────────────────────────────────────────── */
+  .section {
+    position: relative;
+    padding-top: 6rem;
+    padding-bottom: 6rem;
+  }
+  
+  @media (min-width: 768px) {
+    .section {
+      padding-top: 8rem;
+      padding-bottom: 8rem;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .section {
+      padding-top: 10rem;
+      padding-bottom: 10rem;
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────
+     SECTION SEAM — invisible glue between sections.
+     A thin gradient hairline + soft fade above and below
+     gives the eye a moment of breath without breaking
+     the dark continuity.
+     ────────────────────────────────────────────────────── */
+  .section-seam-top::before,
+  .section-seam-bottom::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(203,205,205,0.10) 20%,
+      rgba(203,205,205,0.18) 50%,
+      rgba(203,205,205,0.10) 80%,
+      transparent 100%
+    );
+  }
+  .section-seam-top::before    { top: 0; }
+  .section-seam-bottom::after  { bottom: 0; }
+
+  /* Soft top/bottom fade-into-darkness for sections */
+  .section-fade-top {
+    mask-image: linear-gradient(180deg, transparent 0%, black 8%, black 100%);
+  }
+  .section-fade-bottom {
+    mask-image: linear-gradient(180deg, black 0%, black 92%, transparent 100%);
+  }
+
+  /* GRID lines */
+  .grid-lines::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 80px 80px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black, transparent);
+    pointer-events: none;
+  }
+
+  /* NOISE overlay */
+  .noise {
+    position: relative;
+  }
+  .noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.15 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.25;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+    animation: grain 7s steps(6) infinite;
+  }
+
+  /* SPOTLIGHT — hover-reactive */
+  .spotlight {
+    position: relative;
+    isolation: isolate;
+  }
+  .spotlight::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: radial-gradient(
+      600px circle at var(--mx, 50%) var(--my, 50%),
+      rgba(203,205,205,0.12),
+      transparent 40%
+    );
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .spotlight:hover::before { opacity: 1; }
+
+  .btn-magnetic {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding-left: 1.75rem;
+    padding-right: 1.75rem;
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+    font-weight: 500;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-primary {
+    color: #000000;
+    background: linear-gradient(135deg, #ffffff 0%, #cbcdcd 50%, #ffffff 100%);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.4),
+      0 10px 40px -10px rgba(203,205,205,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.8);
+    border-radius: 999px;
+  }
+  .btn-primary:hover {
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.6),
+      0 14px 60px -8px rgba(203,205,205,0.7),
+      inset 0 1px 0 rgba(255,255,255,1);
+  }
+
+  .btn-ghost {
+    color: #ffffff;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px;
+    backdrop-filter: blur(12px);
+  }
+  .btn-ghost:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.3);
+  }
+
+  .link-magnetic {
+    position: relative;
+    display: inline-block;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    font-size: 0.875rem;
+    letter-spacing: 0.1em;
+  }
+  .link-magnetic::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 1px;
+    width: 100%;
+    background: currentColor;
+    transform-origin: right;
+    transform: scaleX(0);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .link-magnetic:hover::after {
+    transform-origin: left;
+    transform: scaleX(1);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    font-weight: 500;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    color: #cbcdcd;
+  }
+
+  .marquee-track {
+    display: flex;
+    gap: 4rem;
+    width: max-content;
+    animation: marquee 38s linear infinite;
+  }
+}
+
+/* =========================================================
+   UTILITY LAYER
+   ========================================================= */
+@layer utilities {
+  .balance { text-wrap: balance; }
+  .pretty  { text-wrap: pretty; }
+
+  .mask-fade-b { mask-image: linear-gradient(180deg, black 60%, transparent 100%); }
+  .mask-fade-t { mask-image: linear-gradient(180deg, transparent 0%, black 40%); }
+  .mask-fade-x { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
+
+  /* ──────────────────────────────────────────────────────
+     Subtle section background tints — pick per section to
+     create the sense of moving through different chambers.
+     ────────────────────────────────────────────────────── */
+  .bg-zone-cool {
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(102,106,110,0.08), transparent 70%),
+      radial-gradient(ellipse 50% 35% at 10% 80%, rgba(60,70,80,0.06), transparent 70%);
+  }
+  .bg-zone-warm {
+    background:
+      radial-gradient(ellipse 55% 35% at 20% 20%, rgba(140,120,100,0.05), transparent 70%),
+      radial-gradient(ellipse 50% 30% at 85% 70%, rgba(120,100,90,0.04), transparent 70%);
+  }
+  .bg-zone-platinum {
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 0%, rgba(203,205,205,0.06), transparent 70%),
+      radial-gradient(ellipse 40% 30% at 50% 100%, rgba(203,205,205,0.04), transparent 70%);
+  }
+
+  /* Glow orb utility — big blurred circular light source */
+  .glow-orb {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    filter: blur(120px);
+  }
+
+  .cursor-luxury { cursor: none; }
+
+  @media (hover: none) {
+    .cursor-luxury-ring,
+    .cursor-luxury-dot { display: none !important; }
+  }
+}
+
+/* =========================================================
+   FONT FALLBACK FACES
+   ========================================================= */
+html, body { font-family: var(--font-sans), system-ui, -apple-system, sans-serif; }
+html[lang="ar"] body { font-family: var(--font-arabic), system-ui, sans-serif; }

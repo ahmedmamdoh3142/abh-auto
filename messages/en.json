@@ -1,0 +1,1044 @@
+{
+  "brand": {
+    "name": "ABH AUTO",
+    "tagline": "Luxury Automotive Protection"
+  },
+  "nav": {
+    "home": "Home",
+    "services": "Services",
+    "booking": "Book Now",
+    "offers": "Offers",
+    "projects": "Projects",
+    "testimonials": "Testimonials",
+    "about": "About",
+    "faq": "FAQ",
+    "contact": "Contact",
+    "login": "Login",
+    "cta": "Book Protection"
+  },
+  "hero": {
+    "eyebrow": "Est. 2022 · Jeddah",
+    "brandLine": "ABH AUTO",
+    "tagline": "Protection and Care, Refined",
+    "subline": "Professional ceramic coatings, paint protection film, and precision detailing — delivered by private appointment.",
+    "cta_primary": "Book an Appointment",
+    "scroll": "Scroll",
+    "cta_secondary": "Explore Services",
+    "discover": "Discover More"
+  },
+  "stats": {
+    "cars": "Cars Protected",
+    "clients": "Happy Clients",
+    "cities": "City Served",
+    "years": "Years of Experience",
+    "eyebrow": "By the Numbers",
+    "title": "A Standard You Can Measure"
+  },
+  "marquee": [
+    "Nano Ceramic",
+    "Paint Protection Film",
+    "Armored Protection",
+    "Precision Detailing",
+    "Smart Tracking",
+    "Luxury Interior Care"
+  ],
+  "banner": {
+    "highlight": "Limited Opening Offers",
+    "title": "Grand Opening — Up to 40% Off",
+    "copy": "To mark our opening, selected packages are available at special rates across ceramic coatings, paint protection film, and full-care services. Limited time, by appointment only.",
+    "cta": "Reserve Now",
+    "ends": "Offer Ends In",
+    "badgeUp": "UP TO",
+    "badgeOff": "OFF",
+    "eyebrow": "GRAND OPENING"
+  },
+  "offers": {
+    "eyebrow": "SELECTED OFFERS",
+    "title": "Signature Packages",
+    "subtitle": "Practical, carefully built programs for owners who expect a premium result and a smooth experience.",
+    "badge": "LIMITED",
+    "items": [
+      {
+        "title": "Luxury Ceramic Suite",
+        "copy": "Deep gloss, easier maintenance, and a refined finish delivered with expert application.",
+        "discount": "-25%"
+      },
+      {
+        "title": "Summer Shield Program",
+        "copy": "A smart choice for heat, UV exposure, and dust — with enhanced interior care.",
+        "discount": "-18%"
+      },
+      {
+        "title": "Elite Membership",
+        "copy": "Priority booking, dedicated follow-up, and year-round advisory support.",
+        "discount": "VIP"
+      }
+    ],
+    "viewAll": "View All Offers",
+    "campaign": "Limited Campaign",
+
+
+"navHome": "Home",
+  "navOffers": "Offers",
+ 
+  "subA": "Signature",
+  "subItalic": "campaigns",
+  "segCar": "Single car",
+  "segFleet": "Fleet",
+ 
+  "offersEyebrow": "THE PACKAGES",
+  "offersTitle": "Three Tiers. One Standard.",
+  "offersSub": "Choose the tier your car deserves. Tap any package to open its full details.",
+ 
+  "from": "From",
+  "currency": "SAR",
+  "onRequest": "On request",
+  "recommended": "Most chosen",
+  "open": "Package details",
+  "reserve": "Reserve package",
+ 
+  "cmpEyebrow": "COMPARE PACKAGES",
+  "inclH": "What's included",
+  "worksH": "How it works",
+  "mClose": "Close",
+ 
+  "ctaEyebrow": "INVITATION",
+  "ctaLine": "Choose your package.",
+  "ctaSub": "Leave the rest to us.",
+  "ctaPrimary": "Book a consultation",
+  "ctaSecondary": "Speak to an advisor",
+ 
+  "detail": [
+    {
+      "name": "Summer Shield Program",
+      "copy": "UV-rated ceramic + full interior conditioning for desert climates.",
+      "lead": "Engineered for the harshness of the Gulf summer — protecting paint from UV, conditioning the cabin against heat, with a hydrophobic layer that keeps the car cleaner for longer.",
+      "feats": ["UV-rated ceramic","Full interior prep","Heat protection","One maintenance session"],
+      "incl": ["UV ceramic layer, 3-year warranty","Full interior deep-clean & wrap","Leather & surface treatment","Hydrophobic glass coating","Full technical inspection","Free maintenance session at 6 months"],
+      "steps": [
+        ["Intake & assessment","Paint and interior condition inspected and documented."],
+        ["Preparation","Detailed wash, decontamination, old wax removal."],
+        ["Application","UV-resistant ceramic layer + interior conditioning."],
+        ["Delivery","Final inspection under light + warranty card."]
+      ],
+      "terms": "Limited-time offer. Prices start from the figure shown and vary by vehicle size and condition."
+    },
+    {
+      "name": "Diamond Ceramic Suite",
+      "copy": "12-year nano-ceramic with optical clarity and a self-healing topcoat.",
+      "lead": "The finest we offer. A 12-layer nano-ceramic system applied in a cleanroom — unmatched optical depth and protection documented for ten years.",
+      "feats": ["12-layer nano-ceramic","10-year warranty","Self-healing topcoat","Class-1000 cleanroom","Multi-stage correction"],
+      "incl": ["Multi-stage paint correction","12 nano-ceramic layers","Self-healing topcoat","Class-1000 cleanroom application","Independent UV rating","10-year manufacturer warranty","Documented dossier with the car","Two annual maintenance sessions"],
+      "steps": [
+        ["Diagnosis & documentation","Every panel inspected under polarized light, state photographed."],
+        ["Correction","Scratches and swirls removed across three stages."],
+        ["Application","12 ceramic layers, 12-hour cure per coat."],
+        ["Final inspection","Reviewed under light, documented dossier delivered."]
+      ],
+      "terms": "The most chosen among our clients. Prices start from the figure shown and are finalized after assessment."
+    },
+    {
+      "name": "Elite Membership",
+      "copy": "Annual access to a private technician team, valet pickup and global insurance.",
+      "lead": "Not a package — a relationship. Unlimited annual access to the atelier, a team dedicated to your cars, and a concierge that handles everything, wherever you are.",
+      "feats": ["Dedicated technician team","Valet pickup & delivery","Global coverage","Absolute booking priority","Work insured"],
+      "incl": ["Unlimited sessions per year","Dedicated team for your collection","Private valet pickup & delivery","Direct  line, 24/7","Absolute booking priority","International coverage & pickup","All work fully insured","Invitations to private events"],
+      "steps": [
+        ["Private conversation","An introductory session to understand your collection."],
+        ["Programming","A bespoke annual plan designed per car."],
+        ["Activation","Your dedicated team and  are assigned, and service begins."],
+        ["Stewardship","Ongoing management and periodic reports per car."]
+      ],
+      "terms": "Membership is by invitation and assessment. Value is set by collection size and scope of service."
+    }
+  ],
+ 
+  "cmp": {
+    "tiers": ["Summer","Diamond","Elite"],
+    "rows": [
+      ["Manufacturer warranty","3 yrs","10 yrs","10 yrs+"],
+      ["Ceramic layers","—","12","Bespoke"],
+      ["Cleanroom","no","yes","yes"],
+      ["Valet service","no","no","yes"],
+      ["Global coverage","no","no","yes"],
+      ["24/7  access","no","no","yes"]
+    ]
+  },
+
+  "save": "Save",
+    "off": "Off",
+    "allTitle": "The full collection",
+    "all": [
+      {
+        "tag": "Seasonal",
+        "title": "Summer Ceramic Shield",
+        "copy": "UV-rated ceramic with hydrophobic glass — built for the Gulf summer.",
+        "discount": "18% Off"
+      },
+      {
+        "tag": "Flagship",
+        "title": "Diamond Protection Suite",
+        "copy": "A twelve-layer nano-ceramic system applied in a class-1000 cleanroom.",
+        "discount": "25% Off"
+      },
+      {
+        "tag": "Film",
+        "title": "Full-Body Paint Film",
+        "copy": "Bumper-to-bumper self-healing PPF, precision-cut and near invisible.",
+        "discount": "15% Off"
+      },
+      {
+        "tag": "Bundle",
+        "title": "Ceramic + Tint Bundle",
+        "copy": "9H ceramic paired with IR-rejecting ceramic window film.",
+        "discount": "20% Off"
+      },
+      {
+        "tag": "Interior",
+        "title": "Cabin Revival",
+        "copy": "Full interior steam, leather conditioning and ceramic fabric guard.",
+        "discount": "12% Off"
+      },
+      {
+        "tag": "Wheels",
+        "title": "Wheel & Caliper Ceramic",
+        "copy": "Heat-resistant ceramic on wheel faces, barrels and calipers.",
+        "discount": "22% Off"
+      }
+    ]
+  },
+  "services": {
+    "eyebrow": "OUR DISCIPLINE",
+    "title": "Multiple Services. One Commitment to Excellence",
+    "subtitle": "Every service is delivered in a controlled environment using carefully selected materials and tools.",
+    "items": [
+      {
+        "slug": "ceramic",
+        "title": "Nano Ceramic Coating",
+        "blurb": "Clearer gloss. Easier upkeep. Long-lasting protection.",
+        "long": "A multi-layer ceramic system applied in a controlled environment to enhance gloss, improve surface behavior, and simplify day-to-day care.",
+        "benefits": [
+          "Long-term protection",
+          "Easier maintenance",
+          "Clearer gloss",
+          "Controlled application environment"
+        ]
+      },
+      {
+        "slug": "ppf",
+        "title": "Paint Protection Film",
+        "blurb": "Transparent defense against chips and daily wear.",
+        "long": "Precision-cut transparent film designed to reduce the impact of road debris, light scratches, and everyday wear while keeping the finish visually clean.",
+        "benefits": [
+          "Custom-cut per vehicle",
+          "Nearly invisible finish",
+          "Resists light abrasion",
+          "Clean surface appearance"
+        ]
+      },
+      {
+        "slug": "armor",
+        "title": "Armored Protection",
+        "blurb": "Advanced security solutions with careful integration.",
+        "long": "Ballistic and engineered protection solutions for vehicles that require a higher level of security, delivered with attention to appearance and driving dynamics.",
+        "benefits": [
+          "Specialized security options",
+          "Visually balanced integration",
+          "Precise engineering",
+          "Tailored consultation"
+        ]
+      },
+      {
+        "slug": "tracking",
+        "title": "Smart Tracking Systems",
+        "blurb": "Quiet monitoring with reliable alerts.",
+        "long": "Advanced tracking systems that support monitoring and remote control, helping owners stay informed and confident in daily use and travel.",
+        "benefits": [
+          "Real-time alerts",
+          "Remote control",
+          "Low-profile installation",
+          "Built for daily use"
+        ]
+      },
+      {
+        "slug": "security",
+        "title": "Smart Security Systems",
+        "blurb": "Safer access, smarter control.",
+        "long": "Smart security upgrades such as biometric ignition, mobile control, and additional protection layers installed with care and without disturbing the cabin’s design.",
+        "benefits": [
+          "Biometric ignition",
+          "Mobile control",
+          "Additional protection",
+          "Factory look preserved"
+        ]
+      },
+      {
+        "slug": "detailing",
+        "title": "Luxury Detailing",
+        "blurb": "A refined finish for exceptional cars.",
+        "long": "Multi-stage paint correction, precise interior care, and finishing work that helps the vehicle feel as composed as the day it left the showroom.",
+        "benefits": [
+          "Multi-stage correction",
+          "Interior care",
+          "Refined finishing",
+          "Measured results"
+        ]
+      }
+    ],
+    "open": "Open Service",
+    "request": "Request This Service",
+    "viewAll": "View All Services",
+    "discover": "Discover"
+  },
+  "why": {
+    "eyebrow": "WHY ABH AUTO",
+    "title": "Trust Before Hype",
+    "subtitle": "We rely on hands-on experience, selected materials, and results you can see at delivery.",
+    "items": [
+      {
+        "title": "Real Experience",
+        "copy": "Daily hands-on work with a wide range of vehicles and expectations."
+      },
+      {
+        "title": "Precise Execution",
+        "copy": "Each stage is reviewed carefully from preparation to handover."
+      },
+      {
+        "title": "Protection That Lasts",
+        "copy": "Solutions designed to preserve the vehicle’s appearance over time."
+      },
+      {
+        "title": "Trusted Quality",
+        "copy": "Carefully selected materials and consistent workmanship."
+      },
+      {
+        "title": "Detail Driven",
+        "copy": "The real difference lives in the small details, and we treat them that way."
+      }
+    ],
+    "badge": "Inside the Workshop",
+    "promise": "The ABH Promise",
+    "indoor": "Indoor Installation",
+    "warranty": "Manufacturer Warranty",
+    "warrantyYears": "Years",
+    "accredited": "Approved materials and methods"
+  },
+  "projects": {
+    "eyebrow": "RECENT WORK",
+    "title": "Selected Workshop Projects",
+    "subtitle": "A curated selection of recent work that reflects our level of execution.",
+    "viewAll": "View Archive",
+    "chapter": "Chapter",
+
+"metaCars": "Cars entrusted",
+  "metaEst": "Established",
+  "metaProjects": "Published projects",
+ 
+  "archiveEyebrow": "THE GALLERY",
+  "archiveTitle": "Selected Workshop Work",
+  "archiveSub": "A curated set of recently completed projects. Tap any card to open its dossier.",
+  "open": "Open project",
+ 
+  "ctaEyebrow": "INVITATION",
+  "ctaLine": "Bring us the car.",
+  "ctaSub": "We will do the rest.",
+  "ctaPrimary": "Reserve a private viewing",
+  "ctaSecondary": "Speak to an advisor",
+ 
+  "mChapter": "Chapter",
+  "mBefore": "Before",
+  "mAfter": "After",
+  "mBeforeCap": "State on arrival",
+  "mAfterCap": "After completion",
+  "mClose": "Close",
+  "mLead": "It arrived with paint worn thin by the years. It left with new optical depth and protection honored in writing. This is what happened between the two doors.",
+  "mSpecsH": "Specification",
+  "mWorkH": "What happened in the atelier",
+  "mView": "Reserve a project like this",
+  "mSpecs": [["Duration","240 hrs"],["Layers","12"],["Warranty","10 yrs"],["Bay","Private"]],
+  "mSteps": [
+    ["Diagnosis & documentation","Every panel inspected under polarized light; the initial state fully photographed."],
+    ["Multi-stage correction","Micro-scratches and swirls removed across three measured stages."],
+    ["Nano-ceramic application","12 layers in a cleanroom, with a 12-hour cure per coat."],
+    ["Final inspection","Reviewed under light; the documented dossier delivered with the car."]
+  ]
+  },
+  "testimonials": {
+    "eyebrow": "CLIENT FEEDBACK",
+    "title": "From Owners We’re Proud to Serve",
+    "subtitle": "Selected words from clients who experienced the service and recommend it with confidence."
+  },
+  "faq": {
+    "eyebrow": "FREQUENTLY ASKED",
+    "title": "Common Questions",
+    "items": [
+      {
+        "q": "What warranty do you offer?",
+        "a": "Warranty length depends on the service and package, and we confirm it in writing before work begins."
+      },
+      {
+        "q": "How long does ceramic coating last?",
+        "a": "That depends on the package, the way the car is used, and how well post-installation care is followed."
+      },
+      {
+        "q": "How long does the work take?",
+        "a": "Timing varies by service type and project scope, and we confirm the schedule before booking."
+      },
+      {
+        "q": "Does the car need special care after installation?",
+        "a": "We provide simple, clear aftercare guidance to help preserve the result."
+      },
+      {
+        "q": "How is pricing determined?",
+        "a": "Pricing depends on the vehicle, the scope of work, and the selected package, all discussed in advance."
+      },
+      {
+        "q": "Do you offer pickup and delivery?",
+        "a": "Yes — pickup, delivery, and special scheduling are available by arrangement."
+      }
+    ],
+    "subtitle": "Quick answers to the most common questions about services, warranty, and scheduling."
+  },
+  "cta": {
+    "eyebrow": "GET STARTED",
+    "title_a": "Your Vehicle",
+    "title_b": "Deserves Better",
+    "title": "Your Vehicle Deserves Better",
+    "primary": "Book a Consultation",
+    "secondary": "Speak to an Advisor",
+    "advisor": "or speak to an advisor"
+  },
+  "footer": {
+    "tagline": "ABH AUTO — a specialized centre for luxury automotive protection through ceramic coatings, paint protection film, security solutions, and precision detailing.",
+    "explore": "Explore",
+    "company": "Company",
+    "contact": "Contact",
+    "hours": "By appointment only. Sunday through Thursday, 9:00 to 22:00 Saudi time. Saturdays by special arrangement.",
+    "hoursValue": "Sun – Thu · 9:00 – 22:00",
+    "subscribe": "Subscribe to the workshop journal",
+    "subscribePlaceholder": "Your email address",
+    "subscribeButton": "Subscribe",
+    "rights": "All rights reserved.",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "newsletterEyebrow": "Workshop Journal",
+    "newsletterTitle": "Selected notes from the workshop, four times a year.",
+    "newsletterCopy": "New materials, behind-the-scenes updates, and private invitations to limited appointments. No noise.",
+    "newsletterDisclaimer": "By subscribing, you agree to our privacy policy.",
+    "brandCopy": "A specialized centre for protecting and preserving standout vehicles, with ceramic, paint protection, security, and detailing programmes delivered with the discretion the car deserves.",
+    "atelier": "Workshop",
+    "phone": "Phone",
+    "email": "Email",
+    "connect": "Connect"
+  },
+  "login": {
+    "eyebrow": "PRIVATE ACCESS",
+    "email": "Email Address",
+    "password": "Password",
+    "remember": "Keep me signed in",
+    "forgot": "Forgot password?",
+    "submit": "Sign In",
+    "signInTab": "Sign In",
+    "registerTab": "Create Account",
+    "signInTitle": "Member Portal",
+    "signInSubtitle": "Access vehicle dossiers, service history, and advisor follow-up.",
+    "registerTitle": "Create Your Account",
+    "registerSubtitle": "Set up your member profile once — we'll remember it every time you reserve.",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Your full name",
+    "emailPlaceholder": "your@email.com",
+    "passwordPlaceholder": "Your password",
+    "createPasswordPlaceholder": "Create a password",
+    "phone": "Phone",
+    "phonePlaceholder": "+966 5X XXX XXXX",
+    "city": "City",
+    "cityPlaceholder": "Select city",
+    "createAccount": "Create Account",
+    "signingIn": "Signing in…",
+    "creating": "Creating your account…",
+    "show": "Show password",
+    "hide": "Hide password",
+    "noAccount": "New to ABH Auto?",
+    "createLink": "Create an account",
+    "haveAccount": "Already a member?",
+    "signInLink": "Sign in",
+    "invalidCredentials": "That email and password don't match. Please try again.",
+    "welcome": "Welcome",
+    "entering": "Entering the atelier…",
+    "legal": "Protected access. By continuing you agree to our Terms and Privacy Policy.",
+    "forgotTitle": "Reset Password",
+    "forgotSubtitle": "Enter your email and we'll send you a secure link to reset your password.",
+    "forgotSubmit": "Send Reset Link",
+    "forgotSending": "Sending…",
+    "backToSignIn": "Back to sign in",
+    "forgotSuccessTitle": "Check Your Inbox",
+    "forgotSuccessCopy": "If an account exists for {email}, a reset link is on its way.",
+    "asideEyebrow": "Member Portal",
+    "asideQuote": "Where every car is remembered by name.",
+    "asideAttribution": "ABH Atelier · Jeddah",
+    "perk1": "Vehicle dossiers, kept on file",
+    "perk2": "Full service history at a glance",
+    "perk3": "Priority booking & private concierge",
+    "validation": {
+      "nameRequired": "Please enter your name.",
+      "emailRequired": "Please enter your email.",
+      "emailInvalid": "Please enter a valid email.",
+      "passwordRequired": "Please enter your password.",
+      "passwordShort": "Use at least 8 characters.",
+      "phoneRequired": "Please enter your phone number.",
+      "cityRequired": "Please select your city."
+    },
+    "account": {
+      "memberSince": "Member since {year}",
+      "myProfile": "My Profile",
+      "myBookings": "My Bookings",
+      "signOut": "Sign Out"
+    },
+    "meta": {
+      "title": "Member Portal · ABH Auto",
+      "description": "Sign in to the ABH Auto member portal — vehicle dossiers, service history and priority booking."
+    }
+  },
+  "_nav_account_block_add_inside_nav": {
+    "account": {
+      "memberSince": "Member since {year}",
+      "myProfile": "My Profile",
+      "myBookings": "My Bookings",
+      "signOut": "Sign Out"
+    }
+  },
+  "loader": {
+    "tagline": "Preparing ABH AUTO"
+  },
+  "common": {
+    "learnMore": "Learn more",
+    "close": "Close",
+    "explore": "Explore",
+    "discover": "Discover",
+    "stillCurious": "Still have questions?",
+    "conciergePrompt": "Reach the  directly. Replies typically arrive within four hours during business hours.",
+    "newsletterCta": "Subscribe",
+    "newsletterPlaceholder": "Your email",
+    "allRights": "All rights reserved.",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "cookies": "Cookies",
+    "language": "Language",
+    "chatConcierge": "Chat with an advisor"
+  },
+  "about": {
+    "meta": {
+      "title": "About",
+      "description": "ABH Auto — a workshop built around quiet discipline, measured execution, and careful handover."
+    },
+    "obsession": {
+      "chapter": "01",
+      "label": "The Obsession",
+      "line1": "We are not",
+      "line2": "in the race",
+      "line3": "for speed.",
+      "line4": "We are in the",
+      "line5": "race for right.",
+      "footnote": "Three years. One standard. No compromise."
+    },
+    "closeup": {
+      "chapter": "02",
+      "label": "Close-Up",
+      "intro": "Look closer.",
+      "frames": [
+        {
+          "tag": "0.0001 mm",
+          "title": "The Layer",
+          "copy": "A finely applied layer, inspected carefully before handover."
+        },
+        {
+          "tag": "12 hours",
+          "title": "The Cure",
+          "copy": "We allow the material the time it needs to settle properly."
+        },
+        {
+          "tag": "9H",
+          "title": "The Bond",
+          "copy": "A refined surface built for better resistance and clearer gloss."
+        },
+        {
+          "tag": "10 years",
+          "title": "The Promise",
+          "copy": "Written warranty according to the selected service and terms."
+        }
+      ]
+    },
+    "hand": {
+      "chapter": "03",
+      "label": "The Hand",
+      "title": "One pair of hands.",
+      "subtitle": "Every car.",
+      "body": "We give each vehicle the time it deserves, with a small team focused on detail and consistency.",
+      "name": "Abdullah Bin Hamad",
+      "role": "Founder · Lead Technician"
+    },
+    "standard": {
+      "chapter": "04",
+      "label": "The Standard",
+      "intro": "Three rules.",
+      "outro": "We do not accept work that misses them.",
+      "rules": [
+        {
+          "n": "01",
+          "rule": "Nothing is rushed.",
+          "expand": "Every stage gets the time it needs to reach the right result."
+        },
+        {
+          "n": "02",
+          "rule": "Nothing is hidden.",
+          "expand": "The key steps are reviewed and the scope is explained before handover."
+        },
+        {
+          "n": "03",
+          "rule": "Nothing is approximate.",
+          "expand": "Preparation, measurement, and execution follow a clear method."
+        }
+      ]
+    },
+    "room": {
+      "chapter": "05",
+      "label": "The Room",
+      "intro": "The environment is part of the result.",
+      "body": "Clean air, proper light, and controlled temperature make a real difference in workmanship.",
+      "specs": [
+        {
+          "k": "Air",
+          "v": "Filtered"
+        },
+        {
+          "k": "Light",
+          "v": "5500K"
+        },
+        {
+          "k": "Temp",
+          "v": "22°C ± 1"
+        },
+        {
+          "k": "Bays",
+          "v": "Private"
+        }
+      ]
+    },
+    "remains": {
+      "chapter": "06",
+      "label": "What Remains",
+      "intro": "After years of work, what remains is the quality of execution.",
+      "items": [
+        {
+          "v": "400",
+          "unit": "+",
+          "k": "Vehicles entrusted to us"
+        },
+        {
+          "v": "3",
+          "unit": "yrs",
+          "k": "Of continuous work"
+        },
+        {
+          "v": "0",
+          "unit": "",
+          "k": "Cars we regret"
+        },
+        {
+          "v": "1",
+          "unit": "",
+          "k": "Standard from day one"
+        }
+      ]
+    },
+    "invitation": {
+      "chapter": "07",
+      "label": "Invitation",
+      "line": "Bring us the car.",
+      "sub": "We will do the rest.",
+      "cta": "Reserve a Private Viewing"
+    }
+  },
+  "contact": {
+    "meta": {
+      "title": "Contact",
+      "description": "Write to the atelier in Jeddah. By private appointment only."
+    },
+    "overture": {
+      "eyebrow": "WRITE TO THE ATELIER",
+      "title_a": "Start a",
+      "title_b": "private conversation.",
+      "subtitle": "Every message is read carefully by our team and answered during business hours.",
+      "statusOpen": "Atelier open",
+      "statusClosed": "Atelier closed",
+      "scrollPrompt": "Compose"
+    },
+    "compose": {
+      "chapter": "01",
+      "label": "THE LETTER",
+      "title": "Fill in the details.",
+      "subtitle": "A simple letter instead of a long form.",
+      "letterTitle": "A letter from",
+      "letterDate": "Today",
+      "sentence1_a": "My name is",
+      "sentence1_b": "and I would like to",
+      "sentence1_c": "regarding my",
+      "sentence1_d": ",",
+      "sentence2_a": "You can reach me at",
+      "sentence2_b": "or on",
+      "sentence2_c": ".",
+      "messageLabel": "What I would like to say",
+      "messagePlaceholder": "Write your message here…",
+      "placeholders": {
+        "name": "your name",
+        "intent": "what you would like to do",
+        "vehicle": "your vehicle",
+        "email": "your email",
+        "phone": "your phone (optional)"
+      },
+      "intentOptions": [
+        "book a private viewing",
+        "start a protection project",
+        "speak with the advisor",
+        "ask about press & partnerships"
+      ],
+      "footer": "Sincerely,",
+      "consent": "I agree that ABH Auto may store this message to respond to me.",
+      "send": "Send Message",
+      "sending": "Preparing the message…",
+      "successTitle": "Your message has been sent.",
+      "successCopy": "Our team will get back to you within four hours.",
+      "successAction": "Write another",
+      "errors": {
+        "nameRequired": "Please enter your name.",
+        "intentRequired": "Please choose a purpose.",
+        "emailRequired": "We need an email to reply.",
+        "emailInvalid": "The email address looks incomplete.",
+        "messageRequired": "Please write a few words.",
+        "consentRequired": "Please confirm consent."
+      }
+    },
+    "channels": {
+      "eyebrow": "OR REACH US DIRECTLY",
+      "title": "Three doors.",
+      "subtitle": "Each one leads to the same atelier.",
+      "items": [
+        {
+          "tag": "01",
+          "label": "VISIT",
+          "title": "By appointment",
+          "copy": "Private visits are arranged in advance.",
+          "value": "Book a visit",
+          "subline": "Atelier I · Jeddah",
+          "action": "form"
+        },
+        {
+          "tag": "02",
+          "label": "CALL",
+          "title": "Direct telephone",
+          "copy": "A direct line to reception.",
+          "value": "+966 12 000 0000",
+          "subline": "9:00 – 22:00 AST",
+          "action": "tel"
+        },
+        {
+          "tag": "03",
+          "label": "MESSAGE",
+          "title": "WhatsApp",
+          "copy": "For quick questions and photos.",
+          "value": "+966 50 000 0000",
+          "subline": "Replies within the hour",
+          "action": "whatsapp"
+        }
+      ]
+    },
+    "location": {
+      "eyebrow": "FIND THE ATELIER",
+      "title_a": "Jeddah · ",
+      "title_b": "Al-Faisaliyah",
+      "subtitle": "On the Red Sea coast. By appointment only.",
+      "address": [
+        "ABH Auto · Atelier I",
+        "Al-Faisaliyah District",
+        "Jeddah 23445",
+        "Kingdom of Saudi Arabia"
+      ],
+      "directionsCta": "Open in Google Maps",
+      "phoneLabel": "Phone",
+      "phone": "+966 12 000 0000",
+      "emailLabel": "Email",
+      "email": "concierge@abh-auto.example",
+      "coordinatesLabel": "Coordinates"
+    },
+    "closing": {
+      "eyebrow": "BEHIND THE DOOR",
+      "title_a": "Step inside",
+      "title_b": "the atelier.",
+      "subtitle": "Private bays. Filtered air. One vehicle at a time.",
+      "hoursTitle": "Hours",
+      "todayBadge": "Today",
+      "timezone": "Jeddah · AST",
+      "hoursRows": [
+        {
+          "days": "Sunday — Thursday",
+          "hours": "9:00 — 22:00"
+        },
+        {
+          "days": "Friday",
+          "hours": "Closed"
+        },
+        {
+          "days": "Saturday",
+          "hours": "By arrangement"
+        }
+      ]
+    }
+  },
+
+  "booking": {
+    "cats": {
+      "packages": "Packages",
+      "ceramic": "Nano Ceramic",
+      "ppf": "Paint Film",
+      "thermal": "Heat & Tint",
+      "protection": "Protection",
+      "addons": "Add-ons"
+    },
+    "svc": {
+      "pkg_diamond": {
+        "name": "Diamond Suite",
+        "desc": "Our flagship 12-layer nano-ceramic system applied in a class-1000 cleanroom."
+      },
+      "pkg_summer": {
+        "name": "Summer Shield",
+        "desc": "UV-rated ceramic and full cabin conditioning, engineered for desert climates."
+      },
+      "pkg_elite": {
+        "name": "Elite Membership",
+        "desc": "Unlimited annual access, a dedicated team, valet and 24/7  support."
+      },
+      "cer_9h": {
+        "name": "9H Nano Ceramic",
+        "desc": "9H hardness ceramic for lasting depth of gloss and hydrophobic behaviour."
+      },
+      "cer_graphene": {
+        "name": "Graphene Ceramic",
+        "desc": "Graphene-infused coating with superior heat dissipation and water sheeting."
+      },
+      "cer_wheel": {
+        "name": "Wheel & Caliper Ceramic",
+        "desc": "Heat-resistant ceramic on wheel faces, barrels and calipers."
+      },
+      "ppf_full": {
+        "name": "Full-Body PPF",
+        "desc": "Bumper-to-bumper precision-cut film, self-healing and near-invisible."
+      },
+      "ppf_track": {
+        "name": "Track Pack PPF",
+        "desc": "High-impact zones — front end, rockers, mirrors — shielded for the road."
+      },
+      "ppf_partial": {
+        "name": "Partial Front PPF",
+        "desc": "Hood, fenders and bumper protection against stone chips."
+      },
+      "tint_ceramic": {
+        "name": "Ceramic Window Tint",
+        "desc": "IR-rejecting ceramic tint that cuts cabin heat without going dark."
+      },
+      "tint_windshield": {
+        "name": "Windshield Heat Film",
+        "desc": "Optically clear heat-rejection film for the windshield."
+      },
+      "prot_armor": {
+        "name": "Ballistic Armoring",
+        "desc": "Engineered ballistic protection with balanced weight and discretion."
+      },
+      "prot_tracking": {
+        "name": "Smart Tracking",
+        "desc": "Low-profile GPS tracking with geofencing and instant alerts."
+      },
+      "prot_security": {
+        "name": "Smart Security",
+        "desc": "Biometric ignition and app control with factory-clean integration."
+      },
+      "add_detail": {
+        "name": "Full Detailing",
+        "desc": "Complete interior and exterior detailing with premium products."
+      },
+      "add_polish": {
+        "name": "Machine Polishing",
+        "desc": "Multi-stage correction to erase swirls, scratches and oxidation."
+      },
+      "add_engine": {
+        "name": "Engine Bay Detail",
+        "desc": "Careful engine degrease and dressing for a showroom bay."
+      }
+    },
+    "from": "From",
+    "onRequest": "On request",
+    "currency": "SAR",
+    "step2": {
+      "largeVehicle": "Large",
+      "towingTitle": "Towing & Pickup",
+      "towingDesc": "We collect and return your vehicle, white-glove.",
+      "towingLocationTitle": "Pickup Location",
+      "towingAddressPlaceholder": "Enter your address",
+      "towingMapHint": "Tap to drop your pin",
+      "towingCost": "Towing",
+      "total": "Total",
+      "noServices": "No services selected yet.",
+      "selectAtLeast": "Please select at least one service to continue.",
+      "continue": "Booking details",
+      "back": "Back to Vehicle",
+      "heading": "Compose the Service",
+      "subheading": "Pick a discipline, then the treatments. Prices reflect your vehicle’s size.",
+      "mostChosen": "Most chosen",
+      "added": "Added",
+      "select": "Select",
+      "yourBuild": "Your Build",
+      "item": "item",
+      "items": "items",
+      "youSave": "You save {amount} SAR",
+      "someOnRequest": "Some items are quoted after assessment.",
+      "dossierLabel": "Your Vehicle",
+      "towingOneWay": "One-Way",
+      "towingReturn": "Return Trip",
+      "towingBoth": "Both Ways"
+    },
+    "step3": {
+      "fullName": "Full Name",
+      "fullNamePlaceholder": "Your full name",
+      "phone": "Phone",
+      "phonePlaceholder": "+20 1XX XXX XXXX",
+      "email": "Email",
+      "emailPlaceholder": "your@email.com",
+      "city": "City",
+      "cityPlaceholder": "Select city",
+      "branch": "Branch",
+      "branchPlaceholder": "Select branch",
+      "time": "Preferred Time",
+      "continue": "Proceed to Payment",
+      "back": "Back to Services",
+      "validation": {
+        "nameRequired": "Please enter your full name.",
+        "phoneRequired": "Please enter your phone number.",
+        "emailRequired": "Please enter your email address.",
+        "emailInvalid": "Please enter a valid email address.",
+        "cityRequired": "Please select your city.",
+        "branchRequired": "Please select a branch.",
+        "dateRequired": "Please choose a date.",
+        "timeRequired": "Please choose a time."
+      },
+      "heading": "Where & When",
+      "subheading": "Tell us how to reach you, and choose a moment for the atelier.",
+      "contactGroup": "Contact",
+      "appointmentGroup": "Appointment",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening",
+      "booked": "Booked",
+      "datePlaceholder": "Select date",
+      "timePlaceholder": "Select time",
+      "date": "Preferred Date",
+      "hour": "Hour",
+      "minute": "Minute",
+      "confirmTime": "Set time"
+    },
+    "step4": {
+      "heading": "Confirm & Reserve",
+      "subheading": "One last look. Everything below is exactly what we’ll prepare.",
+      "vehicleTitle": "Vehicle",
+      "servicesTitle": "Services",
+      "detailsTitle": "Your Details",
+      "towing": "Towing",
+      "branch": "Branch",
+      "dateTime": "Date & Time",
+      "paymentTitle": "Payment Method",
+      "total": "Total Due",
+      "selectPayment": "Select a payment method to continue.",
+      "confirm": "Confirm Booking",
+      "back": "Back to Details",
+      "tabby": "Tabby",
+      "tabbyDesc": "Pay in 4 installments, interest-free.",
+      "tamara": "Tamara",
+      "tamaraDesc": "Split into 3 easy payments.",
+      "applePay": "Apple Pay",
+      "applePayDesc": "Fast, secure payment with Face ID.",
+      "cash": "Cash at Branch",
+      "cashDesc": "Pay when you arrive at the branch.",
+      "breakdown": "Price breakdown",
+      "estimate": "Estimate",
+      "processing": "Securing your slot…",
+      "tabbyNote": "4 × {amount} SAR, interest-free",
+      "tamaraNote": "3 × {amount} SAR",
+      "youSave": "You save",
+      "reserving": "You are reserving",
+      "protected": "Fully protected"
+    },
+    "eyebrow": "Private Appointment · Atelier",
+    "title": "Reserve Your Session",
+    "subtitle": "A booking experience composed like the cars we protect — deliberate, quiet, exact.",
+    "steps": {
+      "vehicle": "Vehicle",
+      "services": "Services",
+      "customer": "Your Details",
+      "payment": "Confirm"
+    },
+    "step1": {
+      "brand": "Brand",
+      "brandPlaceholder": "Select brand",
+      "model": "Model",
+      "modelPlaceholder": "Select model",
+      "color": "Color",
+      "plate": "License Plate",
+      "platePlaceholder": "Enter plate number",
+      "plateHint": "As on the official plate",
+      "heading": "Your Vehicle",
+      "subheading": "Tell us about the car we will care for. The marque sets the canvas.",
+      "summaryTitle": "Vehicle Profile",
+      "summaryEmpty": "Choose a marque and the profile takes shape.",
+      "continue": "Continue to Services"
+    },
+    "success": {
+      "title": "The Atelier Awaits",
+      "subtitle": "Your session is reserved. An  will confirm the details within two hours.",
+      "refLabel": "Booking Reference",
+      "nextSteps": "Our  team will contact you shortly to finalise your appointment.",
+      "backHome": "Back to Home",
+      "newBooking": "Make Another Booking"
+    },
+    "meta": {
+      "title": "Reserve Your Session · ABH Auto",
+      "description": "Book a private vehicle-protection session at the ABH Auto atelier — ceramic, PPF, tint and bespoke care."
+    },
+    "colors": {
+      "white": "Pearl White",
+      "black": "Obsidian Black",
+      "silver": "Titanium Silver",
+      "gray": "Graphite Gray",
+      "red": "Crimson Red",
+      "blue": "Midnight Blue",
+      "green": "British Racing Green",
+      "yellow": "Solar Yellow",
+      "orange": "Burnt Orange",
+      "brown": "Cognac Brown",
+      "beige": "Champagne Beige",
+      "gold": "Champagne Gold"
+    },
+    "cities": {
+      "cairo": "Cairo",
+      "alexandria": "Alexandria",
+      "giza": "Giza",
+      "nasr_city": "Nasr City",
+      "new_cairo": "New Cairo",
+      "maadi": "Maadi",
+      "zamalek": "Zamalek",
+      "october": "6th of October"
+    },
+    "branches": {
+      "nasr_city": "Nasr City Branch",
+      "new_cairo": "New Cairo Branch",
+      "alexandria": "Alexandria Branch"
+    }
+  }
+}
