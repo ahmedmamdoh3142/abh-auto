@@ -18,6 +18,7 @@
  *
  * Real car imagery is drawn from the existing /images/project-*.png plates,
  * picked deterministically per vehicle so it's stable between renders.
+ * **
  */
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
