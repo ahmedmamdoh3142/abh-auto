@@ -997,7 +997,12 @@
       "subheading": "Tell us about the car we will care for. The marque sets the canvas.",
       "summaryTitle": "Vehicle Profile",
       "summaryEmpty": "Choose a marque and the profile takes shape.",
-      "continue": "Continue to Services"
+      "continue": "Continue to Services",
+      "garageTitle": "Choose from your garage",
+      "garageHint": "Pick one of your saved cars, or add a new one.",
+      "garageNew": "New vehicle",
+      "garageBack": "Choose from my garage",
+      "viewBookings": "View my bookings"
     },
     "success": {
       "title": "The Atelier Awaits",
@@ -1039,6 +1044,100 @@
       "nasr_city": "Nasr City Branch",
       "new_cairo": "New Cairo Branch",
       "alexandria": "Alexandria Branch"
+    }
+  },
+
+  "account": {
+    "meta": {
+      "title": "My Account · ABH Auto",
+      "description": "Your ABH Auto member dashboard — bookings, garage and profile."
+    },
+    "nav": {
+      "overview": "Overview",
+      "bookings": "Bookings",
+      "garage": "Garage",
+      "profile": "Profile",
+      "signOut": "Sign Out"
+    },
+    "hero": {
+      "eyebrow": "Member Dashboard",
+      "greeting": "Welcome back",
+      "memberSince": "Member since {year}"
+    },
+    "stats": {
+      "vehicles": "Vehicles",
+      "upcoming": "Active bookings",
+      "visits": "Completed visits",
+      "since": "Member since"
+    },
+    "overview": {
+      "nextTitle": "Your next appointment",
+      "noUpcoming": "You have no upcoming appointments.",
+      "book": "Book a session",
+      "today": "today",
+      "daysAway": "days away",
+      "garageTitle": "Your garage",
+      "manageGarage": "Manage garage",
+      "recentTitle": "Recent visits",
+      "viewAll": "View all"
+    },
+    "bookings": {
+      "tabLive": "Upcoming & active",
+      "tabPast": "Past",
+      "newBooking": "New booking",
+      "emptyLive": "No upcoming reservations. Your atelier awaits.",
+      "emptyPast": "No past visits yet.",
+      "total": "Total",
+      "viewDetails": "View details",
+      "reschedule": "Reschedule",
+      "rebook": "Book again",
+      "inProgress": "In progress",
+      "status": {
+        "upcoming": "Upcoming",
+        "active": "In service",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      },
+      "stages": {
+        "received": "Received",
+        "inService": "In service",
+        "quality": "Quality check",
+        "ready": "Ready"
+      }
+    },
+    "garage": {
+      "title": "Your Garage",
+      "subtitle": "The vehicles we care for. Add a car here and it's ready to pick the next time you book.",
+      "addVehicle": "Add vehicle",
+      "edit": "Edit",
+      "remove": "Remove",
+      "empty": "Your garage is empty. Add your first vehicle.",
+      "addTitle": "Add a vehicle",
+      "editTitle": "Edit vehicle",
+      "brand": "Brand",
+      "brandPlaceholder": "Select brand",
+      "model": "Model",
+      "modelPlaceholder": "Select model",
+      "color": "Colour",
+      "plate": "Plate",
+      "platePlaceholder": "Plate number",
+      "year": "Year",
+      "yearPlaceholder": "2024",
+      "fillAll": "Please complete brand, model, colour and plate.",
+      "cancel": "Cancel",
+      "save": "Save vehicle",
+      "removeTitle": "Remove vehicle",
+      "removeConfirm": "Remove {vehicle} from your garage? This can't be undone."
+    },
+    "profile": {
+      "title": "Profile",
+      "subtitle": "Keep your details current — we use them to prepare every visit.",
+      "fullName": "Full Name",
+      "email": "Email",
+      "phone": "Phone",
+      "city": "City",
+      "save": "Save changes",
+      "saved": "Saved"
     }
   }
 }

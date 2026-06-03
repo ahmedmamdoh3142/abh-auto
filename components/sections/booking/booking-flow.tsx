@@ -8,22 +8,16 @@
  * image-backed atelier band up top, then a glass "console" that swaps
  * between four steps with a cinematic step-rail.
  *
- *   01 · VEHICLE   brand → model → colour → plate, beside a hero car plate
- *                  that re-tints to the chosen paint. Brand+model infers size.
- *   02 · SERVICES  the chosen car rides along in a sticky ribbon; services are
- *                  picked as cards (offers/services DNA), priced by size; a
- *                  towing module (one-way / return / both) reveals a monochrome
- *                  map pin-picker; a live summary sits beside a "Booking details"
- *                  advance button.
+ *   01 · VEHICLE   pick from the member's garage (if signed in) or enter a new
+ *                  car: brand → model → colour → plate, beside a hero plate.
+ *   02 · SERVICES  cards priced by size, towing module + monochrome map.
  *   03 · DETAILS   name, phone, email, city, branch, date, time → payment.
  *                  Pre-filled from the signed-in member (empty fields only).
- *   04 · CONFIRM   full dossier + total + Tabby / Tamara / Apple Pay / Cash,
- *                  then a success seal.
+ *   04 · CONFIRM   full dossier + total + payment, then a success seal.
+ *                  On confirm, the reservation is saved to the member's history.
  *
  * Strict palette (obsidian / ivory / platinum / steel). next-intl + RTL,
- * framer-motion, deterministic particles, no browser storage.
- *
- * i18n: reads the existing `booking` namespace (messages/en.json + ar.json).
+ * framer-motion, deterministic particles, no browser storage in the UI layer.
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -89,7 +83,7 @@ export function BookingFlow() {
   const t = useTranslations('booking');
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const { member, hydrated } = useAuth();
+  const { member, hydrated, addBooking } = useAuth();
 
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
@@ -144,11 +138,29 @@ export function BookingFlow() {
   const go = useCallback((to: number) => {
     setStep(to);
     setMaxReached((m) => Math.max(m, to));
-    // ease the console back into view on step change
     requestAnimationFrame(() => {
       consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, []);
+
+  /* Persist the reservation to the member's history (if signed in), then seal. */
+  const confirmBooking = useCallback(() => {
+    if (member) {
+      const brand = BRANDS.find((b) => b.id === data.brandId);
+      addBooking({
+        vehicleLabel: `${brand?.name ?? ''} ${data.model}`.trim(),
+        plate: data.plate,
+        serviceSlugs: data.services,
+        branchKey: data.branch,
+        date: data.date,
+        time: data.time,
+        total: total.grand,
+        status: 'upcoming',
+      });
+    }
+    setDone(true);
+    requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, [member, addBooking, data, total.grand]);
 
   const reset = useCallback(() => {
     setData(INITIAL);
@@ -166,7 +178,6 @@ export function BookingFlow() {
 
       <section className="section relative pt-4 md:pt-8" id="booking">
         <div className="container">
-          {/* Step rail */}
           <StepRail
             step={step}
             maxReached={maxReached}
@@ -174,12 +185,10 @@ export function BookingFlow() {
             onJump={(i) => i <= maxReached && !done && go(i)}
           />
 
-          {/* Console */}
           <div
             ref={consoleRef}
             className="spotlight glass relative mt-12 scroll-mt-28 rounded-[28px] border border-white/[0.08] md:mt-16"
           >
-            {/* top chrome hairline */}
             <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-platinum/30 to-transparent" />
 
             <AnimatePresence mode="wait">
@@ -198,6 +207,7 @@ export function BookingFlow() {
                     <StepVehicle
                       t={t} isAr={isAr} data={data} onChange={onVehicleChange}
                       bookingImage={BOOKING_IMAGE}
+                      garage={member?.vehicles ?? []}
                       onNext={() => go(1)}
                     />
                   )}
@@ -216,7 +226,7 @@ export function BookingFlow() {
                   {step === 3 && (
                     <StepConfirm
                       t={t} isAr={isAr} data={data} total={total} set={set}
-                      onBack={() => go(2)} onConfirm={() => { setDone(true); requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
+                      onBack={() => go(2)} onConfirm={confirmBooking}
                     />
                   )}
                 </motion.div>
@@ -240,7 +250,6 @@ function BookingHero({ t }: { t: ReturnType<typeof useTranslations> }) {
 
   return (
     <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
-      {/* faint cinematic plate behind the band */}
       <div aria-hidden className="absolute inset-0 -z-20">
         <Image src={CINEMATIC} alt="" fill sizes="100vw"
           className="object-cover opacity-[0.18]"
@@ -305,9 +314,7 @@ function StepRail({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="relative flex items-center justify-between">
-        {/* baseline track */}
         <span aria-hidden className="absolute inset-x-0 top-[19px] h-px bg-white/10" />
-        {/* progress fill */}
         <motion.span
           aria-hidden
           className="absolute top-[19px] h-px bg-gradient-to-r from-platinum/40 via-ivory to-platinum/40"
@@ -377,10 +384,8 @@ function StepSuccess({
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="relative px-6 py-16 text-center md:px-10 md:py-24"
     >
-      {/* radial bloom */}
       <span aria-hidden className="pointer-events-none absolute left-1/2 top-1/3 -z-10 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.07] blur-[120px]" />
 
-      {/* seal */}
       <motion.div
         initial={{ scale: 0.5, opacity: 0, rotate: -12 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
@@ -420,7 +425,6 @@ function StepSuccess({
         {t('success.subtitle')}
       </motion.p>
 
-      {/* reference + vehicle chip */}
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.45, duration: 0.7, ease: EASE }}
@@ -461,7 +465,7 @@ function StepSuccess({
         transition={{ delay: 0.7, duration: 0.7, ease: EASE }}
         className="mt-10 flex flex-wrap items-center justify-center gap-4"
       >
-        <a href="/" data-cursor="hover"><GhostPill>{t('success.backHome')}</GhostPill></a>
+        <a href="/account" data-cursor="hover"><GhostPill>{t('success.viewBookings')}</GhostPill></a>
         <button onClick={onReset} data-cursor="hover"><PrimaryPill>{t('success.newBooking')}</PrimaryPill></button>
       </motion.div>
     </motion.div>
