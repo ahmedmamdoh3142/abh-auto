@@ -17,7 +17,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocale } from 'next-intl';
 
-import { ScaleSwitcher } from './scale-switcher';
+  
 import {
   lanes,
   scales,
