@@ -14,7 +14,7 @@
  *
  * FRAMES
  *  - Put your images in:  public/frames/
- *  - Named exactly:       ezgif-frame-001.png … ezgif-frame-056.png
+ *  - Named exactly:       ezgif-frame-001.webp … ezgif-frame-056.webp
  *  - Tune FRAME_COUNT / TRACK_VH below.
  *
  * Notes
@@ -35,7 +35,7 @@ import { ArrowUpRight, ArrowDown } from 'lucide-react';
 const FRAME_COUNT = 80;                 // number of frames in public/frames
 const FRAME_DIR = '/frames';            // folder under /public
 const TRACK_VH = 700;                   // scroll length; higher = slower scrub
-const framePath = (i: number) => `${FRAME_DIR}/ezgif-frame-${String(i).padStart(3, '0')}.png`;
+const framePath = (i: number) => `${FRAME_DIR}/ezgif-frame-${String(i).padStart(3, '0')}.webp`;
 const FIRST_FRAME = framePath(1);
 
 const EASE = [0.16, 1, 0.3, 1] as const;
