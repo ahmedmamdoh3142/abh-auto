@@ -942,7 +942,12 @@
       "date": "Preferred Date",
       "hour": "Hour",
       "minute": "Minute",
-      "confirmTime": "Set time"
+      "confirmTime": "Set time",
+      "am": "AM",
+      "pm": "PM",
+      "timeRange": "Available 10:00 AM – 9:00 PM",
+      "timeOutOfRange": "Outside service hours (10 AM – 9 PM)",
+      "timeDone": "Set time"
     },
     "step4": {
       "heading": "Confirm & Reserve",
@@ -1103,7 +1108,32 @@
         "inService": "In service",
         "quality": "Quality check",
         "ready": "Ready"
-      }
+      },
+      "paid": "Paid",
+      "payAtBranch": "Pay at branch",
+      "detail": {
+        "title": "Booking details",
+        "reference": "Reference",
+        "dateTime": "Date & time",
+        "branch": "Branch",
+        "payment": "Payment",
+        "services": "Services",
+        "total": "Total"
+      },
+      "cancel": "Cancel booking",
+      "cancelTitle": "Cancel this booking?",
+      "cancelConfirm": "Your reservation for {vehicle} on {date} will be cancelled.",
+      "keep": "Keep booking",
+      "confirmCancel": "Cancel booking",
+      "rescheduleTitle": "Reschedule",
+      "rescheduleHint": "Choose a new date and time for your visit.",
+      "pickTime": "Preferred time",
+      "saveReschedule": "Confirm new time",
+      "addServices": "Add services",
+      "addServicesTitle": "Add services",
+      "addServicesHint": "Enhance this visit — the extra is settled at the branch.",
+      "addConfirm": "Add to booking",
+      "included": "Everything else is already in this booking."
     },
     "garage": {
       "title": "Your Garage",

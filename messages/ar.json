@@ -943,7 +943,12 @@
       "date": "التاريخ المفضّل",
       "hour": "ساعة",
       "minute": "دقيقة",
-      "confirmTime": "تأكيد الوقت"
+      "confirmTime": "تأكيد الوقت",
+      "am": "ص",
+      "pm": "م",
+      "timeRange": "متاح من ١٠ صباحاً حتى ٩ مساءً",
+      "timeOutOfRange": "خارج مواعيد الخدمة (١٠ ص – ٩ م)",
+      "timeDone": "تأكيد الوقت"
     },
     "step4": {
       "heading": "التأكيد والحجز",
@@ -1104,7 +1109,32 @@
         "inService": "قيد العمل",
         "quality": "فحص الجودة",
         "ready": "جاهزة"
-      }
+      },
+      "paid": "مدفوع",
+      "payAtBranch": "الدفع في الفرع",
+      "detail": {
+        "title": "تفاصيل الحجز",
+        "reference": "المرجع",
+        "dateTime": "التاريخ والوقت",
+        "branch": "الفرع",
+        "payment": "الدفع",
+        "services": "الخدمات",
+        "total": "الإجمالي"
+      },
+      "cancel": "إلغاء الحجز",
+      "cancelTitle": "إلغاء هذا الحجز؟",
+      "cancelConfirm": "سيتم إلغاء حجزك لسيارة {vehicle} يوم {date}.",
+      "keep": "الإبقاء على الحجز",
+      "confirmCancel": "تأكيد الإلغاء",
+      "rescheduleTitle": "إعادة الجدولة",
+      "rescheduleHint": "اختر تاريخاً ووقتاً جديدين لزيارتك.",
+      "pickTime": "الوقت المفضّل",
+      "saveReschedule": "تأكيد الموعد الجديد",
+      "addServices": "إضافة خدمات",
+      "addServicesTitle": "إضافة خدمات",
+      "addServicesHint": "عزّز هذه الزيارة — تُسوّى الإضافة في الفرع.",
+      "addConfirm": "أضف إلى الحجز",
+      "included": "كل الباقي مضاف بالفعل إلى هذا الحجز."
     },
     "garage": {
       "title": "سياراتك",

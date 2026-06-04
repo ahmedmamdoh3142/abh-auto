@@ -44,15 +44,17 @@ const config: Config = {
       },
       fontFamily: {
         // Loaded via next/font in app/layout.tsx
-        display:   ['var(--font-display)', 'serif'],
+        display:   ['var(--font-display)', 'Cormorant Garamond', 'serif'],
         editorial: ['var(--font-editorial)', 'serif'],
         sans:      ['var(--font-sans)', 'system-ui', 'sans-serif'],
         arabic:    ['var(--font-arabic)', 'system-ui', 'sans-serif'],
       },
       fontSize: {
-        'hero-sm': ['clamp(2.5rem, 8vw, 4rem)', { lineHeight: '0.95', letterSpacing: '-0.04em' }],
-        'hero':    ['clamp(3.5rem, 11vw, 9rem)', { lineHeight: '0.9',  letterSpacing: '-0.05em' }],
-        'display': ['clamp(2rem, 5vw, 4.5rem)',  { lineHeight: '1.02', letterSpacing: '-0.03em' }],
+        // Larger, more confident editorial scale (clamps scale with viewport;
+        // base body sizes scale via the root font-size lift in globals.css).
+        'hero-sm': ['clamp(2.75rem, 8.5vw, 4.75rem)', { lineHeight: '0.95', letterSpacing: '-0.035em' }],
+        'hero':    ['clamp(3.75rem, 11.5vw, 9.5rem)', { lineHeight: '0.9',  letterSpacing: '-0.045em' }],
+        'display': ['clamp(2.25rem, 5.5vw, 5rem)',    { lineHeight: '1.02', letterSpacing: '-0.025em' }],
       },
       backgroundImage: {
         'metallic': 'linear-gradient(135deg, #cbcdcd 0%, #ffffff 30%, #666a6e 65%, #cbcdcd 100%)',

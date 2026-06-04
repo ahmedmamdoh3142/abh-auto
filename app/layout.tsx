@@ -2,8 +2,9 @@
  * Root layout — ABH Auto
  *
  * Responsibilities
- *  - Load typography (Cormorant Garamond display, Inter sans, IBM Plex
- *    Sans Arabic) into CSS variables consumed by tailwind tokens.
+ *  - Load typography (Cormorant Garamond display, Hanken Grotesk sans,
+ *    Playfair Display editorial italics, IBM Plex Sans Arabic) into CSS
+ *    variables consumed by tailwind tokens.
  *  - Resolve current locale from cookie + provide messages via
  *    NextIntlClientProvider.
  *  - Provide membership session via AuthProvider (navbar / booking / login).
@@ -13,9 +14,9 @@
  */
 import type { Metadata, Viewport } from "next";
 import {
-  Italiana,
+  Cormorant_Garamond,
   Playfair_Display,
-  Inter,
+  Hanken_Grotesk,
   IBM_Plex_Sans_Arabic,
 } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
@@ -37,11 +38,13 @@ import "./globals.css";
 
 // --- Fonts -----------------------------------------------------------------
 
-// Italiana — couture display face (single weight, very thin, very elegant).
-// Used for editorial display headlines and the brand mark.
-const fontDisplay = Italiana({
+// Cormorant Garamond — couture high-contrast serif. More presence and a far
+// larger range of weights than Italiana, while keeping the elegant character.
+// Used for display headlines and the brand mark.
+const fontDisplay = Cormorant_Garamond({
   subsets: ["latin"],
-  weight: ["400"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
 });
@@ -55,7 +58,9 @@ const fontEditorial = Playfair_Display({
   display: "swap",
 });
 
-const fontSans = Inter({
+// Hanken Grotesk — refined, slightly editorial grotesque for body and UI.
+// Reads more premium than Inter, with similar metrics (safe drop-in).
+const fontSans = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-sans",

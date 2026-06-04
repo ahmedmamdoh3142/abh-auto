@@ -155,6 +155,8 @@ export function BookingFlow() {
         date: data.date,
         time: data.time,
         total: total.grand,
+        payment: data.payment === 'cash' ? 'branch' : 'paid',
+        size: data.size,
         status: 'upcoming',
       });
     }

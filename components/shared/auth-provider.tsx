@@ -19,7 +19,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { BRANDS } from '@/lib/booking-data';
+import { BRANDS, type VehicleSize } from '@/lib/booking-data';
 
 export interface Vehicle {
   id: string;
@@ -42,6 +42,8 @@ export interface BookingRecord {
   date: string;            // ISO (yyyy-mm-dd)
   time: string;
   total: number;
+  payment?: 'paid' | 'branch';  // 'branch' = settle on arrival (can still add services)
+  size?: VehicleSize;           // vehicle size, for pricing added services
   stage?: number;          // 0..3 progress for `active`
   createdAt: string;
 }
@@ -68,6 +70,8 @@ interface AuthContextValue {
   updateVehicle: (id: string, patch: Partial<Vehicle>) => void;
   removeVehicle: (id: string) => void;
   addBooking: (b: Omit<BookingRecord, 'id' | 'createdAt' | 'status'> & { status?: BookingStatus }) => BookingRecord;
+  updateBooking: (id: string, patch: Partial<BookingRecord>) => void;
+  cancelBooking: (id: string) => void;
 }
 
 const SESSION_KEY = 'abh.member';
@@ -123,17 +127,17 @@ function seedBookings(vehicles: Vehicle[]): BookingRecord[] {
     {
       id: ref(), status: 'upcoming', vehicleLabel: labelOf(v0), plate: v0?.plate ?? '',
       serviceSlugs: ['pkg_diamond'], branchKey: 'new_cairo', date: dayISO(6), time: '11:00',
-      total: 9200, createdAt: dayISO(-2),
+      total: 9200, payment: 'branch', size: 'large', createdAt: dayISO(-2),
     },
     {
       id: ref(), status: 'active', vehicleLabel: labelOf(v1), plate: v1?.plate ?? '',
       serviceSlugs: ['ppf_full', 'tint_ceramic'], branchKey: 'nasr_city', date: dayISO(0), time: '09:30',
-      total: 14600, stage: 1, createdAt: dayISO(-3),
+      total: 14600, payment: 'paid', size: 'large', stage: 1, createdAt: dayISO(-3),
     },
     {
       id: ref(), status: 'completed', vehicleLabel: labelOf(v0), plate: v0?.plate ?? '',
       serviceSlugs: ['add_detail', 'add_polish'], branchKey: 'alexandria', date: dayISO(-40), time: '13:00',
-      total: 1850, createdAt: dayISO(-44),
+      total: 1850, payment: 'paid', size: 'large', createdAt: dayISO(-44),
     },
   ];
 }
@@ -288,10 +292,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return record;
   }, [persist]);
 
+  const updateBooking = useCallback<AuthContextValue['updateBooking']>((id, patch) => {
+    setMember((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) };
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  const cancelBooking = useCallback<AuthContextValue['cancelBooking']>((id) => {
+    updateBooking(id, { status: 'cancelled' });
+  }, [updateBooking]);
+
   const value = useMemo<AuthContextValue>(() => ({
     member, hydrated, signIn, register, signOut, updateProfile,
-    addVehicle, updateVehicle, removeVehicle, addBooking,
-  }), [member, hydrated, signIn, register, signOut, updateProfile, addVehicle, updateVehicle, removeVehicle, addBooking]);
+    addVehicle, updateVehicle, removeVehicle, addBooking, updateBooking, cancelBooking,
+  }), [member, hydrated, signIn, register, signOut, updateProfile, addVehicle, updateVehicle, removeVehicle, addBooking, updateBooking, cancelBooking]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -31,7 +31,15 @@
     border-color: rgba(255, 255, 255, 0.06);
   }
 
+  /* ──────────────────────────────────────────────────────
+     GLOBAL TYPE SCALE
+     Everything on the site is sized in rem, so raising the
+     root size lifts the whole page in one coordinated step.
+     16px → 17px (base) → 18px (desktop). Larger, calmer,
+     more in line with world-class luxury sites.
+     ────────────────────────────────────────────────────── */
   html {
+    font-size: 106.25%;            /* 17px */
     background-color: #000000;
     color: #ffffff;
     -webkit-font-smoothing: antialiased;
@@ -40,11 +48,18 @@
     scroll-behavior: smooth;
   }
 
+  @media (min-width: 1024px) {
+    html { font-size: 112.5%; }    /* 18px */
+  }
+
   /* ──────────────────────────────────────────────────────
      BODY — multi-layer cinematic background
      ────────────────────────────────────────────────────── */
   body {
     font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     color: #ffffff;
     background-color: #000000;
     overflow-x: hidden;
@@ -52,19 +67,10 @@
 
     /* Vertical depth gradient — page scrolls through 4 tonal zones */
     background-image:
-      /* Top — slight platinum bloom from hero */
       radial-gradient(ellipse 90% 40% at 50% 0%, rgba(203,205,205,0.07), transparent 70%),
-
-      /* Right side — cool steel pool */
       radial-gradient(ellipse 50% 30% at 95% 35%, rgba(102,106,110,0.06), transparent 70%),
-
-      /* Left side — warm subtle bloom */
       radial-gradient(ellipse 50% 30% at 0% 65%, rgba(140,120,100,0.04), transparent 70%),
-
-      /* Bottom — fade back to deep platinum hint */
       radial-gradient(ellipse 90% 40% at 50% 100%, rgba(203,205,205,0.05), transparent 70%),
-
-      /* Vertical wash that creates the section-to-section tonal shift */
       linear-gradient(
         180deg,
         #000000 0%,
@@ -75,6 +81,19 @@
         #000000 100%
       );
     background-attachment: fixed;
+  }
+
+  /* ──────────────────────────────────────────────────────
+     HEADINGS — couture serif, optical refinements.
+     Slightly tighter tracking + true kerning/ligatures so
+     the larger sizes read crisp and intentional.
+     ────────────────────────────────────────────────────── */
+  :where(h1, h2, h3, h4, h5, h6) {
+    font-feature-settings: "kern" 1, "liga" 1, "dlig" 1;
+    text-rendering: optimizeLegibility;
+  }
+  .font-display {
+    font-feature-settings: "kern" 1, "liga" 1, "dlig" 1, "swsh" 1;
   }
 
   /* Ambient floating noise layer over entire page (very subtle) */
@@ -151,36 +170,20 @@
     height: 1px;
   }
 
-  /* ──────────────────────────────────────────────────────
-     SECTION — vertical rhythm + transparent so body bg
-     gradient bleeds through. NO solid bg-obsidian!
-     ────────────────────────────────────────────────────── */
+  /* SECTION — vertical rhythm + transparent so body bg gradient bleeds through */
   .section {
     position: relative;
     padding-top: 6rem;
     padding-bottom: 6rem;
   }
-  
   @media (min-width: 768px) {
-    .section {
-      padding-top: 8rem;
-      padding-bottom: 8rem;
-    }
+    .section { padding-top: 8rem; padding-bottom: 8rem; }
   }
-  
   @media (min-width: 1024px) {
-    .section {
-      padding-top: 10rem;
-      padding-bottom: 10rem;
-    }
+    .section { padding-top: 10rem; padding-bottom: 10rem; }
   }
 
-  /* ──────────────────────────────────────────────────────
-     SECTION SEAM — invisible glue between sections.
-     A thin gradient hairline + soft fade above and below
-     gives the eye a moment of breath without breaking
-     the dark continuity.
-     ────────────────────────────────────────────────────── */
+  /* SECTION SEAM — invisible glue between sections */
   .section-seam-top::before,
   .section-seam-bottom::after {
     content: '';
@@ -200,7 +203,6 @@
   .section-seam-top::before    { top: 0; }
   .section-seam-bottom::after  { bottom: 0; }
 
-  /* Soft top/bottom fade-into-darkness for sections */
   .section-fade-top {
     mask-image: linear-gradient(180deg, transparent 0%, black 8%, black 100%);
   }
@@ -222,9 +224,7 @@
   }
 
   /* NOISE overlay */
-  .noise {
-    position: relative;
-  }
+  .noise { position: relative; }
   .noise::after {
     content: '';
     position: absolute;
@@ -237,10 +237,7 @@
   }
 
   /* SPOTLIGHT — hover-reactive */
-  .spotlight {
-    position: relative;
-    isolation: isolate;
-  }
+  .spotlight { position: relative; isolation: isolate; }
   .spotlight::before {
     content: '';
     position: absolute;
@@ -269,7 +266,7 @@
     padding-top: 0.875rem;
     padding-bottom: 0.875rem;
     font-weight: 500;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -308,7 +305,7 @@
     display: inline-block;
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
-    font-size: 0.875rem;
+    font-size: 0.9rem;
     letter-spacing: 0.1em;
   }
   .link-magnetic::after {
@@ -336,7 +333,7 @@
     padding-right: 0.75rem;
     padding-top: 0.375rem;
     padding-bottom: 0.375rem;
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     letter-spacing: 0.2em;
     font-weight: 500;
     text-transform: uppercase;
@@ -365,10 +362,6 @@
   .mask-fade-t { mask-image: linear-gradient(180deg, transparent 0%, black 40%); }
   .mask-fade-x { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
 
-  /* ──────────────────────────────────────────────────────
-     Subtle section background tints — pick per section to
-     create the sense of moving through different chambers.
-     ────────────────────────────────────────────────────── */
   .bg-zone-cool {
     background:
       radial-gradient(ellipse 60% 40% at 80% 20%, rgba(102,106,110,0.08), transparent 70%),
@@ -385,7 +378,6 @@
       radial-gradient(ellipse 40% 30% at 50% 100%, rgba(203,205,205,0.04), transparent 70%);
   }
 
-  /* Glow orb utility — big blurred circular light source */
   .glow-orb {
     position: absolute;
     border-radius: 9999px;

@@ -1,17 +1,19 @@
 'use client';
 
 /**
- * StepDetails — act 03. A clean, simple contact form (name / phone / email /
- * city / branch) plus two field-style triggers that each open a popover:
+ * StepDetails — act 03. Contact form (name / phone / email / city / branch)
+ * plus two field-style triggers that open popovers:
  *   • Date  → calendar popover, past dates disabled.
- *   • Time  → grouped time-slot popover (morning / afternoon / evening),
- *             booked slots disabled.
- * Inline validation gates the advance to payment.
+ *   • Time  → professional 12-hour picker. Service window 10:00 AM – 9:00 PM:
+ *             type any time freely (e.g. 10:10) — anything outside the window
+ *             is rejected; quick-pick chips cover the half-hours.
+ * Both popovers auto-flip: on phones (or when space below is tight) they open
+ * UPWARD so nothing is clipped. Inline validation gates the advance to payment.
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Mail, Calendar, Clock, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { User, Phone, Mail, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { CITIES, BRANCHES } from '@/lib/booking-data';
 import type { BookingState } from './booking-flow';
@@ -22,6 +24,10 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+/* service window, in minutes from midnight */
+const OPEN_MIN = 10 * 60;  // 10:00 AM
+const CLOSE_MIN = 21 * 60; // 09:00 PM
 
 export function StepDetails({
   t, isAr, data, set, onBack, onNext,
@@ -87,7 +93,6 @@ export function StepDetails({
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          {/* Date popover trigger */}
           <Field label={t('step3.date')}>
             <DatePopover
               isAr={isAr}
@@ -101,7 +106,6 @@ export function StepDetails({
             {touched && errors.date && <Err>{errors.date}</Err>}
           </Field>
 
-          {/* Time popover trigger */}
           <Field label={t('step3.time')}>
             <TimePopover
               t={t}
@@ -152,6 +156,7 @@ function DatePopover({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, () => setOpen(false));
+  const place = usePlacement(ref, open, 380);
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const month = calMonth ?? { y: today.getFullYear(), m: today.getMonth() };
@@ -194,9 +199,9 @@ function DatePopover({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className="absolute z-40 mt-2 w-[300px] max-w-[88vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/97 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/97 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}
           >
             <div className="mb-3 flex items-center justify-between">
               <button type="button" data-cursor="hover" disabled={prevDisabled} onClick={() => nav(-1)}
@@ -220,47 +225,115 @@ function DatePopover({
   );
 }
 
-/* ── Time popover ── */
+/* ── Time popover — 12-hour, 10:00 AM – 9:00 PM ── */
 function TimePopover({
   t, value, placeholder, onPick,
 }: { t: ReturnType<typeof useTranslations>; value: string; placeholder: string; onPick: (t: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, () => setOpen(false));
+  const place = usePlacement(ref, open, 440);
 
-  const [h, mm] = value ? value.split(':') : ['', ''];
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
-  const setH = (nh: string) => onPick(`${nh}:${mm || '00'}`);
-  const setM = (nm: string) => onPick(`${h || '09'}:${nm}`);
+  const initParts = value ? to12Parts(value) : null;
+  const [text, setText] = useState(initParts ? `${initParts.h}:${pad(initParts.m)}` : '');
+  const [mer, setMer] = useState<'AM' | 'PM'>(initParts ? initParts.mer : 'AM');
+
+  const onText = (raw: string) => {
+    let s = raw.replace(/[^\d]/g, '').slice(0, 4);
+    if (s.length >= 3) s = s.slice(0, s.length - 2) + ':' + s.slice(s.length - 2);
+    setText(s);
+  };
+
+  const { h, m } = parseText(text);
+  const hOk = h !== null && h >= 1 && h <= 12;
+  const mEff = m === null ? 0 : m;
+  const mOk = mEff >= 0 && mEff <= 59;
+  const cand = hOk && mOk ? to24(h as number, mEff, mer) : null;
+  const inWindow = cand !== null && within(cand);
+  const isValid = cand !== null && inWindow;
+  const outOfRange = cand !== null && !inWindow;
+
+  const slots = useMemo(buildSlots, []);
+  const groups = [
+    { key: 'morning', label: t('step3.morning'), items: slots.filter((s) => mins(s) < 12 * 60) },
+    { key: 'afternoon', label: t('step3.afternoon'), items: slots.filter((s) => mins(s) >= 12 * 60 && mins(s) < 17 * 60) },
+    { key: 'evening', label: t('step3.evening'), items: slots.filter((s) => mins(s) >= 17 * 60) },
+  ];
+
+  const apply = (v: string) => { onPick(v); setOpen(false); };
+  const done = () => { if (isValid && cand) apply(cand); };
+  const pickSlot = (v: string) => { const p = to12Parts(v); setText(`${p.h}:${pad(p.m)}`); setMer(p.mer); apply(v); };
+
+  const display = value ? fmt12(value) : '';
 
   return (
     <div className="relative" ref={ref}>
-      <TriggerButton icon={Clock} filled={!!value} open={open} onClick={() => setOpen((o) => !o)}>
-        {value || placeholder}
+      <TriggerButton icon={Clock} filled={!!display} open={open} onClick={() => setOpen((o) => !o)}>
+        {display || placeholder}
       </TriggerButton>
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className="absolute z-40 mt-2 w-[280px] max-w-[88vw] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/97 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/97 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}
           >
-            {/* live readout */}
-            <div className="flex items-center justify-center gap-1 border-b border-white/[0.06] py-4">
-              <span dir="ltr" className="font-display text-3xl tabular-nums text-ivory">{h || '--'}</span>
-              <span className="font-display text-3xl text-platinum/50">:</span>
-              <span dir="ltr" className="font-display text-3xl tabular-nums text-ivory">{mm || '--'}</span>
-            </div>
-            <div className="grid grid-cols-2">
-              <Column label={t('step3.hour')} values={hours} active={h} onSelect={setH} />
-              <div className="border-s border-white/[0.06]">
-                <Column label={t('step3.minute')} values={mins} active={mm} onSelect={setM} />
+            {/* editable readout */}
+            <div className="border-b border-white/[0.06] px-4 pb-3 pt-4">
+              <div className="flex items-center justify-center gap-3">
+                <input
+                  dir="ltr" inputMode="numeric" value={text} onChange={(e) => onText(e.target.value)}
+                  placeholder="--:--" aria-label="time"
+                  className={[
+                    'w-[5.2rem] bg-transparent text-center font-display text-[2.4rem] leading-none tabular-nums outline-none transition-colors placeholder:text-steel/35',
+                    outOfRange ? 'text-[#e7a3a3]' : 'text-ivory',
+                  ].join(' ')}
+                />
+                <div className="flex flex-col gap-1">
+                  {(['AM', 'PM'] as const).map((mm) => {
+                    const on = mer === mm;
+                    return (
+                      <button key={mm} type="button" data-cursor="hover" onClick={() => setMer(mm)}
+                        className={[
+                          'rounded-lg px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] transition-all duration-200',
+                          on ? 'bg-gradient-to-br from-white to-platinum text-obsidian' : 'border border-white/12 text-platinum/70 hover:border-white/30 hover:text-ivory',
+                        ].join(' ')}
+                      >{t(`step3.${mm === 'AM' ? 'am' : 'pm'}`)}</button>
+                    );
+                  })}
+                </div>
               </div>
+              {outOfRange
+                ? <p className="mt-2.5 text-center text-[0.62rem] tracking-wide text-[#c98a8a]">{t('step3.timeOutOfRange')}</p>
+                : <p className="mt-2.5 text-center text-[0.52rem] uppercase tracking-[0.18em] text-steel">{t('step3.timeRange')}</p>}
             </div>
-            <button type="button" data-cursor="hover" onClick={() => setOpen(false)}
-              className="w-full border-t border-white/[0.06] py-3 text-[0.6rem] uppercase tracking-[0.24em] text-platinum/80 transition-colors hover:text-ivory">
-              {t('step3.confirmTime')}
+
+            {/* quick slots */}
+            <div className="scrollbar-thin max-h-[210px] space-y-3 overflow-y-auto p-3">
+              {groups.map((g) => g.items.length ? (
+                <div key={g.key}>
+                  <div className="mb-1.5 px-1 text-[0.5rem] uppercase tracking-[0.2em] text-steel">{g.label}</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {g.items.map((s) => {
+                      const on = value === s;
+                      return (
+                        <button key={s} type="button" data-cursor="hover" dir="ltr" onClick={() => pickSlot(s)}
+                          className={[
+                            'rounded-lg border py-2 text-center font-display text-[0.82rem] tabular-nums transition-all duration-200',
+                            on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian'
+                              : 'border-white/10 bg-white/[0.02] text-ivory/85 hover:border-white/25',
+                          ].join(' ')}
+                        >{fmt12Short(s)}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null)}
+            </div>
+
+            <button type="button" data-cursor="hover" disabled={!isValid} onClick={done}
+              className="w-full border-t border-white/[0.06] py-3 text-[0.6rem] uppercase tracking-[0.24em] text-platinum/85 transition-colors hover:text-ivory disabled:cursor-not-allowed disabled:text-steel/40">
+              {t('step3.timeDone')}
             </button>
           </motion.div>
         )}
@@ -269,25 +342,55 @@ function TimePopover({
   );
 }
 
-function Column({ label, values, active, onSelect }: { label: string; values: string[]; active: string; onSelect: (v: string) => void }) {
-  return (
-    <div className="flex flex-col">
-      <span className="px-3 pb-1 pt-3 text-center text-[0.5rem] uppercase tracking-[0.2em] text-steel">{label}</span>
-      <div className="scrollbar-thin max-h-[168px] overflow-y-auto px-2 pb-2">
-        {values.map((v) => {
-          const sel = active === v;
-          return (
-            <button key={v} type="button" data-cursor="hover" onClick={() => onSelect(v)}
-              className={[
-                'mb-1 grid w-full place-items-center rounded-lg py-2 font-display text-base tabular-nums transition-all duration-200',
-                sel ? 'bg-gradient-to-br from-white to-platinum text-obsidian' : 'text-ivory/80 hover:bg-white/[0.05]',
-              ].join(' ')}
-            >{v}</button>
-          );
-        })}
-      </div>
-    </div>
-  );
+/* ── time helpers (canonical stored value is 24h "HH:MM") ── */
+function pad(n: number) { return String(n).padStart(2, '0'); }
+function parseText(text: string): { h: number | null; m: number | null } {
+  if (!text) return { h: null, m: null };
+  const [hp, mp] = text.split(':');
+  const h = hp ? parseInt(hp, 10) : NaN;
+  const m = mp !== undefined && mp !== '' ? parseInt(mp, 10) : NaN;
+  return { h: isNaN(h) ? null : h, m: mp === undefined ? null : (isNaN(m) ? null : m) };
+}
+function to24(h12: number, m: number, mer: 'AM' | 'PM'): string {
+  let h = h12 % 12; if (mer === 'PM') h += 12;
+  return `${pad(h)}:${pad(m)}`;
+}
+function to12Parts(v: string): { h: number; m: number; mer: 'AM' | 'PM' } {
+  const [H, M] = v.split(':').map(Number);
+  const mer: 'AM' | 'PM' = H >= 12 ? 'PM' : 'AM';
+  let h = H % 12; if (h === 0) h = 12;
+  return { h, m: M || 0, mer };
+}
+function fmt12(v: string): string { const p = to12Parts(v); return `${p.h}:${pad(p.m)} ${p.mer}`; }
+function fmt12Short(v: string): string { const p = to12Parts(v); return `${p.h}:${pad(p.m)}`; }
+function mins(v: string): number { const [H, M] = v.split(':').map(Number); return H * 60 + M; }
+function within(v: string): boolean { const t = mins(v); return t >= OPEN_MIN && t <= CLOSE_MIN; }
+function buildSlots(): string[] {
+  const out: string[] = [];
+  for (let t = OPEN_MIN; t <= CLOSE_MIN; t += 30) out.push(`${pad(Math.floor(t / 60))}:${pad(t % 60)}`);
+  return out;
+}
+
+/* ── popover placement: auto-flip up on phones / tight space ── */
+function usePlacement(ref: React.RefObject<HTMLElement>, open: boolean, estimated: number) {
+  const [place, setPlace] = useState<'up' | 'down'>('down');
+  useEffect(() => {
+    if (!open) return;
+    const compute = () => {
+      const el = ref.current; if (!el) return;
+      const r = el.getBoundingClientRect();
+      const below = window.innerHeight - r.bottom;
+      const above = r.top;
+      const mobile = window.innerWidth < 768;
+      if (mobile) setPlace(above > 220 ? 'up' : 'down');
+      else setPlace(below < estimated && above > below ? 'up' : 'down');
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    window.addEventListener('scroll', compute, true);
+    return () => { window.removeEventListener('resize', compute); window.removeEventListener('scroll', compute, true); };
+  }, [open, estimated, ref]);
+  return place;
 }
 
 function useOutside(ref: React.RefObject<HTMLElement>, cb: () => void) {
