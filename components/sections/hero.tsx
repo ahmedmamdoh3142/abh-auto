@@ -71,7 +71,10 @@ export function Hero() {
     if (!ctx) return;
     const cw = canvas.width, ch = canvas.height;
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    const scale = Math.max(cw / iw, ch / ih);
+    // Phones / portrait stages → "contain" (whole frame visible, scaled to fit,
+    // letterboxed on obsidian). Desktop / landscape → cinematic "cover".
+    const contain = typeof window !== 'undefined' && (window.innerWidth < 768 || ch > cw);
+    const scale = contain ? Math.min(cw / iw, ch / ih) : Math.max(cw / iw, ch / ih);
     const dw = iw * scale, dh = ih * scale;
     const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
     ctx.clearRect(0, 0, cw, ch);
@@ -153,7 +156,7 @@ export function Hero() {
         {/* CSS poster behind the canvas — no black flash before JS paints */}
         <div
           aria-hidden
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-contain bg-center bg-no-repeat md:bg-cover"
           style={{ backgroundImage: `url('${FIRST_FRAME}')`, filter: 'grayscale(0.2) brightness(0.7) contrast(1.1)' }}
         />
 
