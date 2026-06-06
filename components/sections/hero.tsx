@@ -71,10 +71,8 @@ export function Hero() {
     if (!ctx) return;
     const cw = canvas.width, ch = canvas.height;
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    // Phones / portrait stages → "contain" (whole frame visible, scaled to fit,
-    // letterboxed on obsidian). Desktop / landscape → cinematic "cover".
-    const contain = typeof window !== 'undefined' && (window.innerWidth < 768 || ch > cw);
-    const scale = contain ? Math.min(cw / iw, ch / ih) : Math.max(cw / iw, ch / ih);
+    // Always "cover" — fill the stage on every device (mobile === desktop).
+    const scale = Math.max(cw / iw, ch / ih);
     const dw = iw * scale, dh = ih * scale;
     const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
     ctx.clearRect(0, 0, cw, ch);
@@ -156,8 +154,8 @@ export function Hero() {
         {/* CSS poster behind the canvas — no black flash before JS paints */}
         <div
           aria-hidden
-          className="absolute inset-0 bg-contain bg-center bg-no-repeat md:bg-cover"
-          style={{ backgroundImage: `url('${FIRST_FRAME}')`, filter: 'grayscale(0.2) brightness(0.7) contrast(1.1)' }}
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url('${FIRST_FRAME}')`, filter: 'grayscale(0.12) brightness(0.96) contrast(1.03)' }}
         />
 
         {/* frame canvas */}
@@ -165,13 +163,14 @@ export function Hero() {
           ref={canvasRef}
           aria-hidden
           className={`absolute inset-0 h-full w-full transition-opacity duration-500 ${ready ? 'opacity-100' : 'opacity-0'}`}
-          style={{ filter: 'grayscale(0.2) brightness(0.7) contrast(1.1)' }}
+          style={{ filter: 'grayscale(0.12) brightness(0.96) contrast(1.03)' }}
         />
 
-        {/* cinematic grade: top fade · centre vignette · side vignette */}
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-b from-obsidian/40 via-transparent to-obsidian" />
-        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_80%_70%_at_50%_50%,transparent_0%,rgba(0,0,0,0.5)_72%,rgba(0,0,0,0.92)_100%)]" />
-        <div aria-hidden className="absolute inset-y-0 end-0 w-1/3 bg-gradient-to-l from-obsidian/70 to-transparent" />
+        {/* light scrims only — soft top for the wordmark, soft bottom for the
+            transition into the next section. No heavy vignette: the car and the
+            frames stay the focus. */}
+        <div aria-hidden className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-obsidian/45 to-transparent" />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian via-obsidian/25 to-transparent" />
 
         {/* noise veil */}
         <div

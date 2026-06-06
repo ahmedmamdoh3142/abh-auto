@@ -33,7 +33,6 @@ export default function HomePage() {
     <>
       {/* Hero owns the viewport — no divider after it (marquee handles the seam) */}
       <Hero />
-      <MarqueeStrip />
 
       {/* Stats live in the cool steel zone */}
       <div className="bg-zone-cool">

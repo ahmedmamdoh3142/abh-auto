@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslations } from 'next-intl';
-import { Menu, X, User, CalendarCheck, LogOut, ChevronDown } from 'lucide-react';
+import { Menu, X, User, LogOut, ChevronDown } from 'lucide-react';
 import { Logo } from '@/components/shared/logo';
 import { Button } from '@/components/ui/button';
 import { LocaleSwitcher } from '@/components/shared/locale-switcher';
@@ -71,7 +71,7 @@ export function Navbar() {
         >
           {/* Logo */}
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
-            <Logo size={65} />
+            <Logo size={80} />
           </Link>
 
           {/* Center nav */}
@@ -87,7 +87,7 @@ export function Navbar() {
                 >
                   <span
                     className={cn(
-                      'text-[0.9rem] uppercase tracking-[0.22em] transition-colors duration-300',
+                      'text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
                       active ? 'text-ivory' : 'text-platinum/70 group-hover:text-ivory',
                     )}
                   >
@@ -154,7 +154,7 @@ export function Navbar() {
               initial={{ y: -20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.05 }}
-              className="absolute top-5 left-0 right-0 flex items-center justify-between px-6"
+              className="absolute top-5 left-0 right-0 z-10 flex items-center justify-between px-6"
             >
               <Logo size={28} />
               <button
@@ -240,7 +240,6 @@ function AccountMenu({ member }: { member: Member }) {
 
   const items = [
     { key: 'myProfile', href: '/account', icon: User },
-    { key: 'myBookings', href: '/booking', icon: CalendarCheck },
   ] as const;
 
   return (
@@ -326,9 +325,9 @@ function MobileMemberCard({ member, onClose }: { member: Member; onClose: () => 
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <Link href="/booking" onClick={onClose}
+        <Link href="/account" onClick={onClose}
           className="rounded-2xl border border-white/12 bg-white/[0.02] py-3 text-center text-[0.66rem] uppercase tracking-[0.14em] text-platinum/80">
-          {ta('myBookings')}
+          {ta('myProfile')}
         </Link>
         <button
           onClick={() => { signOut(); onClose(); router.push('/'); }}
