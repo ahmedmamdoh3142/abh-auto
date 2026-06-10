@@ -9,7 +9,7 @@ import Image from 'next/image';
 import { Sparkles } from 'lucide-react';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const BOOKING_IMAGE = '/images/hero-bg.png';
+const BOOKING_IMAGE = '/images/hero-bg.webp';
 
 export function ServicesHero() {
   const locale = useLocale();

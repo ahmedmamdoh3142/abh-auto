@@ -35,8 +35,8 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* The car that carries the stage. Swap for any cinematic vehicle asset
-   (e.g. '/images/project-1.png' or '/images/why-5.png'). */
-const PORTAL_IMAGE = '/images/hero-bg.png';
+   (e.g. '/images/project-1.webp' or '/images/why-5.webp'). */
+const PORTAL_IMAGE = '/images/hero-bg.webp';
 
 /* Self-contained city list so login never couples to booking internals.
    Labels are read from the existing `booking.cities` namespace. */

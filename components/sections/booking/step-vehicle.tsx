@@ -2,13 +2,7 @@
 
 /**
  * StepVehicle — act 01 of the booking flow.
- * Brand → Model → Colour → Plate, beside a cinematic car plate that
- * re-tints to the chosen paint and a live Saudi-style licence plate that
- * mirrors what the owner types.
- *
- * When the member is signed in and has a garage, this step opens on a
- * vehicle picker (their saved cars) with an "enter a new vehicle" escape
- * hatch — so a returning member books in one tap.
+ * لوحة السيارة الآن جزئين: أرقام + حروف (تُخزَّن مدمجة في data.plate).
  */
 import { useState } from 'react';
 import Image from 'next/image';
@@ -16,15 +10,31 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import { Check, ChevronDown, Plus, Car } from 'lucide-react';
 
-import { BRANDS, COLORS } from '@/lib/booking-data';
+import { COLORS, type Brand } from '@/lib/booking-data';
 import type { Vehicle } from '@/components/shared/auth-provider';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill } from './booking-flow';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/* ── أدوات اللوحة: أرقام + حروف ──────────────────────────── */
+const DIGITS_RE = /[0-9\u0660-\u0669]/g;            // أرقام لاتيني + عربي
+export function splitPlate(plate: string): { digits: string; letters: string } {
+  const p = plate || '';
+  const digits = (p.match(DIGITS_RE) || []).join('');
+  const letters = p.replace(DIGITS_RE, '').replace(/\s+/g, ' ').trim();
+  return { digits, letters };
+}
+export function joinPlate(digits: string, letters: string): string {
+  return [digits.trim(), letters.trim()].filter(Boolean).join(' ');
+}
+const onlyDigits = (s: string) => s.replace(/[^0-9\u0660-\u0669]/g, '').slice(0, 4);
+// الحروف تتفصل تلقائيًا: "أبج" -> "أ ب ج" (4 حروف كحد أقصى)
+const onlyLetters = (s: string) =>
+  s.replace(DIGITS_RE, '').replace(/\s+/g, '').split('').slice(0, 4).join(' ');
+
 export function StepVehicle({
-  t, isAr, data, onChange, bookingImage, onNext, garage = [],
+  t, isAr, data, onChange, bookingImage, onNext, garage = [], brands,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -33,12 +43,14 @@ export function StepVehicle({
   bookingImage: string;
   onNext: () => void;
   garage?: Vehicle[];
+  brands: Brand[];
 }) {
-  const brand = BRANDS.find((b) => b.id === data.brandId);
+  const brand = brands.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
-  const complete = data.brandId && data.model && data.colorKey && data.plate.trim().length >= 2;
+  // مكتمل = ماركة + موديل + لون + على الأقل رقم واحد في اللوحة
+  const complete = !!(data.brandId && data.model && data.colorKey && DIGITS_RE.test(data.plate || ''));
 
-  // Open on the picker when there's a garage and nothing chosen yet.
+  const { digits, letters } = splitPlate(data.plate);
   const [mode, setMode] = useState<'pick' | 'new'>(garage.length > 0 ? 'pick' : 'new');
 
   const pickVehicle = (v: Vehicle) =>
@@ -46,7 +58,6 @@ export function StepVehicle({
 
   return (
     <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
-      {/* ── Left — picker or form ───────────────────────────────── */}
       <div>
         {mode === 'pick' && garage.length > 0 ? (
           <div>
@@ -54,7 +65,7 @@ export function StepVehicle({
 
             <div className="mt-9 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               {garage.map((v, i) => {
-                const b = BRANDS.find((x) => x.id === v.brandId);
+                const b = brands.find((x) => x.id === v.brandId);
                 const c = COLORS.find((x) => x.key === v.colorKey);
                 const on = data.brandId === v.brandId && data.model === v.model && data.plate === v.plate;
                 return (
@@ -115,21 +126,18 @@ export function StepVehicle({
             )}
 
             <div className="mt-7 space-y-7">
-              {/* Brand */}
               <Field label={t('step1.brand')}>
                 <Select value={data.brandId} placeholder={t('step1.brandPlaceholder')}
-                  options={BRANDS.map((b) => ({ value: b.id, label: b.name }))}
+                  options={brands.map((b) => ({ value: b.id, label: b.name }))}
                   onChange={(v) => onChange({ brandId: v, model: '' })} />
               </Field>
 
-              {/* Model */}
               <Field label={t('step1.model')}>
                 <Select value={data.model} placeholder={t('step1.modelPlaceholder')} disabled={!brand}
                   options={(brand?.models ?? []).map((m) => ({ value: m, label: m }))}
                   onChange={(v) => onChange({ model: v })} />
               </Field>
 
-              {/* Colour */}
               <Field label={t('step1.color')}>
                 <div className="flex flex-wrap gap-2.5">
                   {COLORS.map((c) => {
@@ -141,7 +149,7 @@ export function StepVehicle({
                         <AnimatePresence>
                           {on && (
                             <motion.span initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} className="absolute inset-0 grid place-items-center">
-                              <Check className="h-4 w-4 drop-shadow" strokeWidth={2.8} style={{ color: ['white', 'silver', 'beige', 'yellow', 'gold'].includes(c.key) ? '#000' : '#fff' }} />
+                              <Check className="h-4 w-4 drop-shadow" strokeWidth={2.8} style={{ color: ['white', 'silver', 'beige', 'gold'].includes(c.key) ? '#000' : '#fff' }} />
                             </motion.span>
                           )}
                         </AnimatePresence>
@@ -152,11 +160,24 @@ export function StepVehicle({
                 {color && <span className="mt-3 block text-[0.62rem] uppercase tracking-[0.2em] text-platinum/70">{t(`colors.${color.key}`)}</span>}
               </Field>
 
-              {/* Plate */}
+              {/* اللوحة — جزئين: أرقام + حروف */}
               <Field label={t('step1.plate')} hint={t('step1.plateHint')}>
-                <input value={data.plate} onChange={(e) => onChange({ plate: e.target.value.toUpperCase().slice(0, 10) })}
-                  placeholder={t('step1.platePlaceholder')} dir="ltr"
-                  className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 font-display text-lg tracking-[0.25em] text-ivory placeholder:text-steel/60 placeholder:tracking-normal placeholder:font-sans outline-none transition-colors duration-300 focus:border-platinum/50 focus:bg-white/[0.05]" />
+                <div dir="ltr" className="grid grid-cols-[1.1fr_1.4fr] gap-3">
+                  <div>
+                    <span className="mb-1.5 block text-[0.5rem] uppercase tracking-[0.2em] text-steel">{isAr ? 'أرقام' : 'Numbers'}</span>
+                    <input value={digits} inputMode="numeric"
+                      onChange={(e) => onChange({ plate: joinPlate(onlyDigits(e.target.value), letters) })}
+                      placeholder="1234" dir="ltr"
+                      className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-center font-display text-lg tracking-[0.25em] text-ivory placeholder:text-steel/50 placeholder:tracking-normal placeholder:font-sans outline-none transition-colors duration-300 focus:border-platinum/50 focus:bg-white/[0.05]" />
+                  </div>
+                  <div>
+                    <span className="mb-1.5 block text-[0.5rem] uppercase tracking-[0.2em] text-steel">{isAr ? 'حروف' : 'Letters'}</span>
+                    <input value={letters}
+                      onChange={(e) => onChange({ plate: joinPlate(digits, onlyLetters(e.target.value)) })}
+                      placeholder={isAr ? 'أ ب ج' : 'ABC'} dir={isAr ? 'rtl' : 'ltr'}
+                      className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-center font-display text-lg tracking-[0.25em] text-ivory placeholder:text-steel/50 placeholder:tracking-normal placeholder:font-sans outline-none transition-colors duration-300 focus:border-platinum/50 focus:bg-white/[0.05]" />
+                  </div>
+                </div>
               </Field>
             </div>
 
@@ -169,7 +190,7 @@ export function StepVehicle({
         )}
       </div>
 
-      {/* ── Right — stage ───────────────────────────────────────── */}
+      {/* ── Right — stage ── */}
       <div className="relative">
         <div className="sticky top-28">
           <div className="relative aspect-[4/5] overflow-hidden rounded-[24px] border border-white/[0.08] bg-obsidian">
@@ -205,7 +226,6 @@ export function StepVehicle({
   );
 }
 
-/* ── Live licence plate ── */
 function LicensePlate({ text }: { text: string }) {
   return (
     <div dir="ltr" className="flex items-stretch overflow-hidden rounded-md border border-white/30 bg-gradient-to-b from-[#f6f6f4] to-[#dcdcd8] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
@@ -220,7 +240,6 @@ function LicensePlate({ text }: { text: string }) {
   );
 }
 
-/* ── Decorative corner crosshairs ── */
 function Cross() {
   const arm = 'absolute bg-ivory/40';
   return (
@@ -237,7 +256,6 @@ function Cross() {
   );
 }
 
-/* ── Reusable field shell ── */
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -250,7 +268,6 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-/* ── Custom select ── */
 export function Select({
   value, placeholder, options, onChange, disabled,
 }: {
@@ -286,7 +303,6 @@ export function Select({
   );
 }
 
-/* ── Step heading ── */
 export function Heading({ index, label, title, sub }: { index: string; label: string; title: string; sub: string }) {
   return (
     <div>

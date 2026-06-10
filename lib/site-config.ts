@@ -16,12 +16,12 @@ export const siteConfig = {
     instagram: 'https://instagram.com',
     youtube: 'https://youtube.com',
     linkedin: 'https://linkedin.com',
-    whatsapp: 'https://wa.me/0000000000',
+    whatsapp: 'https://wa.me/+966570888803',
   },
   contact: {
-    phone: '+971 4 000 0000',
+    phone: '+966570888803',
     email: 'concierge@abh-auto.example',
-    address: 'Workshop 1 · Sheikh Zayed Road · Dubai',
+    address: 'شارع الأمير محمد بن عبد العزيز',
   },
 } as const;
 
@@ -59,23 +59,23 @@ export const heroPoster =
 
 export const serviceImages: Record<string, string> = {
   ceramic:
-    '/images/service-ceramic.png',
+    '/images/service-ceramic.webp',
   ppf:
-    '/images/service-ppf.png',
+    '/images/service-ppf.webp',
   armor:
-    '/images/service-detailing.png',
+    '/images/service-detailing.webp',
   tracking:
     'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=1200&q=75',
   security:
     'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=75',
   detailing:
-    '/images/service-detailing.png',
+    '/images/service-detailing.webp',
 };
 
 export const offerImages = [
-  '/images/offer-1.png',
-  '/images/offer-2.png',
-  '/images/offer-3.png',
+  '/images/offer-1.webp',
+  '/images/offer-2.webp',
+  '/images/offer-3.webp',
 ];
 
 /**
@@ -87,22 +87,22 @@ export const offerImages = [
  * 5: luxury car delivery
  */
 export const whyImages = [
-  '/images/why-1.png',
-  '/images/why-2.png',
-  '/images/why-3.png',
-  '/images/why-4.png',
-  '/images/why-5.png',
+  '/images/why-1.webp',
+  '/images/why-2.webp',
+  '/images/why-3.webp',
+  '/images/why-4.webp',
+  '/images/why-5.webp',
 ];
 
 export const projectImages = [
-  '/images/project-1.png',
-  '/images/project-2.png',
-  '/images/project-3.png',
-  '/images/project-4.png',
-  '/images/project-5.png',
-  '/images/project-6.png',
-  '/images/project-7.png',
-  '/images/project-8.png',
+  '/images/project-1.webp',
+  '/images/project-2.webp',
+  '/images/project-3.webp',
+  '/images/project-4.webp',
+  '/images/project-5.webp',
+  '/images/project-6.webp',
+  '/images/project-7.webp',
+  '/images/project-8.webp',
 ];
 
 export const stats = [

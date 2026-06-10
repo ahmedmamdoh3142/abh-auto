@@ -18,7 +18,7 @@ import { ArrowUpRight, Phone } from 'lucide-react';
 import { RevealText } from '@/components/animations/reveal-text';
 
 const CTA_IMAGE =
-  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=70&w=1920';
+  '/images/project-4.webp';
 
 export function CtaSection() {
   const t = useTranslations('cta');

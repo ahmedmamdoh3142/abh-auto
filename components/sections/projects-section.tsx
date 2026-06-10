@@ -2,43 +2,32 @@
 
 /**
  * ProjectsSection — 360 deg rotating ring carousel.
- * Path: components/sections/projects-section.tsx  (export `ProjectsSection`)
- *
- * Borderless / seamless treatment:
- *  - The SECTION is fully transparent — no grid-lines, no drawn floor, no
- *    box edges. A top+bottom mask dissolves it into the sections above/below
- *    so it reads as one continuous dark field, not a bordered block.
- *  - Each CARD has NO border and is rounded only at the top; its bottom melts
- *    straight into its reflection (flush, no gap, no rounding, immediate
- *    feather) so card + reflection look like a single floating object.
- *  - Inactive cards lose opacity and gain a soft blur with distance, so they
- *    dissolve into the dark instead of looking like cut-out tiles.
- *
- * Mechanic is unchanged from the reference: full ring, drag-to-spin,
- * auto-play, circular SVG progress dial, RTL-aware keyboard.
- *
- * MONOCHROME only. next/image with sizes. Deterministic particles (no
- * hydration mismatch). Content reveal via `animate` (no AnimatePresence).
+ * المشاريع والنصوص تأتي من قاعدة البيانات عبر props.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight, ArrowUpRight } from 'lucide-react';
 
 import { SectionHeader } from '@/components/ui/section-header';
 
-const PROJECTS = [
-  { id: 1, title: 'Pagani Huayra', category: 'Carbon Restoration', image: '/images/project-1.png' },
-  { id: 2, title: 'Rolls-Royce Spectre', category: 'Diamond Suite', image: '/images/project-2.png' },
-  { id: 3, title: 'Ferrari SF90', category: 'Track Specification', image: '/images/project-3.png' },
-  { id: 4, title: 'Bentley Bacalar', category: 'Concours Prep', image: '/images/project-4.png' },
-  { id: 5, title: 'Aston Martin DBX', category: 'Armored B6', image: '/images/project-5.png' },
-  { id: 6, title: 'Porsche 911 GT3', category: 'PPF Application', image: '/images/project-6.png' },
-  { id: 7, title: 'Mercedes-AMG G63', category: 'Stealth Tracking', image: '/images/project-7.png' },
-  { id: 8, title: 'Lamborghini Revuelto', category: 'Ceramic 12yr', image: '/images/project-8.png' },
-];
+interface ProjectRow {
+  slug: string;
+  title: string;
+  category: string;
+  craft: string;
+  year: number;
+  image_after: string;
+  image_before: string | null;
+}
+
+interface ProjectsText {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  viewAll: string;
+}
 
 const SPRING = { type: 'spring' as const, stiffness: 80, damping: 20, mass: 1 };
 const RADIUS = 620;
@@ -46,9 +35,7 @@ const CARD_W = 380;
 const CARD_H = 500;
 const REFLECTION_H = 240;
 
-export function ProjectsSection() {
-  const t = useTranslations('projects');
-
+export function ProjectsSection({ projects, txt }: { projects: ProjectRow[]; txt: ProjectsText }) {
   const [rotation, setRotation] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -59,7 +46,7 @@ export function ProjectsSection() {
   const dragStartRotation = useRef(0);
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const total = PROJECTS.length;
+  const total = projects.length;
   const anglePerItem = 360 / total;
 
   const activeIndex = ((Math.round(-rotation / anglePerItem) % total) + total) % total;
@@ -143,11 +130,8 @@ export function ProjectsSection() {
       }}
     >
       <div className="container relative">
-        <SectionHeader eyebrow={t('eyebrow')} title={t('title')} subtitle={t('subtitle')} />
+        <SectionHeader eyebrow={txt.eyebrow} title={txt.title} subtitle={txt.subtitle} />
 
-        {/* 3D ring stage — breaks out symmetrically wider than the text
-            container via negative inline margins, so it stays perfectly
-            centered in both LTR and RTL. Transparent, no frame. */}
         <div
           ref={containerRef}
           className="relative mx-auto mt-12 h-[720px] w-auto max-w-[1600px] cursor-grab touch-pan-y select-none active:cursor-grabbing md:mt-16 md:-mx-12 lg:-mx-24"
@@ -188,7 +172,7 @@ export function ProjectsSection() {
               animate={{ rotateY: rotation }}
               transition={isDragging ? { duration: 0 } : SPRING}
             >
-              {PROJECTS.map((project, index) => {
+              {projects.map((project, index) => {
                 const angle = index * anglePerItem;
                 const isActive = index === activeIndex;
                 const ringDist = Math.abs(((index - activeIndex + total) % total) - total / 2);
@@ -196,7 +180,7 @@ export function ProjectsSection() {
 
                 return (
                   <div
-                    key={project.id}
+                    key={project.slug}
                     className="absolute"
                     style={{
                       transformStyle: 'preserve-3d',
@@ -207,8 +191,6 @@ export function ProjectsSection() {
                     onClick={() => !isDragging && goTo(index)}
                     data-cursor="hover"
                   >
-                    {/* Unit = card + reflection, animated together so they
-                        move, scale, fade and blur as ONE floating object. */}
                     <motion.div
                       animate={{
                         scale: isActive ? 1 : 0.85,
@@ -220,12 +202,10 @@ export function ProjectsSection() {
                       transition={{ duration: 0.5 }}
                       style={{ transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
                     >
-                      {/* Card body — no border, top-rounded only */}
                       <div
                         className="relative overflow-hidden rounded-t-2xl"
                         style={{ width: CARD_W, height: CARD_H }}
                       >
-                        {/* Image (active gets ken-burns) */}
                         <motion.div
                           className="absolute inset-0"
                           animate={isActive ? { scale: [1, 1.08, 1] } : { scale: 1 }}
@@ -236,7 +216,7 @@ export function ProjectsSection() {
                           }
                         >
                           <Image
-                            src={project.image}
+                            src={project.image_after}
                             alt={`${project.title} — ${project.category}`}
                             fill
                             sizes="320px"
@@ -244,10 +224,8 @@ export function ProjectsSection() {
                           />
                         </motion.div>
 
-                        {/* Tonal grade + bottom feather into the reflection */}
                         <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/30 to-transparent" />
 
-                        {/* Soft active glow (no hard ring) */}
                         <div
                           aria-hidden
                           className="pointer-events-none absolute inset-0 transition-opacity duration-500"
@@ -257,7 +235,6 @@ export function ProjectsSection() {
                           }}
                         />
 
-                        {/* Chrome glass sheen */}
                         <div
                           aria-hidden
                           className="pointer-events-none absolute inset-0 opacity-20"
@@ -267,7 +244,6 @@ export function ProjectsSection() {
                           }}
                         />
 
-                        {/* Content */}
                         <motion.div
                           className="absolute inset-x-0 bottom-0 p-6"
                           animate={{ opacity: isActive ? 1 : 0, y: isActive ? 0 : 24 }}
@@ -283,8 +259,6 @@ export function ProjectsSection() {
                         </motion.div>
                       </div>
 
-                      {/* Reflection — flush under the card, mirrored, fades out
-                          immediately so the seam between them disappears. */}
                       <div
                         aria-hidden
                         className="pointer-events-none overflow-hidden"
@@ -292,7 +266,7 @@ export function ProjectsSection() {
                           width: CARD_W,
                           height: REFLECTION_H,
                           transform: 'scaleY(-1)',
-                          backgroundImage: `url(${project.image})`,
+                          backgroundImage: `url(${project.image_after})`,
                           backgroundSize: `${CARD_W}px ${CARD_H}px`,
                           backgroundPosition: 'left bottom',
                           filter: 'grayscale(1) blur(3px)',
@@ -332,7 +306,7 @@ export function ProjectsSection() {
                 animate={{ strokeDashoffset: -(activeIndex * (2 * Math.PI * 40)) / total }}
                 transition={SPRING}
               />
-              {PROJECTS.map((_, i) => {
+              {projects.map((_, i) => {
                 const a = (i * 360) / total - 90;
                 const x = 50 + 40 * Math.cos((a * Math.PI) / 180);
                 const y = 50 + 40 * Math.sin((a * Math.PI) / 180);
@@ -373,7 +347,7 @@ export function ProjectsSection() {
             data-cursor="hover"
             className="link-magnetic inline-flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.28em] text-platinum/80"
           >
-            {t('viewAll')}
+            {txt.viewAll}
             <ArrowUpRight className="reversible-icon h-3 w-3" strokeWidth={1.8} />
           </Link>
         </div>

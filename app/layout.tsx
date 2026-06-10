@@ -120,7 +120,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
+    apple: "/apple-touch-icon.webp",
   },
   robots: { index: true, follow: true },
 };

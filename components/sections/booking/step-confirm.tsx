@@ -1,35 +1,44 @@
 'use client';
 
 /**
- * StepConfirm — act 04. Full booking dossier, payment selection
- * (Tabby / Tamara / Apple Pay / Cash) and the final confirm action.
+ * StepConfirm — act 04. الخدمات من القاعدة + كود خصم (تحقق من القاعدة، خصم على الإجمالي).
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2 } from 'lucide-react';
 
 import {
-  BRANDS, SERVICES, PAYMENT_METHODS, priceFor, oldPriceFor, currencyFmt,
-  type PaymentMethod,
+  BRANDS, PAYMENT_METHODS, PAYMENT_DISABLED, branchLabel, currencyFmt,
+  type PaymentMethod, type VehicleSize,
 } from '@/lib/booking-data';
+import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+const SIZE_LABELS: Record<VehicleSize, { ar: string; en: string; tier: string }> = {
+  small: { ar: 'صغيرة', en: 'Small', tier: 'Tier I' },
+  medium: { ar: 'متوسطة', en: 'Medium', tier: 'Tier II' },
+  large: { ar: 'كبيرة', en: 'Large', tier: 'Tier III' },
+};
+
 export function StepConfirm({
-  t, isAr, data, total, set, onBack, onConfirm,
+  t, isAr, data, total, set, services: SERVICES, onBack, onConfirm,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
   data: BookingState;
-  total: { services: number; tow: number; grand: number; onReq: boolean; saved: number };
+  total: { services: number; tow: number; beforePromo: number; promoCut: number; grand: number; onReq: boolean; saved: number };
   set: (patch: Partial<BookingState>) => void;
+  services: DbServiceMeta[];
   onBack: () => void; onConfirm: () => void;
 }) {
   const [processing, setProcessing] = useState(false);
   const brand = BRANDS.find((b) => b.id === data.brandId);
+  const szL = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
+  const sizeChip = `${isAr ? szL.ar : szL.en} · ${szL.tier}`;
 
   const confirm = () => {
     if (!data.payment) return;
@@ -41,18 +50,13 @@ export function StepConfirm({
     <div>
       <Heading t={t} />
 
-      {/* cinematic vehicle banner — breaks the monotony of the cards below */}
       <div className="relative mt-8 overflow-hidden rounded-[24px] border border-white/[0.08]">
-        <div
-          className="absolute inset-0 scale-105 bg-cover bg-center brightness-[0.4] grayscale-[0.5]"
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=70&w=1600')" }}
-        />
+        <div className="absolute inset-0 scale-105 bg-cover bg-center brightness-[0.4] grayscale-[0.5]"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=70&w=1600')" }} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/55 to-[#050608]/20" />
         <div className="absolute inset-0 bg-gradient-to-e from-[#050608]/80 to-transparent" />
-        <motion.div
-          initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}
-          className="relative flex flex-col gap-4 p-6 sm:flex-row sm:items-end sm:justify-between md:p-8"
-        >
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}
+          className="relative flex flex-col gap-4 p-6 sm:flex-row sm:items-end sm:justify-between md:p-8">
           <div>
             <span className="text-[0.55rem] uppercase tracking-[0.3em] text-platinum/70">{t('step4.reserving')}</span>
             <h3 className="mt-2 font-display text-3xl uppercase leading-none text-ivory md:text-4xl">
@@ -60,7 +64,7 @@ export function StepConfirm({
             </h3>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <BannerChip>{t(`colors.${data.colorKey}`)}</BannerChip>
-              <BannerChip>{t('step2.largeVehicle')} · Tier III</BannerChip>
+              <BannerChip>{sizeChip}</BannerChip>
               {data.plate && <BannerChip mono>{data.plate}</BannerChip>}
             </div>
           </div>
@@ -72,33 +76,30 @@ export function StepConfirm({
       </div>
 
       <div className="mt-9 grid gap-10 lg:grid-cols-[1fr_1fr] lg:gap-12">
-        {/* ── Dossier ──────────────────────────────────────────── */}
         <div className="space-y-5">
-          {/* vehicle */}
           <DossierCard icon={Car} title={t('step4.vehicleTitle')}>
             <Row k={`${brand?.name ?? ''}`} v={data.model} />
             <Row k={t('step1.color')} v={t(`colors.${data.colorKey}`)} />
             <Row k={t('step1.plate')} v={data.plate} mono />
           </DossierCard>
 
-          {/* services */}
           <DossierCard icon={Wrench} title={t('step4.servicesTitle')}>
             {data.services.map((slug) => {
-              const svc = SERVICES.find((s) => s.slug === slug)!;
-              return <Row key={slug} k={t(`svc.${slug}.name`)}
-                v={svc.onRequest ? t('onRequest') : `${currencyFmt(priceFor(svc, data.size))} ${t('currency')}`} mono={!svc.onRequest} />;
+              const svc = SERVICES.find((s) => s.slug === slug);
+              if (!svc) return null;
+              return <Row key={slug} k={svc.name}
+                v={svc.onRequest ? t('onRequest') : `${currencyFmt(dbPriceFor(svc, data.size))} ${t('currency')}`} mono={!svc.onRequest} />;
             })}
             {data.towing && data.towingMode && (
               <Row k={t('step4.towing')} v={`${currencyFmt(total.tow)} ${t('currency')}`} mono />
             )}
           </DossierCard>
 
-          {/* details */}
           <DossierCard icon={UserRound} title={t('step4.detailsTitle')}>
             <Row k={t('step3.fullName')} v={data.name} />
             <Row k={t('step3.phone')} v={data.phone} mono />
             <Row k={t('step3.email')} v={data.email} mono />
-            <Row k={t('step4.branch')} v={t(`branches.${data.branch}`)} />
+            <Row k={t('step4.branch')} v={branchLabel(data.branch, isAr)} />
             <Row k={t('step4.dateTime')} v={`${data.date} · ${data.time}`} mono />
           </DossierCard>
 
@@ -109,25 +110,24 @@ export function StepConfirm({
           )}
         </div>
 
-        {/* ── Payment ──────────────────────────────────────────── */}
         <div>
           <div className="sticky top-28">
             <SubLabel>{t('step4.paymentTitle')}</SubLabel>
             <div className="mt-5 space-y-3">
-              {PAYMENT_METHODS.map((m, i) => (
-                <PaymentRow
-                  key={m}
-                  method={m}
-                  on={data.payment === m}
-                  title={t(`step4.${m}`)}
-                  desc={t(`step4.${m}Desc`)}
-                  delay={i * 0.06}
-                  onSelect={() => set({ payment: m })}
-                />
-              ))}
+              {PAYMENT_METHODS.map((m, i) => {
+                const disabled = PAYMENT_DISABLED.has(m);
+                return (
+                  <PaymentRow key={m} method={m} on={data.payment === m} disabled={disabled}
+                    soonLabel={isAr ? 'قريبًا' : 'Soon'}
+                    title={t(`step4.${m}`)} desc={t(`step4.${m}Desc`)} delay={i * 0.06}
+                    onSelect={() => { if (!disabled) set({ payment: m }); }} />
+                );
+              })}
             </div>
 
-            {/* price box with expandable breakdown */}
+            {/* ── كود الخصم ── */}
+            <PromoField isAr={isAr} data={data} set={set} />
+
             <div className="mt-7 rounded-3xl border border-platinum/25 bg-gradient-to-b from-platinum/[0.07] to-white/[0.01] p-5 md:p-6">
               <button data-cursor="hover" onClick={() => set({ showBreakdown: !data.showBreakdown })}
                 className="flex w-full items-center justify-between pb-1 text-[0.62rem] uppercase tracking-[0.2em] text-platinum/85">
@@ -140,14 +140,15 @@ export function StepConfirm({
                     transition={{ duration: 0.35, ease: EASE }} className="overflow-hidden">
                     <div className="pt-1.5">
                       {data.services.map((slug) => {
-                        const svc = SERVICES.find((s) => s.slug === slug)!;
-                        const old = oldPriceFor(svc, data.size);
+                        const svc = SERVICES.find((s) => s.slug === slug);
+                        if (!svc) return null;
+                        const old = dbOldPriceFor(svc, data.size);
                         return (
                           <div key={slug} className="flex justify-between gap-3 py-1.5 text-[0.82rem] text-ivory/82">
-                            <span>{t(`svc.${slug}.name`)}</span>
+                            <span>{svc.name}</span>
                             <span dir="ltr" className="flex items-baseline gap-1.5 tabular-nums">
                               {old && <span className="font-display text-xs text-steel line-through decoration-[#c98a8a]/70">{currencyFmt(old)}</span>}
-                              <span className={`font-display ${old ? 'text-[#e7b4b4]' : 'text-platinum'}`}>{svc.onRequest ? t('onRequest') : currencyFmt(priceFor(svc, data.size))}</span>
+                              <span className={`font-display ${old ? 'text-[#e7b4b4]' : 'text-platinum'}`}>{svc.onRequest ? t('onRequest') : currencyFmt(dbPriceFor(svc, data.size))}</span>
                             </span>
                           </div>
                         );
@@ -162,13 +163,27 @@ export function StepConfirm({
                   </motion.div>
                 )}
               </AnimatePresence>
+
               <div className="my-3.5 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+
               {total.saved > 0 && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="inline-flex items-center gap-1.5 text-[#e7b4b4]"><Check className="h-3 w-3" strokeWidth={2.4} />{t('step4.youSave')}</span>
                   <span dir="ltr" className="font-display text-[#e7b4b4] tabular-nums">−{currencyFmt(total.saved)} {t('currency')}</span>
                 </div>
               )}
+
+              {/* سطر خصم الكود */}
+              {data.promoPercent > 0 && total.promoCut > 0 && (
+                <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
+                  <span className="inline-flex items-center gap-1.5 text-platinum">
+                    <Tag className="h-3 w-3" strokeWidth={2} />
+                    {isAr ? `خصم الكود (${data.promoCode}) −${data.promoPercent}%` : `Promo (${data.promoCode}) −${data.promoPercent}%`}
+                  </span>
+                  <span dir="ltr" className="font-display text-platinum tabular-nums">−{currencyFmt(total.promoCut)} {t('currency')}</span>
+                </div>
+              )}
+
               <div className="flex items-end justify-between">
                 <span className="text-[0.6rem] uppercase tracking-[0.26em] text-steel">{total.onReq && total.grand === 0 ? t('step4.estimate') : t('step4.total')}</span>
                 <span className="flex items-baseline gap-1.5">
@@ -182,6 +197,7 @@ export function StepConfirm({
                   )}
                 </span>
               </div>
+
               {data.payment === 'tabby' && total.grand > 0 && (
                 <InstallmentNote t={t} text={t('step4.tabbyNote', { amount: currencyFmt(Math.round(total.grand / 4)) })} />
               )}
@@ -195,15 +211,92 @@ export function StepConfirm({
             <div className="mt-7 flex flex-col gap-3">
               <button onClick={confirm} disabled={!data.payment || processing} data-cursor="hover"
                 className={data.payment && !processing ? '' : 'pointer-events-none opacity-40'}>
-                <PrimaryPill full>
-                  {processing ? t('step4.processing') : t('step4.confirm')}
-                </PrimaryPill>
+                <PrimaryPill full>{processing ? t('step4.processing') : t('step4.confirm')}</PrimaryPill>
               </button>
               <button onClick={onBack} data-cursor="hover" className="self-center"><GhostPill>{t('step4.back')}</GhostPill></button>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── كود الخصم: إدخال + زر تحقق احترافي ── */
+function PromoField({ isAr, data, set }: { isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void }) {
+  const [code, setCode] = useState(data.promoCode ?? '');
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const applied = data.promoPercent > 0 && !!data.promoCode;
+
+  const errMsg = (e: string) => {
+    if (isAr) return e === 'not_found' ? 'كود غير صحيح'
+      : e === 'expired' ? 'انتهت صلاحية الكود'
+      : e === 'used_up' || e === 'inactive' ? 'الكود مش متاح'
+      : 'تعذّر التحقق، حاول تاني';
+    return e === 'not_found' ? 'Invalid code'
+      : e === 'expired' ? 'Code expired'
+      : e === 'used_up' || e === 'inactive' ? 'Code no longer available'
+      : 'Could not verify, try again';
+  };
+
+  const check = async () => {
+    const c = code.trim();
+    if (!c) return;
+    setChecking(true); setError(null);
+    try {
+      const res = await fetch('/api/promo/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c }),
+      });
+      const j = await res.json();
+      if (j?.ok) { set({ promoCode: j.code, promoPercent: Number(j.percent) }); setError(null); }
+      else { set({ promoCode: null, promoPercent: 0 }); setError(errMsg(j?.error ?? 'server_error')); }
+    } catch {
+      set({ promoCode: null, promoPercent: 0 }); setError(errMsg('server_error'));
+    } finally { setChecking(false); }
+  };
+
+  const clear = () => { set({ promoCode: null, promoPercent: 0 }); setCode(''); setError(null); };
+
+  return (
+    <div className="mt-5">
+      <div className="mb-2 flex items-center gap-2 text-[0.58rem] uppercase tracking-[0.24em] text-platinum/80">
+        <Tag className="h-3.5 w-3.5 text-platinum/60" strokeWidth={1.8} />
+        {isAr ? 'كود خصم' : 'Promo code'}
+      </div>
+
+      {applied ? (
+        <div className="flex items-center justify-between rounded-2xl border border-platinum/40 bg-platinum/[0.07] px-4 py-3">
+          <span className="inline-flex items-center gap-2 text-sm text-ivory">
+            <Check className="h-4 w-4 text-platinum" strokeWidth={2.4} />
+            <span className="font-display tracking-[0.12em]">{data.promoCode}</span>
+            <span className="text-platinum/80">· {data.promoPercent}%</span>
+          </span>
+          <button data-cursor="hover" onClick={clear} aria-label="remove"
+            className="grid h-7 w-7 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
+            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2.5">
+          <input
+            value={code} dir="ltr"
+            onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/\s+/g, '')); setError(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
+            placeholder={isAr ? 'اكتب الكود' : 'Enter code'}
+            className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-3 font-display text-sm tracking-[0.14em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+          <button data-cursor="hover" onClick={check} disabled={checking || !code.trim()}
+            className={`inline-flex flex-none items-center gap-2 rounded-2xl border px-5 py-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] transition-all duration-300 ${
+              checking || !code.trim()
+                ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-steel/50'
+                : 'border-platinum/40 bg-platinum/[0.08] text-ivory hover:border-platinum/70 hover:bg-platinum/[0.14]'
+            }`}>
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <Check className="h-3.5 w-3.5" strokeWidth={2.4} />}
+            {isAr ? 'تحقّق' : 'Apply'}
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
     </div>
   );
 }
@@ -222,14 +315,10 @@ function Heading({ t }: { t: ReturnType<typeof useTranslations> }) {
   );
 }
 
-function DossierCard({
-  icon: Icon, title, children,
-}: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+function DossierCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
-      className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 md:p-6"
-    >
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
+      className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 md:p-6">
       <div className="mb-4 flex items-center gap-3">
         <span className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[0.03] text-platinum">
           <Icon className="reversible-icon h-4 w-4" strokeWidth={1.5} />
@@ -259,37 +348,34 @@ function BannerChip({ children, mono }: { children: React.ReactNode; mono?: bool
   );
 }
 
-function PaymentRow({
-  method, on, title, desc, delay, onSelect,
-}: {
+function PaymentRow({ method, on, title, desc, delay, onSelect, disabled, soonLabel }: {
   method: PaymentMethod; on: boolean; title: string; desc: string; delay: number; onSelect: () => void;
+  disabled?: boolean; soonLabel?: string;
 }) {
   return (
-    <motion.button
-      data-cursor="hover"
-      onClick={onSelect}
+    <motion.button data-cursor={disabled ? undefined : 'hover'} onClick={onSelect} disabled={disabled} aria-disabled={disabled}
       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4, ease: EASE }}
-      className={[
-        'flex w-full items-center gap-4 rounded-2xl border p-4 text-start transition-all duration-300',
-        on ? 'border-platinum/45 bg-platinum/[0.07]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20',
-      ].join(' ')}
-    >
-      <PaymentMark method={method} />
+      className={['flex w-full items-center gap-4 rounded-2xl border p-4 text-start transition-all duration-300',
+        disabled ? 'cursor-not-allowed border-white/[0.06] bg-white/[0.01] opacity-55'
+          : on ? 'border-platinum/45 bg-platinum/[0.07]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'].join(' ')}>
+      <span className={disabled ? 'grayscale' : ''}><PaymentMark method={method} /></span>
       <span className="flex-1">
-        <span className="block text-sm font-medium text-ivory">{title}</span>
+        <span className="flex items-center gap-2 text-sm font-medium text-ivory">
+          {title}
+          {disabled && soonLabel && (
+            <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[0.5rem] uppercase tracking-[0.14em] text-platinum/70">{soonLabel}</span>
+          )}
+        </span>
         <span className="mt-0.5 block text-xs text-platinum/55">{desc}</span>
       </span>
-      <span className={[
-        'grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border transition-all duration-300',
-        on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/20',
-      ].join(' ')}>
+      <span className={['grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border transition-all duration-300',
+        on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/20'].join(' ')}>
         {on && <Check className="h-3.5 w-3.5" strokeWidth={2.6} />}
       </span>
     </motion.button>
   );
 }
 
-/** Small monochrome wordmark chip per provider (no external logos). */
 function PaymentMark({ method }: { method: PaymentMethod }) {
   if (method === 'applePay') {
     return (

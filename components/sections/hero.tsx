@@ -4,26 +4,14 @@
  * Hero — ABH Auto · scroll-driven image sequence
  * Path in your repo: components/sections/hero.tsx  (export `Hero`)
  *
- * HOW IT WORKS
- *  - A tall "track" section (TRACK_VH) provides the scroll distance.
- *  - Inside it, a sticky 100svh "stage" stays pinned while you scroll.
- *  - A <canvas> paints one of FRAME_COUNT frames, chosen from scroll
- *    progress (0 → first frame, 1 → last frame). Apple-style scrubbing.
- *  - After the last frame the track ends and the page continues to the
- *    next section naturally.
+ * ⚡ تعديل الأداء (LCP):
+ *  - قبل كده كان بيعمل preload لكل الـ80 فريم **دفعة واحدة** أول ما يركب،
+ *    فبيزاحم تحميل نص الـHero (اللي هو الـLCP) والـhydration على نفس الـbandwidth
+ *    → كان بيطلّع render delay ~4.5s.
+ *  - دلوقتي بنحمّل الفريم الأول فورًا (عشان الستيج يبان بسرعة)، وباقي الفريمات
+ *    بتتحمّل **بعد ما الصفحة تبقى idle** وعلى دفعات صغيرة، فمش بتعطّل أول رسم.
  *
- * FRAMES
- *  - Put your images in:  public/frames/
- *  - Named exactly:       ezgif-frame-001.webp … ezgif-frame-056.webp
- *  - Tune FRAME_COUNT / TRACK_VH below.
- *
- * Notes
- *  - Canvas keeps it smooth and flicker-free; all frames are preloaded and
- *    the first frame paints as soon as it arrives (with a CSS poster behind
- *    to avoid any black flash before JS).
- *  - Brand wordmark + CTAs sit over the opening frames and fade out as the
- *    sequence begins, so the animation reads cleanly.
- *  - Uses existing i18n keys only (hero.*). No new keys.
+ * باقي الميكانيزم زي ما هو.
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
@@ -39,8 +27,18 @@ const framePath = (i: number) => `${FRAME_DIR}/ezgif-frame-${String(i).padStart(
 const FIRST_FRAME = framePath(1);
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const INTRO = 0.6;
-const STAGGER = 0.14;
+const INTRO = 0.45;
+const STAGGER = 0.12;
+
+/* requestIdleCallback مع fallback للمتصفحات اللي مش داعماه (Safari). */
+const ric: (cb: () => void) => number =
+  typeof window !== 'undefined' && 'requestIdleCallback' in window
+    ? (cb) => (window as any).requestIdleCallback(cb, { timeout: 2000 })
+    : (cb) => window.setTimeout(cb, 200);
+const cancelRic: (h: number) => void =
+  typeof window !== 'undefined' && 'cancelIdleCallback' in window
+    ? (h) => (window as any).cancelIdleCallback(h)
+    : (h) => window.clearTimeout(h);
 
 export function Hero() {
   const t = useTranslations('hero');
@@ -94,28 +92,48 @@ export function Hero() {
     draw(frameRef.current);
   }, [draw]);
 
-  /* preload all frames; paint frame 1 the moment it lands */
+  /* preload الفريم الأول فورًا، والباقي بعد ما الصفحة تبقى idle (على دفعات) */
   useEffect(() => {
     const imgs: HTMLImageElement[] = new Array(FRAME_COUNT);
-    let firstDone = false;
-    for (let i = 1; i <= FRAME_COUNT; i++) {
-      const img = new window.Image();
-      img.decoding = 'async';
-      img.src = framePath(i);
-      const onFirst = () => {
-        if (firstDone) return;
-        firstDone = true;
-        resize();
-        setReady(true);
-      };
-      if (i === 1) {
-        if (img.complete) onFirst();
-        else img.onload = onFirst;
-      }
-      imgs[i - 1] = img;
-    }
     imagesRef.current = imgs;
+    let cancelled = false;
+
+    // 1) الفريم الأول — يتحمّل فورًا عشان الستيج يبان من غير فلاش.
+    const first = new window.Image();
+    first.decoding = 'async';
+    first.src = framePath(1);
+    const onFirst = () => {
+      if (cancelled) return;
+      resize();
+      setReady(true);
+    };
+    if (first.complete) onFirst();
+    else first.onload = onFirst;
+    imgs[0] = first;
     resize();
+
+    // 2) باقي الفريمات — مؤجَّلة لحد ما المتصفح يبقى idle، على دفعات من 8.
+    let idleHandle = 0;
+    const BATCH = 8;
+    const loadBatch = (start: number) => {
+      if (cancelled) return;
+      const end = Math.min(start + BATCH, FRAME_COUNT);
+      for (let i = start; i <= end; i++) {
+        const img = new window.Image();
+        img.decoding = 'async';
+        img.src = framePath(i);
+        imgs[i - 1] = img;
+      }
+      if (end < FRAME_COUNT) {
+        idleHandle = ric(() => loadBatch(end + 1));
+      }
+    };
+    idleHandle = ric(() => loadBatch(2));
+
+    return () => {
+      cancelled = true;
+      cancelRic(idleHandle);
+    };
   }, [resize]);
 
   /* keep canvas sharp on viewport changes */

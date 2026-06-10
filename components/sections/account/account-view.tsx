@@ -6,9 +6,8 @@
  *
  * Cinematic, image-led owner portal (obsidian / ivory / platinum / steel,
  * Italiana display, EASE, framer-motion, RTL, next-intl):
- *   OVERVIEW · BOOKINGS (detail drawer: reschedule / cancel / add-services /
- *   payment) · GARAGE (image-backed cards) · PROFILE.
- * Car imagery is drawn from the shipping /images/project-*.png plates.
+ *   OVERVIEW · BOOKINGS (detail drawer: reschedule / cancel / payment) · GARAGE · PROFILE.
+ * Car imagery is drawn from the shipping /images/project-*.webp plates.
  */
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -29,10 +28,10 @@ import { useAuth, type Vehicle, type BookingRecord, type BookingStatus } from '@
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 const CAR_IMAGES = [
-  '/images/project-1.png', '/images/project-2.png', '/images/project-3.png', '/images/project-4.png',
-  '/images/project-5.png', '/images/project-6.png', '/images/project-7.png', '/images/project-8.png',
+  '/images/project-1.webp', '/images/project-2.webp', '/images/project-3.webp', '/images/project-4.webp',
+  '/images/project-5.webp', '/images/project-6.webp', '/images/project-7.webp', '/images/project-8.webp',
 ];
-const COVER_IMAGE = '/images/cta-bg.png';
+const COVER_IMAGE = '/images/cta-bg.webp';
 function hash(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
 function carImg(seed: string) { return CAR_IMAGES[hash(seed || 'x') % CAR_IMAGES.length]; }
 
@@ -295,7 +294,11 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
           )}
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">{b.serviceSlugs.map((s) => <ServiceChip key={s}>{tb(`svc.${s}.name`)}</ServiceChip>)}</div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {b.serviceSnapshots?.map((snap: any, idx: number) => (
+            <ServiceChip key={idx}>{snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}</ServiceChip>
+          ))}
+        </div>
 
         {b.status === 'active' && <ServiceRail t={t} stage={b.stage ?? 0} />}
 
@@ -311,7 +314,7 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
   );
 }
 
-/* ─── Bookings ─────────────────────────────────────────────────────── */
+/* ─── Bookings (ENHANCED GRID CARDS WITH VISIBLE BACKGROUND IMAGES) ─── */
 function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolean; member: Mem; onOpen: (id: string) => void }) {
   const [tab, setTab] = useState<'live' | 'past'>('live');
   const live = member.bookings.filter((b) => b.status === 'upcoming' || b.status === 'active').sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -324,7 +327,7 @@ function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolea
 
   return (
     <div>
-      <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div className="relative inline-grid grid-cols-2 rounded-full border border-white/[0.08] bg-white/[0.02] p-1">
           {tabs.map((it) => {
             const on = tab === it.id;
@@ -340,16 +343,137 @@ function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolea
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div key={tab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: EASE }} className="space-y-4">
+        <motion.div key={tab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: EASE }}
+          className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {list.length === 0
-            ? <EmptyCard icon={tab === 'live' ? Calendar : CalendarCheck} title={tab === 'live' ? t('bookings.emptyLive') : t('bookings.emptyPast')} cta={t('bookings.newBooking')} href="/booking" />
-            : list.map((b) => <BookingCard key={b.id} t={t} tb={tb} isAr={isAr} b={b} onOpen={onOpen} />)}
+            ? <div className="col-span-full"><EmptyCard icon={tab === 'live' ? Calendar : CalendarCheck} title={tab === 'live' ? t('bookings.emptyLive') : t('bookings.emptyPast')} cta={t('bookings.newBooking')} href="/booking" /></div>
+            : list.map((b) => <BookingGridCard key={b.id} t={t} tb={tb} isAr={isAr} b={b} onOpen={onOpen} />)}
         </motion.div>
       </AnimatePresence>
     </div>
   );
 }
 
+/* Professional grid card with full, clear background image (no fog/blur) */
+function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: boolean; b: BookingRecord; onOpen: (id: string) => void }) {
+  const isActive = b.status === 'active';
+  const isPast = b.status === 'completed' || b.status === 'cancelled';
+  const stage = b.stage ?? 0;
+  const stageSteps = [t('bookings.stages.received'), t('bookings.stages.inService'), t('bookings.stages.quality'), t('bookings.stages.ready')];
+  const currentStageLabel = stageSteps[stage] || stageSteps[0];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE }}
+      whileHover={{ y: -4 }}
+      className="group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/20 transition-all duration-500 hover:border-white/25 hover:shadow-2xl"
+    >
+      {/* Full background image - now fully visible, only a very light dark overlay */}
+      <div className="absolute inset-0">
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105"
+          style={{
+            backgroundImage: `url('${carImg(b.plate || b.id)}')`,
+            filter: 'brightness(0.9) contrast(1.05)', // removed grayscale, minimal brightness adjustment
+          }}
+        />
+        {/* Very subtle gradient at bottom only - no fog */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-obsidian/60 to-transparent" />
+      </div>
+
+      {/* Content container - NO backdrop blur, text sits directly on image with subtle text-shadow for readability */}
+      <div className="relative flex flex-1 flex-col p-5 md:p-6">
+        {/* Top row: status chips + total */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            <StatusChip t={t} status={b.status} />
+            {b.status !== 'cancelled' && <PaymentChip t={t} branch={b.payment === 'branch'} />}
+          </div>
+          <div className="rounded-xl bg-obsidian/40 px-3 py-1.5 text-end">
+            <div className="text-[0.5rem] uppercase tracking-[0.2em] text-steel">{t('bookings.total')}</div>
+            <div dir="ltr" className="font-display text-xl tabular-nums text-ivory md:text-2xl">
+              {fmtMoney(b.total)} <span className="text-xs text-platinum/70">{tb('currency')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Bottom section: vehicle info & actions - solid but transparent background, no blur */}
+        <div className="mt-auto space-y-3 rounded-xl bg-obsidian/50 p-4">
+          <div>
+            <h3 className="font-display text-2xl uppercase leading-tight text-ivory md:text-3xl">
+              {b.vehicleLabel}
+            </h3>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] text-platinum/90">
+              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" strokeWidth={1.6} />{tb(`branches.${b.branchKey}`)}</span>
+              <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" strokeWidth={1.6} />{fmtDate(b.date, isAr)} · {b.time}</span>
+            </div>
+          </div>
+
+          {/* Service chips */}
+          <div className="flex flex-wrap gap-1.5">
+            {b.serviceSnapshots?.slice(0, 2).map((snap: any, idx: number) => (
+              <span key={idx} className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">
+                {snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}
+              </span>
+            ))}
+            {b.serviceSnapshots && b.serviceSnapshots.length > 2 && (
+              <span className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">
+                +{b.serviceSnapshots.length - 2}
+              </span>
+            )}
+          </div>
+
+          {/* Progress for active bookings */}
+          {isActive && (
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[0.55rem] uppercase tracking-[0.14em]">
+                <span className="text-platinum/90">{t('bookings.inProgress')}</span>
+                <span className="text-steel">{stage + 1}/{stageSteps.length}</span>
+              </div>
+              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/30">
+                <motion.div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-platinum to-ivory"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((stage + 1) / stageSteps.length) * 100}%` }}
+                  transition={{ duration: 0.5, ease: EASE }}
+                />
+              </div>
+              <div className="mt-1 text-right text-[0.5rem] uppercase tracking-[0.1em] text-platinum/80">
+                {currentStageLabel}
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {isPast ? (
+              <Link href="/booking" data-cursor="hover" className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-black/30 px-3 py-1.5 text-[0.6rem] uppercase tracking-[0.16em] text-platinum/90 transition-colors hover:bg-black/50">
+                {t('bookings.rebook')}
+              </Link>
+            ) : (
+              <div />
+            )}
+            <button
+              data-cursor="hover"
+              onClick={() => onOpen(b.id)}
+              className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.18em] text-platinum/90 transition-all duration-300 hover:text-ivory"
+            >
+              {t('bookings.viewDetails')}
+              <ArrowUpRight className="reversible-icon h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* Original BookingCard (used in overview, unchanged) */
 function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr: boolean; b: BookingRecord; onOpen: (id: string) => void; compact?: boolean }) {
   const isActive = b.status === 'active';
   return (
@@ -371,7 +495,11 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
                 <span dir="ltr" className="font-display text-sm tracking-[0.14em] text-platinum/70">{b.id}</span>
               </div>
               <h3 className="mt-3 font-display text-2xl uppercase leading-none text-ivory">{b.vehicleLabel}</h3>
-              <div className="mt-3 flex flex-wrap items-center gap-2">{b.serviceSlugs.map((s) => <ServiceChip key={s}>{tb(`svc.${s}.name`)}</ServiceChip>)}</div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {b.serviceSnapshots?.map((snap: any, idx: number) => (
+                  <ServiceChip key={idx}>{snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}</ServiceChip>
+                ))}
+              </div>
               <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.74rem] text-platinum/60">
                 <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-platinum/50" strokeWidth={1.7} />{tb(`branches.${b.branchKey}`)}</span>
                 <span className="inline-flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-platinum/50" strokeWidth={1.7} />{fmtDate(b.date, isAr)} · {b.time}</span>
@@ -429,13 +557,12 @@ function ServiceRail({ t, stage }: { t: Tr; stage: number }) {
   );
 }
 
-/* ─── Booking detail drawer ────────────────────────────────────────── */
+/* ─── Booking detail drawer (unchanged) ────────────────────────────── */
 function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; isAr: boolean; booking: BookingRecord; onClose: () => void }) {
   const { updateBooking, cancelBooking } = useAuth();
-  const [mode, setMode] = useState<'view' | 'reschedule' | 'add' | 'cancel'>('view');
+  const [mode, setMode] = useState<'view' | 'reschedule' | 'cancel'>('view');
 
   const editable = booking.status === 'upcoming';
-  const canAdd = booking.status === 'upcoming' && booking.payment === 'branch';
   const size = (booking.size ?? 'large') as VehicleSize;
 
   return (
@@ -465,15 +592,17 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
             <div className="mt-6">
               <div className="mb-3 text-[0.58rem] uppercase tracking-[0.24em] text-platinum/70">{t('bookings.detail.services')}</div>
               <div className="space-y-2">
-                {booking.serviceSlugs.map((s) => {
-                  const meta = SERVICES.find((x) => x.slug === s);
-                  return (
-                    <div key={s} className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
-                      <span className="inline-flex items-center gap-2.5 text-sm text-ivory/90"><Sparkles className="h-3.5 w-3.5 text-platinum/60" strokeWidth={1.6} />{tb(`svc.${s}.name`)}</span>
-                      <span dir="ltr" className="font-display text-sm text-platinum tabular-nums">{meta && !meta.onRequest ? currencyFmt(priceFor(meta, size)) : tb('onRequest')}</span>
-                    </div>
-                  );
-                })}
+                {booking.serviceSnapshots?.map((snap: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
+                    <span className="inline-flex items-center gap-2.5 text-sm text-ivory/90"><Sparkles className="h-3.5 w-3.5 text-platinum/60" strokeWidth={1.6} />{snap?.[isAr ? 'ar' : 'en'] || booking.serviceSlugs[idx]}</span>
+                    <span dir="ltr" className="font-display text-sm text-platinum tabular-nums">
+                      {(() => {
+                        const meta = SERVICES.find((x) => x.slug === booking.serviceSlugs[idx]);
+                        return meta && !meta.onRequest ? currencyFmt(priceFor(meta, size)) : tb('onRequest');
+                      })()}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -484,7 +613,6 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               {editable && <button data-cursor="hover" onClick={() => setMode('reschedule')}><GhostMini><CalendarClock className="h-3.5 w-3.5" strokeWidth={1.8} />{t('bookings.reschedule')}</GhostMini></button>}
-              {canAdd && <button data-cursor="hover" onClick={() => setMode('add')}><GhostMini><Plus className="h-3.5 w-3.5" strokeWidth={2} />{t('bookings.addServices')}</GhostMini></button>}
               {editable && (
                 <button data-cursor="hover" onClick={() => setMode('cancel')}
                   className="ms-auto inline-flex items-center gap-2 rounded-full border border-white/12 px-5 py-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-platinum/55 transition-colors hover:border-[#7c1a1a]/50 hover:text-[#e7b4b4]">
@@ -499,15 +627,10 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
           <motion.div key="resched" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.3, ease: EASE }}>
             <ReschedulePanel t={t} tb={tb} isAr={isAr} booking={booking}
               onBack={() => setMode('view')}
-              onSave={(date, time) => { updateBooking(booking.id, { date, time }); setMode('view'); }} />
-          </motion.div>
-        )}
-
-        {mode === 'add' && (
-          <motion.div key="add" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.3, ease: EASE }}>
-            <AddServicesPanel t={t} tb={tb} booking={booking} size={size}
-              onBack={() => setMode('view')}
-              onSave={(slugs, addedTotal) => { updateBooking(booking.id, { serviceSlugs: [...booking.serviceSlugs, ...slugs], total: booking.total + addedTotal }); setMode('view'); }} />
+              onSave={async (date, time) => {
+                await updateBooking(booking.id, { date, time });
+                setMode('view');
+              }} />
           </motion.div>
         )}
 
@@ -518,7 +641,7 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
             <p className="mx-auto mt-3 max-w-[38ch] text-sm leading-relaxed text-platinum/65">{t('bookings.cancelConfirm', { vehicle: booking.vehicleLabel, date: fmtDate(booking.date, isAr) })}</p>
             <div className="mt-7 flex items-center justify-center gap-3">
               <button data-cursor="hover" onClick={() => setMode('view')}><GhostMini>{t('bookings.keep')}</GhostMini></button>
-              <button data-cursor="hover" onClick={() => { cancelBooking(booking.id); onClose(); }}
+              <button data-cursor="hover" onClick={async () => { await cancelBooking(booking.id); onClose(); }}
                 className="inline-flex items-center gap-2 rounded-full border border-[#7c1a1a]/50 bg-[#2a1414]/50 px-6 py-3 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#e7b4b4] transition-colors hover:bg-[#2a1414]/80">
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />{t('bookings.confirmCancel')}
               </button>
@@ -539,9 +662,19 @@ function DetailRow({ k, children, mono }: { k: string; children: React.ReactNode
   );
 }
 
-function ReschedulePanel({ t, tb, isAr, booking, onBack, onSave }: { t: Tr; tb: Tr; isAr: boolean; booking: BookingRecord; onBack: () => void; onSave: (date: string, time: string) => void }) {
+function ReschedulePanel({ t, tb, isAr, booking, onBack, onSave }: { t: Tr; tb: Tr; isAr: boolean; booking: BookingRecord; onBack: () => void; onSave: (date: string, time: string) => Promise<void> }) {
   const [date, setDate] = useState(booking.date);
   const [time, setTime] = useState(booking.time);
+  const [saving, setSaving] = useState(false);
+  const handleSave = async () => {
+    if (!date || !time) return;
+    setSaving(true);
+    try {
+      await onSave(date, time);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div>
       <PanelHead onBack={onBack} title={t('bookings.rescheduleTitle')} sub={t('bookings.rescheduleHint')} />
@@ -554,46 +687,9 @@ function ReschedulePanel({ t, tb, isAr, booking, onBack, onSave }: { t: Tr; tb: 
       </div>
       <div className="mt-7 flex items-center justify-end gap-3">
         <button data-cursor="hover" onClick={onBack}><GhostMini>{t('garage.cancel')}</GhostMini></button>
-        <button data-cursor="hover" onClick={() => onSave(date, time)} disabled={!date || !time} className={date && time ? '' : 'pointer-events-none opacity-40'}><Pill>{t('bookings.saveReschedule')}</Pill></button>
-      </div>
-    </div>
-  );
-}
-
-function AddServicesPanel({ t, tb, booking, size, onBack, onSave }: { t: Tr; tb: Tr; booking: BookingRecord; size: VehicleSize; onBack: () => void; onSave: (slugs: string[], addedTotal: number) => void }) {
-  const available = SERVICES.filter((s) => !s.onRequest && !booking.serviceSlugs.includes(s.slug));
-  const [picked, setPicked] = useState<string[]>([]);
-  const toggle = (slug: string) => setPicked((p) => p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]);
-  const addedTotal = picked.reduce((sum, slug) => { const m = SERVICES.find((x) => x.slug === slug); return sum + (m ? priceFor(m, size) : 0); }, 0);
-
-  return (
-    <div>
-      <PanelHead onBack={onBack} title={t('bookings.addServicesTitle')} sub={t('bookings.addServicesHint')} />
-      <div className="mt-6 max-h-[42vh] space-y-2.5 overflow-y-auto pe-1">
-        {available.map((s) => {
-          const on = picked.includes(s.slug);
-          return (
-            <button key={s.slug} data-cursor="hover" onClick={() => toggle(s.slug)}
-              className={['flex w-full items-center gap-3 rounded-2xl border p-4 text-start transition-all duration-300', on ? 'border-platinum/45 bg-platinum/[0.06]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'].join(' ')}>
-              <span className={['grid h-6 w-6 flex-none place-items-center rounded-full border transition-all duration-300', on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/20 text-transparent'].join(' ')}><Check className="h-3.5 w-3.5" strokeWidth={2.6} /></span>
-              <span className="flex-1">
-                <span className="block text-sm text-ivory">{tb(`svc.${s.slug}.name`)}</span>
-                <span className="mt-0.5 block text-[0.72rem] text-platinum/55 line-clamp-1">{tb(`svc.${s.slug}.desc`)}</span>
-              </span>
-              <span dir="ltr" className="font-display text-sm text-platinum tabular-nums">+{currencyFmt(priceFor(s, size))}</span>
-            </button>
-          );
-        })}
-        {available.length === 0 && <p className="py-6 text-center text-sm text-steel">{t('bookings.included')}</p>}
-      </div>
-
-      <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
-        <span className="text-[0.58rem] uppercase tracking-[0.2em] text-steel">{t('bookings.detail.total')}</span>
-        <span dir="ltr" className="font-display text-2xl text-ivory tabular-nums">{fmtMoney(booking.total + addedTotal)} <span className="text-sm text-platinum/70">{tb('currency')}</span></span>
-      </div>
-      <div className="mt-5 flex items-center justify-end gap-3">
-        <button data-cursor="hover" onClick={onBack}><GhostMini>{t('garage.cancel')}</GhostMini></button>
-        <button data-cursor="hover" onClick={() => onSave(picked, addedTotal)} disabled={picked.length === 0} className={picked.length ? '' : 'pointer-events-none opacity-40'}><Pill>{t('bookings.addConfirm')}</Pill></button>
+        <button data-cursor="hover" onClick={handleSave} disabled={!date || !time || saving} className={date && time && !saving ? '' : 'pointer-events-none opacity-40'}>
+          <Pill>{saving ? t('bookings.saving') : t('bookings.saveReschedule')}</Pill>
+        </button>
       </div>
     </div>
   );
@@ -681,7 +777,7 @@ function TimeGrid({ tb, value, onPick }: { tb: Tr; value: string; onPick: (t: st
   );
 }
 
-/* ─── Garage ───────────────────────────────────────────────────────── */
+/* ─── Garage (unchanged) ───────────────────────────────────────────── */
 function Garage({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
   const { removeVehicle } = useAuth();
   const [editing, setEditing] = useState<Vehicle | null>(null);
@@ -752,15 +848,47 @@ function VehicleCard({ t, tb, v, onEdit, onRemove, compact }: { t: Tr; tb: Tr; v
   );
 }
 
+const PLATE_DIGITS_RE = /[0-9\u0660-\u0669]/g;
+function splitPlate(plate: string) {
+  const p = plate || '';
+  const digits = (p.match(PLATE_DIGITS_RE) || []).join('');
+  const letters = p.replace(PLATE_DIGITS_RE, '').replace(/\s+/g, ' ').trim();
+  return { digits, letters };
+}
+function joinPlate(digits: string, letters: string) {
+  return [digits.trim(), letters.trim()].filter(Boolean).join(' ');
+}
+ 
 function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Vehicle | null; onClose: () => void }) {
   const { addVehicle, updateVehicle } = useAuth();
-  const [v, setV] = useState({ brandId: vehicle?.brandId ?? '', model: vehicle?.model ?? '', colorKey: vehicle?.colorKey ?? '', plate: vehicle?.plate ?? '', year: vehicle?.year ?? '' });
+  const initSplit = splitPlate(vehicle?.plate ?? '');
+  const [v, setV] = useState({
+    brandId: vehicle?.brandId ?? '',
+    model: vehicle?.model ?? '',
+    colorKey: vehicle?.colorKey ?? '',
+    plateDigits: (vehicle as any)?.plateDigits ?? initSplit.digits,
+    plateLetters: (vehicle as any)?.plateLetters ?? initSplit.letters,
+    year: vehicle?.year ?? '',
+  });
   const [touched, setTouched] = useState(false);
   const set = (p: Partial<typeof v>) => setV((s) => ({ ...s, ...p }));
   const brand = BRANDS.find((b: any) => b.id === v.brandId);
-  const valid = v.brandId && v.model && v.colorKey && v.plate.trim().length >= 2;
-  const save = () => { if (!valid) { setTouched(true); return; } if (vehicle) updateVehicle(vehicle.id, v); else addVehicle(v); onClose(); };
-
+  // مكتمل = ماركة + موديل + لون + على الأقل رقم واحد
+  const valid = v.brandId && v.model && v.colorKey && v.plateDigits.trim().length >= 1;
+ 
+  const save = () => {
+    if (!valid) { setTouched(true); return; }
+    const payload = {
+      brandId: v.brandId, model: v.model, colorKey: v.colorKey, year: v.year,
+      plateDigits: v.plateDigits.trim(),
+      plateLetters: v.plateLetters.trim(),
+      plate: joinPlate(v.plateDigits, v.plateLetters),
+    };
+    if (vehicle) updateVehicle(vehicle.id, payload as any);
+    else addVehicle(payload as any);
+    onClose();
+  };
+ 
   return (
     <Modal onClose={onClose} title={vehicle ? t('garage.editTitle') : t('garage.addTitle')}>
       <div className="space-y-5">
@@ -782,16 +910,26 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
             })}
           </div>
         </Field>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label={t('garage.plate')}>
-            <input value={v.plate} dir="ltr" onChange={(e) => set({ plate: e.target.value.toUpperCase().slice(0, 10) })} placeholder={t('garage.platePlaceholder')}
-              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 font-display text-lg tracking-[0.22em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
-          </Field>
-          <Field label={t('garage.year')}>
-            <input value={v.year} dir="ltr" inputMode="numeric" onChange={(e) => set({ year: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder={t('garage.yearPlaceholder')}
-              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
-          </Field>
-        </div>
+ 
+        {/* اللوحة — جزئين: أرقام + حروف */}
+        <Field label={t('garage.plate')}>
+          <div dir="ltr" className="grid grid-cols-[1.1fr_1.4fr] gap-3">
+            <input value={v.plateDigits} inputMode="numeric" dir="ltr"
+              onChange={(e) => set({ plateDigits: e.target.value.replace(/[^0-9\u0660-\u0669]/g, '').slice(0, 4) })}
+              placeholder="1234"
+              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-center font-display text-lg tracking-[0.22em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/50 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+            <input value={v.plateLetters}
+              onChange={(e) => set({ plateLetters: e.target.value.replace(/[0-9\u0660-\u0669]/g, '').replace(/\s+/g, '').split('').slice(0, 4).join(' ') })}
+              placeholder="أ ب ج"
+              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-center font-display text-lg tracking-[0.22em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/50 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+          </div>
+        </Field>
+ 
+        <Field label={t('garage.year')}>
+          <input value={v.year} dir="ltr" inputMode="numeric" onChange={(e) => set({ year: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder={t('garage.yearPlaceholder')}
+            className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+        </Field>
+ 
         {touched && !valid && <p className="text-[0.66rem] text-[#c98a8a]">{t('garage.fillAll')}</p>}
         <div className="flex items-center justify-end gap-3 pt-1">
           <button data-cursor="hover" onClick={onClose}><GhostMini>{t('garage.cancel')}</GhostMini></button>
@@ -802,7 +940,7 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
   );
 }
 
-/* ─── Profile ──────────────────────────────────────────────────────── */
+/* ─── Profile (unchanged) ──────────────────────────────────────────── */
 function Profile({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
   const { updateProfile } = useAuth();
   const [v, setV] = useState({ name: member.name, email: member.email, phone: member.phone, city: member.city });
@@ -897,7 +1035,7 @@ function PaymentChip({ t, branch }: { t: Tr; branch: boolean }) {
 }
 
 function ServiceChip({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full border border-white/12 bg-obsidian/40 px-3 py-1 text-[0.62rem] tracking-wide text-platinum/85 backdrop-blur-sm">{children}</span>;
+  return <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90 backdrop-blur-sm">{children}</span>;
 }
 function MetaChip({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-obsidian/40 px-3 py-1.5 text-[0.62rem] tracking-wide text-platinum/75 backdrop-blur-sm"><Icon className="h-3.5 w-3.5 text-platinum/55" strokeWidth={1.7} />{children}</span>;
@@ -946,13 +1084,14 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] grid place-items-center p-4">
       <div aria-hidden onClick={onClose} className="absolute inset-0 bg-obsidian/80 backdrop-blur-md" />
       <motion.div initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }} transition={{ duration: 0.4, ease: EASE }}
-        className={`glass-strong relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[28px] border border-white/[0.1] p-6 shadow-[0_50px_120px_-40px_rgba(0,0,0,0.85)] md:p-8 ${wide ? 'max-w-xl' : 'max-w-lg'}`}>
-        <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-platinum/40 to-transparent" />
-        <div className="mb-6 flex items-center justify-between">
+        className={`glass-strong relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-[28px] border border-white/[0.1] shadow-[0_50px_120px_-40px_rgba(0,0,0,0.85)] ${wide ? 'max-w-xl' : 'max-w-lg'}`}>
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-white/[0.08] bg-[#0c0d0e]/90 px-6 py-4 backdrop-blur-md md:px-8">
           <h3 className="font-display text-xl font-light uppercase tracking-tight text-ivory md:text-2xl">{title}</h3>
           <button data-cursor="hover" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full border border-white/12 text-platinum/70 transition-colors hover:border-white/30 hover:text-ivory"><X className="h-4 w-4" /></button>
         </div>
-        {children}
+        <div className="p-6 md:p-8">
+          {children}
+        </div>
       </motion.div>
     </motion.div>
   );

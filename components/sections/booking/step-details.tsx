@@ -1,21 +1,15 @@
 'use client';
 
 /**
- * StepDetails — act 03. Contact form (name / phone / email / city / branch)
- * plus two field-style triggers that open popovers:
- *   • Date  → calendar popover, past dates disabled.
- *   • Time  → professional 12-hour picker. Service window 10:00 AM – 9:00 PM:
- *             type any time freely (e.g. 10:10) — anything outside the window
- *             is rejected; quick-pick chips cover the half-hours.
- * Both popovers auto-flip: on phones (or when space below is tight) they open
- * UPWARD so nothing is clipped. Inline validation gates the advance to payment.
+ * StepDetails — act 03. Contact form + date/time popovers.
+ * المواعيد دلوقتي كل ساعة (مش نص ساعة)، من 10ص لـ 9م.
  */
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Phone, Mail, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { CITIES, BRANCHES } from '@/lib/booking-data';
+import { CITIES, BRANCHES, branchLabel, cityLabel } from '@/lib/booking-data';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 import { Heading, Field, Select } from './step-vehicle';
@@ -25,9 +19,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-/* service window, in minutes from midnight */
-const OPEN_MIN = 10 * 60;  // 10:00 AM
-const CLOSE_MIN = 21 * 60; // 09:00 PM
+const OPEN_MIN = 10 * 60;   // 10:00 AM
+const CLOSE_MIN = 21 * 60;  // 09:00 PM
+const SLOT_STEP = 60;       // كل ساعة
 
 export function StepDetails({
   t, isAr, data, set, onBack, onNext,
@@ -80,39 +74,28 @@ export function StepDetails({
 
         <Field label={t('step3.city')}>
           <Select value={data.city} placeholder={t('step3.cityPlaceholder')}
-            options={CITIES.map((c) => ({ value: c, label: t(`cities.${c}`) }))}
+            options={CITIES.map((c) => ({ value: c, label: cityLabel(c, isAr) }))}
             onChange={(v) => set({ city: v })} />
           {touched && errors.city && <Err>{errors.city}</Err>}
         </Field>
 
         <Field label={t('step3.branch')}>
           <Select value={data.branch} placeholder={t('step3.branchPlaceholder')}
-            options={BRANCHES.map((b) => ({ value: b, label: t(`branches.${b}`) }))}
+            options={BRANCHES.map((b) => ({ value: b, label: branchLabel(b, isAr) }))}
             onChange={(v) => set({ branch: v })} />
           {touched && errors.branch && <Err>{errors.branch}</Err>}
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label={t('step3.date')}>
-            <DatePopover
-              isAr={isAr}
-              value={data.date}
-              display={dateNice}
-              placeholder={t('step3.datePlaceholder')}
-              calMonth={data.calMonth}
-              setCalMonth={(cm) => set({ calMonth: cm })}
-              onPick={(iso) => set({ date: iso })}
-            />
+            <DatePopover isAr={isAr} value={data.date} display={dateNice}
+              placeholder={t('step3.datePlaceholder')} calMonth={data.calMonth}
+              setCalMonth={(cm) => set({ calMonth: cm })} onPick={(iso) => set({ date: iso })} />
             {touched && errors.date && <Err>{errors.date}</Err>}
           </Field>
 
           <Field label={t('step3.time')}>
-            <TimePopover
-              t={t}
-              value={data.time}
-              placeholder={t('step3.timePlaceholder')}
-              onPick={(time) => set({ time })}
-            />
+            <TimePopover t={t} value={data.time} placeholder={t('step3.timePlaceholder')} onPick={(time) => set({ time })} />
             {touched && errors.time && <Err>{errors.time}</Err>}
           </Field>
         </div>
@@ -126,32 +109,20 @@ export function StepDetails({
   );
 }
 
-/* ── trigger button shared look ── */
-function TriggerButton({
-  icon: Icon, filled, children, onClick, open,
-}: { icon: React.ElementType; filled: boolean; children: React.ReactNode; onClick: () => void; open: boolean }) {
+function TriggerButton({ icon: Icon, filled, children, onClick, open }: { icon: React.ElementType; filled: boolean; children: React.ReactNode; onClick: () => void; open: boolean }) {
   return (
-    <button
-      type="button" data-cursor="hover" onClick={onClick}
-      className={[
-        'flex w-full items-center gap-3 rounded-2xl border bg-white/[0.03] px-5 py-4 text-start text-sm transition-colors duration-300',
-        open ? 'border-platinum/50 bg-white/[0.05]' : 'border-white/12 hover:border-white/25',
-      ].join(' ')}
-    >
+    <button type="button" data-cursor="hover" onClick={onClick}
+      className={['flex w-full items-center gap-3 rounded-2xl border bg-white/[0.03] px-5 py-4 text-start text-sm transition-colors duration-300',
+        open ? 'border-platinum/50 bg-white/[0.05]' : 'border-white/12 hover:border-white/25'].join(' ')}>
       <Icon className="h-4 w-4 flex-none text-platinum/60" strokeWidth={1.8} />
       <span className={filled ? 'text-ivory' : 'text-steel/70'}>{children}</span>
     </button>
   );
 }
 
-/* ── Date popover ── */
-function DatePopover({
-  isAr, value, display, placeholder, calMonth, setCalMonth, onPick,
-}: {
+function DatePopover({ isAr, value, display, placeholder, calMonth, setCalMonth, onPick }: {
   isAr: boolean; value: string; display: string; placeholder: string;
-  calMonth: { y: number; m: number } | null;
-  setCalMonth: (cm: { y: number; m: number }) => void;
-  onPick: (iso: string) => void;
+  calMonth: { y: number; m: number } | null; setCalMonth: (cm: { y: number; m: number }) => void; onPick: (iso: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -177,17 +148,18 @@ function DatePopover({
     const date = new Date(y, m, d);
     const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const past = date < today; const sel = value === iso; const isToday = date.getTime() === today.getTime();
+    const isFriday = date.getDay() === 5; // الجمعة إجازة
+    const disabled = past || isFriday;
     cells.push(
-      <button key={iso} type="button" disabled={past} data-cursor={past ? undefined : 'hover'}
-        onClick={past ? undefined : () => { onPick(iso); setOpen(false); }}
-        className={[
-          'grid aspect-square place-items-center rounded-[10px] border font-display text-[0.9rem] tabular-nums transition-all duration-200',
+      <button key={iso} type="button" disabled={disabled} data-cursor={disabled ? undefined : 'hover'}
+        onClick={disabled ? undefined : () => { onPick(iso); setOpen(false); }}
+        title={isFriday && !past ? (isAr ? 'الجمعة إجازة' : 'Closed on Friday') : undefined}
+        className={['grid aspect-square place-items-center rounded-[10px] border font-display text-[0.9rem] tabular-nums transition-all duration-200',
           past ? 'cursor-not-allowed border-transparent text-steel/35 line-through decoration-steel/30'
+            : isFriday ? 'cursor-not-allowed border-transparent text-steel/30'
             : sel ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian'
             : 'border-transparent text-ivory/85 hover:border-white/20 hover:bg-white/[0.05]',
-          isToday && !sel ? 'shadow-[inset_0_0_0_1px_rgba(203,205,205,0.3)]' : '',
-        ].join(' ')}
-      >{d}</button>,
+          isToday && !sel ? 'shadow-[inset_0_0_0_1px_rgba(203,205,205,0.3)]' : ''].join(' ')}>{d}</button>,
     );
   }
 
@@ -198,11 +170,9 @@ function DatePopover({
       </TriggerButton>
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
+          <motion.div initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/97 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}
-          >
+            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/97 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}>
             <div className="mb-3 flex items-center justify-between">
               <button type="button" data-cursor="hover" disabled={prevDisabled} onClick={() => nav(-1)}
                 className="grid h-8 w-8 place-items-center rounded-full border border-white/12 text-platinum transition-all duration-300 hover:border-white/30 hover:text-ivory disabled:cursor-not-allowed disabled:opacity-30">
@@ -225,10 +195,7 @@ function DatePopover({
   );
 }
 
-/* ── Time popover — 12-hour, 10:00 AM – 9:00 PM ── */
-function TimePopover({
-  t, value, placeholder, onPick,
-}: { t: ReturnType<typeof useTranslations>; value: string; placeholder: string; onPick: (t: string) => void }) {
+function TimePopover({ t, value, placeholder, onPick }: { t: ReturnType<typeof useTranslations>; value: string; placeholder: string; onPick: (t: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, () => setOpen(false));
@@ -273,32 +240,22 @@ function TimePopover({
       </TriggerButton>
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
+          <motion.div initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/97 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}
-          >
-            {/* editable readout */}
+            className={`absolute z-40 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/97 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}>
             <div className="border-b border-white/[0.06] px-4 pb-3 pt-4">
               <div className="flex items-center justify-center gap-3">
-                <input
-                  dir="ltr" inputMode="numeric" value={text} onChange={(e) => onText(e.target.value)}
-                  placeholder="--:--" aria-label="time"
-                  className={[
-                    'w-[5.2rem] bg-transparent text-center font-display text-[2.4rem] leading-none tabular-nums outline-none transition-colors placeholder:text-steel/35',
-                    outOfRange ? 'text-[#e7a3a3]' : 'text-ivory',
-                  ].join(' ')}
-                />
+                <input dir="ltr" inputMode="numeric" value={text} onChange={(e) => onText(e.target.value)} placeholder="--:--" aria-label="time"
+                  className={['w-[5.2rem] bg-transparent text-center font-display text-[2.4rem] leading-none tabular-nums outline-none transition-colors placeholder:text-steel/35',
+                    outOfRange ? 'text-[#e7a3a3]' : 'text-ivory'].join(' ')} />
                 <div className="flex flex-col gap-1">
                   {(['AM', 'PM'] as const).map((mm) => {
                     const on = mer === mm;
                     return (
                       <button key={mm} type="button" data-cursor="hover" onClick={() => setMer(mm)}
-                        className={[
-                          'rounded-lg px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] transition-all duration-200',
-                          on ? 'bg-gradient-to-br from-white to-platinum text-obsidian' : 'border border-white/12 text-platinum/70 hover:border-white/30 hover:text-ivory',
-                        ].join(' ')}
-                      >{t(`step3.${mm === 'AM' ? 'am' : 'pm'}`)}</button>
+                        className={['rounded-lg px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] transition-all duration-200',
+                          on ? 'bg-gradient-to-br from-white to-platinum text-obsidian' : 'border border-white/12 text-platinum/70 hover:border-white/30 hover:text-ivory'].join(' ')}>
+                        {t(`step3.${mm === 'AM' ? 'am' : 'pm'}`)}</button>
                     );
                   })}
                 </div>
@@ -308,7 +265,6 @@ function TimePopover({
                 : <p className="mt-2.5 text-center text-[0.52rem] uppercase tracking-[0.18em] text-steel">{t('step3.timeRange')}</p>}
             </div>
 
-            {/* quick slots */}
             <div className="scrollbar-thin max-h-[210px] space-y-3 overflow-y-auto p-3">
               {groups.map((g) => g.items.length ? (
                 <div key={g.key}>
@@ -318,12 +274,9 @@ function TimePopover({
                       const on = value === s;
                       return (
                         <button key={s} type="button" data-cursor="hover" dir="ltr" onClick={() => pickSlot(s)}
-                          className={[
-                            'rounded-lg border py-2 text-center font-display text-[0.82rem] tabular-nums transition-all duration-200',
-                            on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian'
-                              : 'border-white/10 bg-white/[0.02] text-ivory/85 hover:border-white/25',
-                          ].join(' ')}
-                        >{fmt12Short(s)}</button>
+                          className={['rounded-lg border py-2 text-center font-display text-[0.82rem] tabular-nums transition-all duration-200',
+                            on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/10 bg-white/[0.02] text-ivory/85 hover:border-white/25'].join(' ')}>
+                          {fmt12Short(s)}</button>
                       );
                     })}
                   </div>
@@ -342,7 +295,6 @@ function TimePopover({
   );
 }
 
-/* ── time helpers (canonical stored value is 24h "HH:MM") ── */
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function parseText(text: string): { h: number | null; m: number | null } {
   if (!text) return { h: null, m: null };
@@ -351,10 +303,7 @@ function parseText(text: string): { h: number | null; m: number | null } {
   const m = mp !== undefined && mp !== '' ? parseInt(mp, 10) : NaN;
   return { h: isNaN(h) ? null : h, m: mp === undefined ? null : (isNaN(m) ? null : m) };
 }
-function to24(h12: number, m: number, mer: 'AM' | 'PM'): string {
-  let h = h12 % 12; if (mer === 'PM') h += 12;
-  return `${pad(h)}:${pad(m)}`;
-}
+function to24(h12: number, m: number, mer: 'AM' | 'PM'): string { let h = h12 % 12; if (mer === 'PM') h += 12; return `${pad(h)}:${pad(m)}`; }
 function to12Parts(v: string): { h: number; m: number; mer: 'AM' | 'PM' } {
   const [H, M] = v.split(':').map(Number);
   const mer: 'AM' | 'PM' = H >= 12 ? 'PM' : 'AM';
@@ -367,11 +316,10 @@ function mins(v: string): number { const [H, M] = v.split(':').map(Number); retu
 function within(v: string): boolean { const t = mins(v); return t >= OPEN_MIN && t <= CLOSE_MIN; }
 function buildSlots(): string[] {
   const out: string[] = [];
-  for (let t = OPEN_MIN; t <= CLOSE_MIN; t += 30) out.push(`${pad(Math.floor(t / 60))}:${pad(t % 60)}`);
+  for (let t = OPEN_MIN; t <= CLOSE_MIN; t += SLOT_STEP) out.push(`${pad(Math.floor(t / 60))}:${pad(t % 60)}`);
   return out;
 }
 
-/* ── popover placement: auto-flip up on phones / tight space ── */
 function usePlacement(ref: React.RefObject<HTMLElement>, open: boolean, estimated: number) {
   const [place, setPlace] = useState<'up' | 'down'>('down');
   useEffect(() => {
@@ -379,8 +327,7 @@ function usePlacement(ref: React.RefObject<HTMLElement>, open: boolean, estimate
     const compute = () => {
       const el = ref.current; if (!el) return;
       const r = el.getBoundingClientRect();
-      const below = window.innerHeight - r.bottom;
-      const above = r.top;
+      const below = window.innerHeight - r.bottom; const above = r.top;
       const mobile = window.innerWidth < 768;
       if (mobile) setPlace(above > 220 ? 'up' : 'down');
       else setPlace(below < estimated && above > below ? 'up' : 'down');
@@ -401,23 +348,16 @@ function useOutside(ref: React.RefObject<HTMLElement>, cb: () => void) {
   }, [ref, cb]);
 }
 
-function IconInput({
-  icon: Icon, value, onChange, placeholder, dir, error,
-}: {
-  icon: React.ElementType; value: string; onChange: (v: string) => void;
-  placeholder: string; dir?: 'ltr' | 'rtl'; error?: string | null;
+function IconInput({ icon: Icon, value, onChange, placeholder, dir, error }: {
+  icon: React.ElementType; value: string; onChange: (v: string) => void; placeholder: string; dir?: 'ltr' | 'rtl'; error?: string | null;
 }) {
   return (
     <div>
       <div className="relative">
         <Icon className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-platinum/60" strokeWidth={1.8} />
-        <input
-          value={value} dir={dir} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-          className={[
-            'w-full rounded-2xl border bg-white/[0.03] px-5 py-4 ps-11 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors duration-300',
-            error ? 'border-[#7c1a1a]/70 focus:border-[#7c1a1a]' : 'border-white/12 focus:border-platinum/50 focus:bg-white/[0.05]',
-          ].join(' ')}
-        />
+        <input value={value} dir={dir} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+          className={['w-full rounded-2xl border bg-white/[0.03] px-5 py-4 ps-11 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors duration-300',
+            error ? 'border-[#7c1a1a]/70 focus:border-[#7c1a1a]' : 'border-white/12 focus:border-platinum/50 focus:bg-white/[0.05]'].join(' ')} />
       </div>
       {error && <Err>{error}</Err>}
     </div>

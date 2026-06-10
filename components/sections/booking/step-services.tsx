@@ -1,13 +1,8 @@
 'use client';
 
 /**
- * StepServices — act 02 of the booking flow.
- *
- * A rich vehicle "dossier" rides along the top; services are organised into
- * category tabs (Packages / Ceramic / PPF / Thermal / Protection / Add-ons).
- * Each service is an image-backed card revealing its includes + warranty on
- * hover/select. A towing module opens modes + the map picker. The build
- * summary lives in a sticky dock that always stays reachable while scrolling.
+ * StepServices — act 02. الخدمات والتصنيفات تأتي من القاعدة كـ props.
+ * شريحة الحجم دلوقتي ديناميكية حسب data.size (مش ثابتة "كبيرة").
  */
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
@@ -16,9 +11,10 @@ import {
 } from 'lucide-react';
 
 import {
-  BRANDS, COLORS, CATEGORIES, SERVICES, TOWING_COST, priceFor, oldPriceFor, discountPct, currencyFmt,
-  type CategoryId, type TowingMode,
+  BRANDS, COLORS, TOWING_COST, currencyFmt,
+  type CategoryId, type TowingMode, type Category, type VehicleSize,
 } from '@/lib/booking-data';
+import { dbPriceFor, dbOldPriceFor, dbDiscountPct, type DbServiceMeta } from '@/lib/booking-pricing';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 import { Heading } from './step-vehicle';
@@ -29,19 +25,30 @@ const CAT_ICONS: Record<string, React.ElementType> = {
   star: Star, shield: Shield, layers: Layers, sun: Sun, lock: Lock, sparkles: Sparkles,
 };
 
+const SIZE_LABELS: Record<VehicleSize, { ar: string; en: string; tier: string }> = {
+  small: { ar: 'صغيرة', en: 'Small', tier: 'Tier I' },
+  medium: { ar: 'متوسطة', en: 'Medium', tier: 'Tier II' },
+  large: { ar: 'كبيرة', en: 'Large', tier: 'Tier III' },
+};
+
 export function StepServices({
-  t, isAr, data, set, total, onBack, onNext,
+  t, isAr, data, set, total, categories, services: SERVICES, onBack, onNext,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
   data: BookingState;
   set: (patch: Partial<BookingState>) => void;
   total: { services: number; tow: number; grand: number; onReq: boolean; saved: number };
+  categories: Category[];
+  services: DbServiceMeta[];
   onBack: () => void; onNext: () => void;
 }) {
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
   const list = SERVICES.filter((s) => s.cat === data.activeCat);
+
+  const sz = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
+  const sizeChip = `${isAr ? sz.ar : sz.en} · ${sz.tier}`;
 
   const toggle = (slug: string) =>
     set({ services: data.services.includes(slug)
@@ -60,15 +67,12 @@ export function StepServices({
         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, ease: EASE }}
         className="dossier-pass relative mt-7 overflow-hidden rounded-[22px] border border-white/[0.1] bg-gradient-to-br from-white/[0.07] via-white/[0.025] to-transparent"
       >
-        {/* accent rail */}
         <span className="absolute inset-y-0 start-0 w-[3px] bg-gradient-to-b from-platinum/0 via-platinum/70 to-platinum/0" />
-        {/* ambient + hairline + shimmer */}
         <span className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-platinum/[0.06] blur-3xl" />
         <span className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-platinum/50 to-transparent" />
         <span className="dossier-shimmer pointer-events-none absolute inset-0" />
 
         <div className="relative flex flex-col gap-5 p-5 ps-7 sm:flex-row sm:items-center sm:gap-7 md:p-6 md:ps-8">
-          {/* medallion */}
           <div className="flex items-center gap-4">
             <div className="relative grid h-[68px] w-[68px] flex-none place-items-center rounded-full border border-white/12 bg-obsidian/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <span className="absolute inset-1.5 rounded-full border border-white/[0.06]" />
@@ -82,7 +86,6 @@ export function StepServices({
             </div>
           </div>
 
-          {/* details */}
           <div className="hidden flex-1 sm:block">
             <StatusLabel t={t} />
             <div className="mt-1.5 flex items-baseline gap-2.5">
@@ -91,15 +94,14 @@ export function StepServices({
             </div>
             <div className="mt-3.5 flex flex-wrap items-center gap-2">
               {color && <SpecChip dot={color.hex}>{t(`colors.${color.key}`)}</SpecChip>}
-              <SpecChip>{t('step2.largeVehicle')} · Tier III</SpecChip>
+              <SpecChip>{sizeChip}</SpecChip>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:hidden">
             {color && <SpecChip dot={color.hex}>{t(`colors.${color.key}`)}</SpecChip>}
-            <SpecChip>{t('step2.largeVehicle')} · Tier III</SpecChip>
+            <SpecChip>{sizeChip}</SpecChip>
           </div>
 
-          {/* plate */}
           {data.plate && (
             <div dir="ltr" className="flex flex-none items-stretch self-start overflow-hidden rounded-[10px] border border-white/30 bg-gradient-to-b from-[#f6f6f4] to-[#d8d8d4] shadow-[0_12px_34px_-12px_rgba(0,0,0,0.75)] sm:self-center">
               <div className="flex flex-col items-center justify-center bg-obsidian px-2.5 py-2">
@@ -121,7 +123,7 @@ export function StepServices({
         <div>
           {/* category tabs */}
           <div className="mb-6 flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => {
+            {categories.map((c) => {
               const on = data.activeCat === c.id;
               const count = data.services.filter((sl) => SERVICES.find((s) => s.slug === sl)?.cat === c.id).length;
               const Icon = CAT_ICONS[c.icon] ?? Star;
@@ -138,7 +140,7 @@ export function StepServices({
                   ].join(' ')}
                 >
                   <Icon className="h-[15px] w-[15px]" strokeWidth={1.6} />
-                  {t(`cats.${c.label}`)}
+                  {c.label}
                   {count > 0 && (
                     <span className={`grid h-4 min-w-4 place-items-center rounded-full px-1 text-[0.55rem] ${on ? 'bg-black/15' : 'bg-platinum/20 text-platinum'}`}>{count}</span>
                   )}
@@ -157,9 +159,9 @@ export function StepServices({
             >
               {list.map((sv, i) => {
                 const on = data.services.includes(sv.slug);
-                const price = priceFor(sv, data.size);
-                const oldPrice = oldPriceFor(sv, data.size);
-                const off = discountPct(sv);
+                const price = dbPriceFor(sv, data.size);
+                const oldPrice = dbOldPriceFor(sv, data.size);
+                const off = dbDiscountPct(sv, data.size);
                 return (
                   <motion.button
                     key={sv.slug}
@@ -196,9 +198,9 @@ export function StepServices({
                         <Chip icon={<Shield className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.warranty}</Chip>
                         <Chip icon={<Clock className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.dur}</Chip>
                       </div>
-                      <h4 className="font-display text-[1.4rem] uppercase leading-[1.04] text-ivory">{t(`svc.${sv.slug}.name`)}</h4>
+                      <h4 className="font-display text-[1.4rem] uppercase leading-[1.04] text-ivory">{sv.name}</h4>
                       <p className="mt-2 text-[0.74rem] leading-[1.5] text-platinum/65 line-clamp-2">
-                        {t(`svc.${sv.slug}.desc`)}
+                        {sv.desc}
                       </p>
                       <div className="mt-2.5 flex max-h-0 flex-wrap gap-x-3 gap-y-1.5 overflow-hidden opacity-0 transition-all duration-500 group-hover:max-h-[70px] group-hover:opacity-100 group-[.on]:max-h-[70px] group-[.on]:opacity-100">
                         {sv.incl.map((x) => (
@@ -313,8 +315,8 @@ export function StepServices({
                   return (
                     <motion.div key={sl} layout initial={{ opacity: 0, x: isAr ? -10 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                       className="flex items-center gap-2.5 text-sm">
-                      <span className="flex-1 text-ivory/85">{t(`svc.${sl}.name`)}</span>
-                      <span dir="ltr" className="font-display text-platinum tabular-nums">{m.onRequest ? '—' : currencyFmt(priceFor(m, data.size))}</span>
+                      <span className="flex-1 text-ivory/85">{m?.name ?? sl}</span>
+                      <span dir="ltr" className="font-display text-platinum tabular-nums">{m?.onRequest ? '—' : currencyFmt(dbPriceFor(m, data.size))}</span>
                       <button data-cursor="hover" onClick={(e) => { e.stopPropagation(); toggle(sl); }}
                         className="grid h-[22px] w-[22px] flex-none place-items-center rounded-full border border-white/12 text-steel transition-all duration-200 hover:border-[#7c1a1a]/60 hover:text-[#c98a8a]">
                         <X className="h-3 w-3" strokeWidth={1.8} />

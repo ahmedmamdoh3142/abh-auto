@@ -48,10 +48,10 @@ function TikTokIcon({ className }: { className?: string }) {
 }
 
 const socials = [
-  { href: "https://facebook.com", label: "Facebook", Icon: FacebookIcon },
-  { href: "https://instagram.com", label: "Instagram", Icon: InstagramIcon },
-  { href: "https://snapchat.com", label: "Snapchat", Icon: SnapchatIcon },
-  { href: "https://tiktok.com", label: "TikTok", Icon: TikTokIcon },
+  { href: "https://www.facebook.com/profile.php?id=61588741474865", label: "Facebook", Icon: FacebookIcon },
+  { href: "https://www.instagram.com/abh.auto/", label: "Instagram", Icon: InstagramIcon },
+  { href: "https://www.snapchat.com/add/abhauto1?share_id=ql_6HRtNv6k&locale=en-US", label: "Snapchat", Icon: SnapchatIcon },
+  { href: "https://www.tiktok.com/@abhauto1?lang=en", label: "TikTok", Icon: TikTokIcon },
 ];
 
 export function Footer() {

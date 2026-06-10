@@ -140,47 +140,61 @@ export function discountPct(service: ServiceMeta): number {
   return Math.round((1 - service.base / service.oldBase) * 100);
 }
 
-/* ── Vehicle catalogue ── */
-export interface Brand { id: string; name: string; models: string[]; }
+/* ── Vehicle catalogue (مصدره ملف الإكسل عبر brands-data.ts) ── */
+export type { Brand } from './brands-data';
+export { BRANDS, MODEL_SIZE, sizeForModel } from './brands-data';
+import { sizeForModel as _sizeForModel } from './brands-data';
 
-export const BRANDS: Brand[] = [
-  { id: 'rolls', name: 'Rolls-Royce', models: ['Phantom', 'Ghost', 'Cullinan', 'Spectre', 'Wraith', 'Dawn'] },
-  { id: 'bentley', name: 'Bentley', models: ['Continental GT', 'Flying Spur', 'Bentayga', 'Bacalar', 'Mulsanne'] },
-  { id: 'ferrari', name: 'Ferrari', models: ['SF90', 'Roma', '296 GTB', 'Purosangue', '812', 'F8'] },
-  { id: 'lamborghini', name: 'Lamborghini', models: ['Revuelto', 'Huracán', 'Urus', 'Aventador'] },
-  { id: 'porsche', name: 'Porsche', models: ['911', 'Taycan', 'Cayenne', 'Panamera', 'Macan', '718'] },
-  { id: 'mercedes', name: 'Mercedes-Benz', models: ['S-Class', 'G63 AMG', 'Maybach', 'GLS', 'SL', 'EQS'] },
-  { id: 'bmw', name: 'BMW', models: ['7 Series', 'X7', 'M5', 'XM', 'i7', '8 Series'] },
-  { id: 'aston', name: 'Aston Martin', models: ['DBX', 'DB12', 'Vantage', 'Valhalla'] },
-  { id: 'mclaren', name: 'McLaren', models: ['750S', 'Artura', 'GTS', '720S'] },
-  { id: 'landrover', name: 'Land Rover', models: ['Range Rover', 'Range Rover Sport', 'Defender', 'Velar'] },
-  { id: 'pagani', name: 'Pagani', models: ['Huayra', 'Utopia'] },
-  { id: 'cadillac', name: 'Cadillac', models: ['Escalade', 'CT5', 'Lyriq'] },
-];
-
-const MODEL_SIZE: Record<string, VehicleSize> = {};
-export function inferSize(_brandId: string, model: string): VehicleSize {
-  return MODEL_SIZE[model] ?? 'large';
+/** للتوافق القديم: الحجم من (الماركة + الموديل). */
+export function inferSize(brandId: string, model: string): VehicleSize {
+  return _sizeForModel(brandId, model);
 }
 
 export interface ColorMeta { key: string; hex: string; light: boolean; }
 export const COLORS: ColorMeta[] = [
-  { key: 'white', hex: '#f3f3f1', light: true }, { key: 'black', hex: '#0a0a0b', light: false },
-  { key: 'silver', hex: '#c7c9cb', light: true }, { key: 'gray', hex: '#6b6e72', light: false },
-  { key: 'red', hex: '#7c1a1a', light: false }, { key: 'blue', hex: '#1b2a44', light: false },
-  { key: 'green', hex: '#1c3a2e', light: false }, { key: 'yellow', hex: '#c9a227', light: true },
-  { key: 'orange', hex: '#9c4416', light: false }, { key: 'brown', hex: '#4a3526', light: false },
-  { key: 'beige', hex: '#cdbfa3', light: true }, { key: 'gold', hex: '#b8993f', light: true },
+  { key: 'white', hex: '#f5f5f5', light: true },
+  { key: 'black', hex: '#0a0a0a', light: false },
+  { key: 'silver', hex: '#c9ccce', light: true },
+  { key: 'gray', hex: '#6b7075', light: false },
+  { key: 'gunmetal', hex: '#2a2d31', light: false },
+  { key: 'blue', hex: '#1f3a93', light: false },
+  { key: 'red', hex: '#9b1c1c', light: false },
+  { key: 'green', hex: '#14452f', light: false },
+  { key: 'brown', hex: '#4a2f1b', light: false },
+  { key: 'beige', hex: '#d8c8a8', light: true },
+  { key: 'gold', hex: '#b8973f', light: true },
+  { key: 'burgundy', hex: '#5c1626', light: false },
 ];
 
 export type TowingMode = 'oneway' | 'return' | 'both';
 export const TOWING_COST: Record<TowingMode, number> = { oneway: 300, return: 300, both: 550 };
 
-export const CITIES = ['cairo', 'alexandria', 'giza', 'nasr_city', 'new_cairo', 'maadi', 'zamalek', 'october'] as const;
-export const BRANCHES = ['nasr_city', 'new_cairo', 'alexandria'] as const;
+// المدن: جدة ومكة فقط (مطابقة لجدول cities في القاعدة)، بأسماء مبنية في الكود.
+export const CITIES = ['jeddah', 'makkah'] as const;
+export const CITY_LABELS: Record<string, { ar: string; en: string }> = {
+  jeddah: { ar: 'جدة', en: 'Jeddah' },
+  makkah: { ar: 'مكة المكرمة', en: 'Makkah' },
+};
+export function cityLabel(code: string, isAr: boolean): string {
+  const c = CITY_LABELS[code];
+  return c ? (isAr ? c.ar : c.en) : code;
+}
+export const BRANCHES = ['tahlia'] as const;
+
+// أسماء الفروع مبنية في الكود (لا تعتمد على ملفات الترجمة) لضمان ظهورها صح دائمًا.
+export const BRANCH_LABELS: Record<string, { ar: string; en: string }> = {
+  tahlia: { ar: 'جدة — فرع التحلية', en: 'Jeddah — Al Tahlia' },
+};
+export function branchLabel(code: string, isAr: boolean): string {
+  const b = BRANCH_LABELS[code];
+  return b ? (isAr ? b.ar : b.en) : code;
+}
 
 export type PaymentMethod = 'tabby' | 'tamara' | 'applePay' | 'cash';
+// كل طرق الدفع ظاهرة، لكن المعطّلة منها (PAYMENT_DISABLED) معروضة كـ "قريبًا"
+// وغير قابلة للاختيار لحد ما نفعّل بوابات الدفع. المتاح حاليًا: الدفع بالفرع (cash).
 export const PAYMENT_METHODS: PaymentMethod[] = ['tabby', 'tamara', 'applePay', 'cash'];
+export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby', 'tamara', 'applePay']);
 
 /** Time slots grouped by part of day; BOOKED simulates taken slots. */
 export const TIME_GROUPS: [string, string[]][] = [

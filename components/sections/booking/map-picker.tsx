@@ -1,25 +1,42 @@
 'use client';
 
 /**
- * MapPicker — a stylised monochrome map the owner drops a pin on.
- *
- * Real Google Maps needs an API key; this is a self-contained, on-brand
- * canvas (SVG street grid + park + water + a draggable platinum pin) that
- * emits lat/lng + a synthesised address line. Drop-in: swap for a real
- * map embed later by replacing the <svg> stage and keeping the props.
+ * MapPicker — لاقط موقع حقيقي (Leaflet + OpenStreetMap، بدون مفتاح API).
+ * - اضغط على الخريطة أو اسحب الدبوس لتحديد نقطة فعلية.
+ * - زر "موقعي الحالي" يستخدم GPS المتصفح.
+ * - العنوان يتعبّى تلقائيًا عبر Reverse Geocoding (Nominatim).
+ * نفس الـ props القديمة عشان يفضل drop-in.
  */
-import { useRef, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Crosshair } from 'lucide-react';
+import { useRef, useState, useEffect, useCallback } from 'react';
+import { MapPin, Crosshair, Loader2 } from 'lucide-react';
 
-// Jeddah-ish anchor so synthesised coordinates read plausibly.
-const ANCHOR = { lat: 21.5433, lng: 39.1728 };
-const SPAN = 0.06;
+const DEFAULT = { lat: 21.5433, lng: 39.1728 }; // جدة
+const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 
-const DISTRICTS = [
-  'Al-Faisaliyah', 'Al-Rawdah', 'Al-Hamra', 'Ash-Shati', 'Al-Andalus',
-  'Al-Salamah', 'Al-Zahra', 'Al-Naeem', 'Al-Khalidiyah',
-];
+function loadLeaflet(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const w = window as any;
+    if (w.L) return resolve(w.L);
+    if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet'; link.href = LEAFLET_CSS;
+      document.head.appendChild(link);
+    }
+    const existing = document.querySelector(`script[src="${LEAFLET_JS}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', () => resolve((window as any).L));
+      existing.addEventListener('error', reject);
+      if ((window as any).L) resolve((window as any).L);
+      return;
+    }
+    const sc = document.createElement('script');
+    sc.src = LEAFLET_JS; sc.async = true;
+    sc.onload = () => resolve((window as any).L);
+    sc.onerror = reject;
+    document.body.appendChild(sc);
+  });
+}
 
 export function MapPicker({
   value, onPick, addressPlaceholder, mapHint,
@@ -29,105 +46,127 @@ export function MapPicker({
   addressPlaceholder: string;
   mapHint: string;
 }) {
-  const stageRef = useRef<HTMLDivElement>(null);
-  const [pin, setPin] = useState<{ x: number; y: number } | null>(
-    value.lat != null ? { x: 50, y: 50 } : null,
-  );
-  const [dragging, setDragging] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const [ready, setReady] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
 
-  const place = useCallback((clientX: number, clientY: number) => {
-    const el = stageRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const x = Math.min(100, Math.max(0, ((clientX - r.left) / r.width) * 100));
-    const y = Math.min(100, Math.max(0, ((clientY - r.top) / r.height) * 100));
-    setPin({ x, y });
-    const lat = +(ANCHOR.lat + (0.5 - y / 100) * SPAN).toFixed(5);
-    const lng = +(ANCHOR.lng + (x / 100 - 0.5) * SPAN).toFixed(5);
-    const district = DISTRICTS[Math.floor((x + y) / 200 * DISTRICTS.length) % DISTRICTS.length];
-    const street = 100 + Math.floor((x * y) % 400);
-    onPick({ lat, lng, address: `${street} ${district} St, Jeddah` });
-  }, [onPick]);
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    setGeocoding(true);
+    try {
+      const isAr = typeof document !== 'undefined' && document.documentElement.lang === 'ar';
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=${isAr ? 'ar' : 'en'}`,
+        { headers: { 'Accept': 'application/json' } },
+      );
+      const j = await res.json();
+      const addr = j?.display_name ?? '';
+      onPickRef.current({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), address: addr });
+    } catch {
+      onPickRef.current({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), address: '' });
+    } finally {
+      setGeocoding(false);
+    }
+  }, []);
+
+  const placeMarker = useCallback((L: any, lat: number, lng: number, geocode = true) => {
+    const map = mapRef.current; if (!map) return;
+    if (!markerRef.current) {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="transform:translate(-50%,-100%)">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="#f4f4f2" stroke="#0a0b0c" stroke-width="1.2"
+            style="filter:drop-shadow(0 4px 8px rgba(0,0,0,.55))">
+            <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/>
+            <circle cx="12" cy="10" r="2.6" fill="#0a0b0c" stroke="none"/></svg></div>`,
+        iconSize: [0, 0],
+      });
+      markerRef.current = L.marker([lat, lng], { draggable: true, icon }).addTo(map);
+      markerRef.current.on('dragend', () => {
+        const p = markerRef.current.getLatLng();
+        reverseGeocode(p.lat, p.lng);
+      });
+    } else {
+      markerRef.current.setLatLng([lat, lng]);
+    }
+    if (geocode) reverseGeocode(lat, lng);
+  }, [reverseGeocode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadLeaflet().then((L) => {
+      if (cancelled || !hostRef.current || mapRef.current) return;
+      const start = value.lat != null && value.lng != null ? { lat: value.lat, lng: value.lng } : DEFAULT;
+      const map = L.map(hostRef.current, { zoomControl: true, attributionControl: false }).setView([start.lat, start.lng], 13);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19, subdomains: 'abcd',
+      }).addTo(map);
+      map.on('click', (e: any) => placeMarker(L, e.latlng.lat, e.latlng.lng));
+      mapRef.current = map;
+      if (value.lat != null && value.lng != null) placeMarker(L, value.lat, value.lng, false);
+      setReady(true);
+      setTimeout(() => map.invalidateSize(), 200);
+    }).catch(() => setReady(false));
+    return () => { cancelled = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const L = (window as any).L;
+        if (mapRef.current && L) { mapRef.current.setView([latitude, longitude], 15); placeMarker(L, latitude, longitude); }
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  };
 
   return (
     <div className="space-y-4">
-      <div
-        ref={stageRef}
-        data-cursor="hover"
-        onClick={(e) => place(e.clientX, e.clientY)}
-        onMouseDown={() => setDragging(true)}
-        onMouseUp={() => setDragging(false)}
-        onMouseLeave={() => setDragging(false)}
-        onMouseMove={(e) => dragging && place(e.clientX, e.clientY)}
-        className="relative h-56 w-full cursor-crosshair overflow-hidden rounded-2xl border border-white/12 bg-[#070809] md:h-64"
-      >
-        {/* map artwork */}
-        <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 400 260">
-          <defs>
-            <pattern id="mp-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M40 0H0V40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width="400" height="260" fill="url(#mp-grid)" />
-          {/* water */}
-          <path d="M0 0 L120 0 Q90 70 130 130 Q90 200 110 260 L0 260 Z" fill="rgba(102,106,110,0.10)" />
-          <path d="M0 0 L120 0 Q90 70 130 130 Q90 200 110 260 L0 260 Z" fill="none" stroke="rgba(203,205,205,0.12)" strokeWidth="1" />
-          {/* park */}
-          <rect x="250" y="40" width="90" height="70" rx="10" fill="rgba(203,205,205,0.04)" stroke="rgba(203,205,205,0.10)" />
-          {/* arterial roads */}
-          <path d="M150 0 L210 260" stroke="rgba(203,205,205,0.18)" strokeWidth="3" fill="none" />
-          <path d="M0 90 L400 60" stroke="rgba(203,205,205,0.16)" strokeWidth="3" fill="none" />
-          <path d="M0 180 L400 200" stroke="rgba(203,205,205,0.12)" strokeWidth="2" fill="none" />
-          <path d="M300 0 L330 260" stroke="rgba(203,205,205,0.10)" strokeWidth="2" fill="none" />
-        </svg>
+      <div className="relative overflow-hidden rounded-2xl border border-white/12">
+        <div ref={hostRef} className="h-56 w-full md:h-72" style={{ background: '#0b0c0d' }} />
 
-        {/* hint */}
-        {!pin && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-obsidian/60 px-4 py-2 text-[0.6rem] uppercase tracking-[0.22em] text-platinum/70 backdrop-blur-md">
-              <Crosshair className="h-3 w-3" strokeWidth={1.8} />
-              {mapHint}
+        {!ready && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#0b0c0d]">
+            <span className="inline-flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.2em] text-platinum/60">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />…
             </span>
           </div>
         )}
 
-        {/* pin */}
-        {pin && (
-          <motion.div
-            initial={{ scale: 0, y: -8 }} animate={{ scale: 1, y: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-full"
-            style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-          >
-            <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1.5 rounded-full bg-platinum/30 blur-sm" />
-            <MapPin className="h-7 w-7 fill-ivory text-obsidian drop-shadow-[0_4px_10px_rgba(0,0,0,0.6)]" strokeWidth={1.5} />
-          </motion.div>
-        )}
-
-        {/* ripple ring when pin set */}
-        {pin && (
-          <motion.span
-            key={`${pin.x}-${pin.y}`}
-            initial={{ scale: 0, opacity: 0.6 }} animate={{ scale: 3, opacity: 0 }}
-            transition={{ duration: 0.8 }}
-            className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-ivory"
-            style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-          />
-        )}
+        {/* hint + my location */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
+          <span className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-white/12 bg-obsidian/70 px-3 py-1.5 text-[0.58rem] uppercase tracking-[0.18em] text-platinum/80 backdrop-blur-md">
+            <Crosshair className="h-3 w-3" strokeWidth={1.8} />{mapHint}
+          </span>
+          <button type="button" data-cursor="hover" onClick={useMyLocation}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-obsidian/70 px-3 py-1.5 text-[0.58rem] uppercase tracking-[0.16em] text-ivory backdrop-blur-md transition-colors hover:border-platinum/50">
+            {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" strokeWidth={1.8} />}
+          </button>
+        </div>
       </div>
 
-      {/* address line */}
+      {/* address line (editable + reverse-geocoded) */}
       <div className="relative">
         <MapPin className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-platinum/60" strokeWidth={1.8} />
         <input
           value={value.address}
-          onChange={(e) => onPick({ lat: value.lat ?? ANCHOR.lat, lng: value.lng ?? ANCHOR.lng, address: e.target.value })}
+          onChange={(e) => onPick({ lat: value.lat ?? DEFAULT.lat, lng: value.lng ?? DEFAULT.lng, address: e.target.value })}
           placeholder={addressPlaceholder}
           className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 ps-11 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors duration-300 focus:border-platinum/50 focus:bg-white/[0.05]"
         />
-        {value.lat != null && (
+        {(geocoding || value.lat != null) && (
           <span dir="ltr" className="pointer-events-none absolute end-4 top-1/2 -translate-y-1/2 font-mono text-[0.6rem] tabular-nums text-steel">
-            {value.lat?.toFixed(3)}, {value.lng?.toFixed(3)}
+            {geocoding ? <Loader2 className="h-3 w-3 animate-spin" /> : <>{value.lat?.toFixed(3)}, {value.lng?.toFixed(3)}</>}
           </span>
         )}
       </div>

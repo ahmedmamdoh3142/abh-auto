@@ -665,12 +665,12 @@
       "description": "Write to the atelier in Jeddah. By private appointment only."
     },
     "overture": {
-      "eyebrow": "WRITE TO THE ATELIER",
+      "eyebrow": "WRITE TO THE TEAM",
       "title_a": "Start a",
       "title_b": "private conversation.",
       "subtitle": "Every message is read carefully by our team and answered during business hours.",
-      "statusOpen": "Atelier open",
-      "statusClosed": "Atelier closed",
+      "statusOpen": "Center open",
+      "statusClosed": "Center closed",
       "scrollPrompt": "Compose"
     },
     "compose": {
@@ -874,6 +874,12 @@
         "desc": "Careful engine degrease and dressing for a showroom bay."
       }
     },
+    "branches": { "tahlia": "Jeddah — Al Tahlia" },
+    "colors": {
+      "white": "White", "black": "Black", "silver": "Silver", "gray": "Gray",
+      "gunmetal": "Gunmetal", "blue": "Blue", "red": "Red", "green": "Green",
+      "brown": "Brown", "beige": "Beige", "gold": "Gold", "burgundy": "Burgundy"
+    },
     "from": "From",
     "onRequest": "On request",
     "currency": "SAR",
@@ -1036,14 +1042,8 @@
       "gold": "Champagne Gold"
     },
     "cities": {
-      "cairo": "Cairo",
-      "alexandria": "Alexandria",
-      "giza": "Giza",
-      "nasr_city": "Nasr City",
-      "new_cairo": "New Cairo",
-      "maadi": "Maadi",
-      "zamalek": "Zamalek",
-      "october": "6th of October"
+      "cairo": "Jaddah",
+      "alexandria": "Makka"
     },
     "branches": {
       "nasr_city": "Nasr City Branch",

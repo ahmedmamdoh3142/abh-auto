@@ -29,7 +29,7 @@ import Image from 'next/image';
 import { useAtelierStatus } from '@/hooks/use-atelier-status';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const BOOKING_IMAGE = '/images/hero-bg.png';
+const BOOKING_IMAGE = '/images/hero-bg.webp';
 
 export function Overture() {
   const t = useTranslations('contact.overture');

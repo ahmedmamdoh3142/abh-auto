@@ -1,27 +1,28 @@
 /**
  * Projects page — /projects  (أعمالنا)
- * Path: app/projects/page.tsx
- *
- * Server component: owns metadata + zone background, delegates the
- * interactive archive to the client `ProjectsArchive`.
  */
 import type { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
+import { getLocale } from 'next-intl/server';
 
 import { ProjectsArchive } from '@/components/sections/projects-archive';
+import { getProjectsData } from '@/lib/projects-data';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations('projects');
+  const locale = await getLocale();
+  const { text } = await getProjectsData(locale as 'en' | 'ar');
   return {
-    title: t('title'),
-    description: t('subtitle'),
+    title: text?.meta?.title ?? 'Projects',
+    description: text?.subtitle ?? '',
   };
 }
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const locale = await getLocale();
+  const { projects, text } = await getProjectsData(locale as 'en' | 'ar');
+
   return (
     <div className="bg-zone-cool">
-      <ProjectsArchive />
+      <ProjectsArchive projects={projects as any} txt={text} />
     </div>
   );
 }

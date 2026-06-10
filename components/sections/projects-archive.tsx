@@ -2,27 +2,7 @@
 
 /**
  * ProjectsArchive — dedicated /projects (أعمالنا) experience.
- * Path: components/sections/projects-archive.tsx
- *
- * Structure:
- *   1. SUBPAGE HERO — an inner-page header band (NOT a full-screen landing
- *      hero): breadcrumb, large editorial title, lead line, a 3-up meta row
- *      (cars / established / projects) and a drawn baseline. Short, static,
- *      refined — the way studio sites treat secondary-page headers.
- *   2. GALLERY      — centered header; tall monochrome cards (Offers/Services
- *      DNA + useSpotlight). Clicking a card opens the dossier modal.
- *   3. CTA          — image-backed cinematic close, centered.
- *
- * PROJECT DOSSIER MODAL:
- *   - a STICKY top bar (project no. + name + close ✕) that stays pinned while
- *     the body scrolls — the close is always reachable.
- *   - SEPARATE before / after image figures (side by side, no slider), each
- *     labelled and captioned.
- *   - specification grid + numbered "what happened in the atelier" list.
- *   - chrome CTA. Closes via ✕ / scrim / ESC.
- *
- * Strict palette (obsidian/ivory/platinum/steel). next/image, framer-motion,
- * deterministic particles, full RTL.
+ * المشاريع والنصوص تأتي من قاعدة البيانات عبر props.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -33,39 +13,37 @@ import {
   useScroll,
   useTransform,
 } from 'framer-motion';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { ArrowUpRight, X } from 'lucide-react';
 
 import { SectionHeader } from '@/components/ui/section-header';
 import { useSpotlight } from '@/hooks/use-mouse';
 
-const CTA_IMAGE = '/images/cta-bg.png'; // any cinematic shot; lib/site-config is read-only
-const BOOKING_IMAGE = '/images/hero-bg.png';
+const CTA_IMAGE = '/images/cta-bg.webp';
+const BOOKING_IMAGE = '/images/hero-bg.webp';
 
-/* ── Data ───────────────────────────────────────────────────────────── */
 type Craft = 'ceramic' | 'ppf' | 'armor' | 'tracking' | 'detailing';
 
 interface Project {
+  slug: string;
   id: number;
   model: string;
   craft: Craft;
   year: number;
-  image: string;   // after
-  before: string;  // before
+  image: string;
+  before: string;
   cat: { en: string; ar: string };
-  specs?: { en: [string, string][]; ar: [string, string][] };
 }
 
-const PROJECTS: Project[] = [
-  { id: 1, model: 'Pagani Huayra',        craft: 'detailing', year: 2024, image: '/images/project-1.png', before: '/images/project-1-before.png', cat: { en: 'Carbon Restoration',  ar: 'ترميم كربون' } },
-  { id: 2, model: 'Rolls-Royce Spectre',  craft: 'ceramic',   year: 2024, image: '/images/project-2.png', before: '/images/project-2-before.png', cat: { en: 'Diamond Suite',       ar: 'باقة الألماس' } },
-  { id: 3, model: 'Ferrari SF90',         craft: 'ppf',       year: 2023, image: '/images/project-3.png', before: '/images/project-3-before.png', cat: { en: 'Track Specification', ar: 'مواصفات الحلبة' } },
-  { id: 4, model: 'Bentley Bacalar',      craft: 'detailing', year: 2024, image: '/images/project-4.png', before: '/images/project-4-before.png', cat: { en: 'Concours Prep',       ar: 'تحضير كونكور' } },
-  { id: 5, model: 'Aston Martin DBX',     craft: 'armor',     year: 2023, image: '/images/project-5.png', before: '/images/project-5-before.png', cat: { en: 'Armored B6',          ar: 'تدريع B6' } },
-  { id: 6, model: 'Porsche 911 GT3',      craft: 'ppf',       year: 2024, image: '/images/project-6.png', before: '/images/project-6-before.png', cat: { en: 'PPF Application',     ar: 'تطبيق أفلام الحماية' } },
-  { id: 7, model: 'Mercedes-AMG G63',     craft: 'tracking',  year: 2023, image: '/images/project-7.png', before: '/images/project-7-before.png', cat: { en: 'Stealth Tracking',    ar: 'تتبّع خفي' } },
-  { id: 8, model: 'Lamborghini Revuelto', craft: 'ceramic',   year: 2024, image: '/images/project-8.png', before: '/images/project-8-before.png', cat: { en: 'Ceramic · 12yr',      ar: 'سيراميك · ١٢ سنة' } },
-];
+type ProjectRow = {
+  slug: string;
+  title: string;
+  category: string;
+  craft: Craft;
+  year: number;
+  image_after: string;
+  image_before: string | null;
+};
 
 const FILTERS: ('all' | Craft)[] = ['all', 'ceramic', 'ppf', 'armor', 'tracking', 'detailing'];
 const FILTER_LABELS: Record<string, { en: string; ar: string }> = {
@@ -82,10 +60,25 @@ const SPRING = { type: 'spring' as const, stiffness: 120, damping: 22, mass: 0.9
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /* ════════════════════════════════════════════════════════════════════ */
-export function ProjectsArchive() {
-  const t = useTranslations('projects');
+export function ProjectsArchive({ projects, txt }: { projects: ProjectRow[]; txt: any }) {
   const locale = useLocale();
   const isAr = locale === 'ar';
+
+  // قارئ نصوص بسيط من بيانات القاعدة (يحاكي t / t.raw)
+  const t = ((key: string) => txt?.[key] ?? '') as any;
+  t.raw = (key: string) => txt?.[key] ?? [];
+
+  // حوّل صفوف القاعدة لشكل الكومبوننت
+  const PROJECTS: Project[] = projects.map((p, i) => ({
+    slug: p.slug,
+    id: i + 1,
+    model: p.title,
+    craft: p.craft,
+    year: p.year,
+    image: p.image_after,
+    before: p.image_before ?? p.image_after,
+    cat: { en: p.category, ar: p.category },
+  }));
 
   const [active, setActive] = useState<'all' | Craft>('all');
   const [openId, setOpenId] = useState<number | null>(null);
@@ -94,19 +87,17 @@ export function ProjectsArchive() {
     const c: Record<string, number> = { all: PROJECTS.length };
     for (const p of PROJECTS) c[p.craft] = (c[p.craft] ?? 0) + 1;
     return c;
-  }, []);
+  }, [PROJECTS]);
   const visible = useMemo(
     () => (active === 'all' ? PROJECTS : PROJECTS.filter((p) => p.craft === active)),
-    [active],
+    [active, PROJECTS],
   );
   const openProject = openId != null ? PROJECTS.find((p) => p.id === openId) ?? null : null;
 
   return (
     <>
-      {/* ── INNER-PAGE HERO ───────────────────────────────────────── */}
       <SubpageHero isAr={isAr} t={t} />
 
-      {/* ── GALLERY ───────────────────────────────────────────────── */}
       <section className="section pt-8 md:pt-12" id="archive">
         <div className="container">
           <SectionHeader
@@ -158,19 +149,15 @@ export function ProjectsArchive() {
 
       <PlatinumDivider />
 
-      {/* ── CTA ───────────────────────────────────────────────────── */}
       <ArchiveCta t={t} />
 
-      {/* ── DOSSIER MODAL ─────────────────────────────────────────── */}
       <ProjectModal project={openProject} isAr={isAr} t={t} onClose={() => setOpenId(null)} />
     </>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════════ */
-/*  Inner-page hero band (BookingHero style)                            */
-/* ════════════════════════════════════════════════════════════════════ */
-function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTranslations> }) {
+function SubpageHero({ isAr, t }: { isAr: boolean; t: any }) {
   const meta = [
     { v: '400+', k: t('metaCars') },
     { v: '2022', k: t('metaEst') },
@@ -187,7 +174,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
 
   return (
     <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
-      {/* faint cinematic plate behind the band */}
       <div aria-hidden className="absolute inset-0 -z-20">
         <Image
           src={BOOKING_IMAGE}
@@ -198,32 +184,20 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }}
         />
       </div>
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/60 via-obsidian/30 to-obsidian"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-      >
+      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/60 via-obsidian/30 to-obsidian" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         {particles.map((p) => (
           <motion.span
             key={p.id}
             className="absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
             style={{ left: `${p.left}%`, top: `${p.top}%` }}
             animate={{ opacity: [0, 0.8, 0], y: [10, -50, -100] }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              ease: 'easeOut',
-              delay: p.delay,
-            }}
+            transition={{ duration: p.duration, repeat: Infinity, ease: 'easeOut', delay: p.delay }}
           />
         ))}
       </div>
 
       <div className="container">
-        {/* breadcrumb */}
         <motion.nav
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -237,7 +211,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           <span className="text-platinum">{t('navWorks')}</span>
         </motion.nav>
 
-        {/* eyebrow — BookingHero style */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -249,7 +222,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           <span className="h-px w-10 bg-gradient-to-l from-transparent to-platinum/60" />
         </motion.div>
 
-        {/* title — line reveal */}
         <h1 className="font-display text-[clamp(2.8rem,8vw,6.5rem)] font-light leading-[0.95] tracking-tight">
           <span className="block overflow-hidden">
             <motion.span
@@ -263,7 +235,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           </span>
         </h1>
 
-        {/* lead */}
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -273,7 +244,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           {t('subtitle')}
         </motion.p>
 
-        {/* meta row */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -281,29 +251,20 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
           className="mt-10 flex items-center justify-center gap-6 md:gap-14"
         >
           {meta.map((m, i) => (
-            <div key={m.k} className="flex items-center gap-6 md:gap-14">
+            <div key={m.k || i} className="flex items-center gap-6 md:gap-14">
               {i > 0 && (
-                <span
-                  aria-hidden
-                  className="h-9 w-px bg-gradient-to-b from-transparent via-platinum/30 to-transparent"
-                />
+                <span aria-hidden className="h-9 w-px bg-gradient-to-b from-transparent via-platinum/30 to-transparent" />
               )}
               <div className="text-center">
-                <div
-                  dir="ltr"
-                  className="font-display text-[clamp(1.6rem,3vw,2.4rem)] font-light leading-none text-ivory tabular-nums"
-                >
+                <div dir="ltr" className="font-display text-[clamp(1.6rem,3vw,2.4rem)] font-light leading-none text-ivory tabular-nums">
                   {m.v}
                 </div>
-                <div className="mt-2 text-[0.55rem] uppercase tracking-[0.26em] text-steel">
-                  {m.k}
-                </div>
+                <div className="mt-2 text-[0.55rem] uppercase tracking-[0.26em] text-steel">{m.k}</div>
               </div>
             </div>
           ))}
         </motion.div>
 
-        {/* drawn baseline */}
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
@@ -315,8 +276,6 @@ function SubpageHero({ isAr, t }: { isAr: boolean; t: ReturnType<typeof useTrans
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════ */
-/*  Gallery card                                                          */
 /* ════════════════════════════════════════════════════════════════════ */
 function GalleryCard({
   project,
@@ -359,16 +318,10 @@ function GalleryCard({
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover:opacity-100"
-        style={{
-          background:
-            'radial-gradient(360px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.10), transparent 60%)',
-        }}
+        style={{ background: 'radial-gradient(360px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.10), transparent 60%)' }}
       />
 
-      <div
-        aria-hidden
-        className="absolute top-5 end-5 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] font-display text-lg text-ivory ring-1 ring-white/15 backdrop-blur-md transition-all duration-500 group-hover:bg-ivory group-hover:text-obsidian group-hover:ring-white/40"
-      >
+      <div aria-hidden className="absolute top-5 end-5 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] font-display text-lg text-ivory ring-1 ring-white/15 backdrop-blur-md transition-all duration-500 group-hover:bg-ivory group-hover:text-obsidian group-hover:ring-white/40">
         {pad2(project.id)}
       </div>
       <span className="absolute top-6 start-6 z-10 text-[0.58rem] tracking-[0.22em] text-platinum/70 tabular-nums">
@@ -387,10 +340,7 @@ function GalleryCard({
           <span className="block h-px w-8 bg-platinum/60 transition-all duration-700 group-hover:w-16 group-hover:bg-ivory" />
           <span className="inline-flex items-center gap-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.26em] text-ivory">
             {openLabel}
-            <ArrowUpRight
-              className="reversible-icon h-3 w-3 transition-transform duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-              strokeWidth={2}
-            />
+            <ArrowUpRight className="reversible-icon h-3 w-3 transition-transform duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={2} />
           </span>
         </div>
       </div>
@@ -398,17 +348,12 @@ function GalleryCard({
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 transition-opacity duration-700 group-hover:opacity-100"
-        style={{
-          boxShadow:
-            'inset 0 0 90px rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.10)',
-        }}
+        style={{ boxShadow: 'inset 0 0 90px rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.10)' }}
       />
     </motion.button>
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════ */
-/*  Project dossier modal                                                 */
 /* ════════════════════════════════════════════════════════════════════ */
 function ProjectModal({
   project,
@@ -418,7 +363,7 @@ function ProjectModal({
 }: {
   project: Project | null;
   isAr: boolean;
-  t: ReturnType<typeof useTranslations>;
+  t: any;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -435,9 +380,8 @@ function ProjectModal({
     };
   }, [project, onClose]);
 
-  const specs: [string, string][] =
-    project?.specs?.[isAr ? 'ar' : 'en'] ?? (t.raw('mSpecs') as [string, string][]);
-  const steps = t.raw('mSteps') as [string, string][];
+  const specs: [string, string][] = (t.raw('mSpecs') as [string, string][]) ?? [];
+  const steps = (t.raw('mSteps') as [string, string][]) ?? [];
 
   return (
     <AnimatePresence>
@@ -464,16 +408,11 @@ function ProjectModal({
             exit={{ opacity: 0, y: 30, scale: 0.98 }}
             transition={{ duration: 0.55, ease: EASE }}
           >
-            {/* STICKY top bar — close always visible */}
             <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/[0.06] bg-gradient-to-b from-[rgba(10,11,12,0.95)] via-[rgba(10,11,12,0.7)] to-transparent px-5 py-4 backdrop-blur-md md:px-10">
               <div className="flex min-w-0 items-center gap-3.5">
-                <span className="font-display text-base text-platinum tabular-nums">
-                  {pad2(project.id)}
-                </span>
+                <span className="font-display text-base text-platinum tabular-nums">{pad2(project.id)}</span>
                 <span className="h-px w-8 bg-platinum/40" />
-                <span className="truncate font-display text-base uppercase tracking-wide text-ivory">
-                  {project.model}
-                </span>
+                <span className="truncate font-display text-base uppercase tracking-wide text-ivory">{project.model}</span>
               </div>
               <button
                 onClick={onClose}
@@ -485,14 +424,10 @@ function ProjectModal({
               </button>
             </div>
 
-            {/* scrollable body */}
             <div className="overflow-y-auto">
-              {/* head */}
               <div className="px-6 pt-8 text-center md:px-10 md:pt-12">
                 <div className="mb-4 flex items-center justify-center gap-4">
-                  <span className="font-display text-lg text-platinum tabular-nums">
-                    {pad2(project.id)}
-                  </span>
+                  <span className="font-display text-lg text-platinum tabular-nums">{pad2(project.id)}</span>
                   <span className="h-px w-12 bg-platinum/50" />
                   <span className="text-[0.56rem] uppercase tracking-[0.3em] text-steel">
                     {t('mChapter')} · {project.year}
@@ -507,23 +442,11 @@ function ProjectModal({
                 </span>
               </div>
 
-              {/* SEPARATE before / after */}
               <div className="mx-6 mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 md:mx-10 md:gap-4">
-                <BAFigure
-                  src={project.before}
-                  variant="before"
-                  label={t('mBefore')}
-                  caption={t('mBeforeCap')}
-                />
-                <BAFigure
-                  src={project.image}
-                  variant="after"
-                  label={t('mAfter')}
-                  caption={t('mAfterCap')}
-                />
+                <BAFigure src={project.before} variant="before" label={t('mBefore')} caption={t('mBeforeCap')} />
+                <BAFigure src={project.image} variant="after" label={t('mAfter')} caption={t('mAfterCap')} />
               </div>
 
-              {/* body */}
               <div className="px-6 pb-12 pt-8 md:px-10">
                 <p className="mx-auto max-w-[64ch] text-center text-base leading-[1.9] text-platinum/84 md:text-lg">
                   {t('mLead')}
@@ -532,13 +455,8 @@ function ProjectModal({
                 <ModalSectionHeading>{t('mSpecsH')}</ModalSectionHeading>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {specs.map(([k, v]) => (
-                    <div
-                      key={k}
-                      className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]"
-                    >
-                      <small className="mb-2 block text-[0.54rem] uppercase tracking-[0.22em] text-steel">
-                        {k}
-                      </small>
+                    <div key={k} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]">
+                      <small className="mb-2 block text-[0.54rem] uppercase tracking-[0.22em] text-steel">{k}</small>
                       <b className="font-display text-2xl font-normal text-ivory">{v}</b>
                     </div>
                   ))}
@@ -547,13 +465,8 @@ function ProjectModal({
                 <ModalSectionHeading>{t('mWorkH')}</ModalSectionHeading>
                 <div>
                   {steps.map(([title, desc], i) => (
-                    <div
-                      key={title}
-                      className="flex gap-4 border-b border-white/[0.07] py-4"
-                    >
-                      <span className="min-w-[2.2rem] font-display text-lg text-steel tabular-nums">
-                        {pad2(i + 1)}
-                      </span>
+                    <div key={title} className="flex gap-4 border-b border-white/[0.07] py-4">
+                      <span className="min-w-[2.2rem] font-display text-lg text-steel tabular-nums">{pad2(i + 1)}</span>
                       <div>
                         <div className="mb-1 text-base text-ivory">{title}</div>
                         <div className="text-sm leading-[1.75] text-platinum/60">{desc}</div>
@@ -589,10 +502,7 @@ function BAFigure({
 }) {
   const isBefore = variant === 'before';
   return (
-    <figure
-      data-cursor="hover"
-      className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-obsidian"
-    >
+    <figure data-cursor="hover" className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-obsidian">
       <Image
         src={src}
         alt={label}
@@ -600,26 +510,20 @@ function BAFigure({
         sizes="(max-width: 640px) 100vw, 50vw"
         className={[
           'object-cover transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105',
-          isBefore
-            ? 'brightness-[0.72] grayscale-[0.7] contrast-[1.05]'
-            : 'brightness-100 grayscale-[0.1]',
+          isBefore ? 'brightness-[0.72] grayscale-[0.7] contrast-[1.05]' : 'brightness-100 grayscale-[0.1]',
         ].join(' ')}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian/60 to-transparent" />
       <span
         className={[
           'absolute top-4 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[0.55rem] uppercase tracking-[0.26em] backdrop-blur-md start-4',
-          isBefore
-            ? 'border border-white/20 bg-black/55 text-platinum/85'
-            : 'border border-white bg-white/90 text-obsidian',
+          isBefore ? 'border border-white/20 bg-black/55 text-platinum/85' : 'border border-white bg-white/90 text-obsidian',
         ].join(' ')}
       >
         <span className="h-1 w-1 rounded-full bg-current" />
         {label}
       </span>
-      <figcaption className="absolute bottom-4 start-4 text-[0.6rem] text-ivory/85">
-        {caption}
-      </figcaption>
+      <figcaption className="absolute bottom-4 start-4 text-[0.6rem] text-ivory/85">{caption}</figcaption>
     </figure>
   );
 }
@@ -627,18 +531,14 @@ function BAFigure({
 function ModalSectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="my-6 mt-10 flex items-center gap-4">
-      <span className="whitespace-nowrap text-[0.62rem] uppercase tracking-[0.3em] text-platinum">
-        {children}
-      </span>
+      <span className="whitespace-nowrap text-[0.62rem] uppercase tracking-[0.3em] text-platinum">{children}</span>
       <span className="h-px flex-1 bg-gradient-to-r from-platinum/30 to-transparent" />
     </div>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════════ */
-/*  CTA                                                                   */
-/* ════════════════════════════════════════════════════════════════════ */
-function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
+function ArchiveCta({ t }: { t: any }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const bgY = useTransform(scrollYProgress, [0, 1], ['-10%', '10%']);
@@ -652,11 +552,7 @@ function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
   }));
 
   return (
-    <section
-      ref={ref}
-      id="cta"
-      className="relative flex min-h-[82svh] items-center justify-center overflow-hidden text-center isolate"
-    >
+    <section ref={ref} id="cta" className="relative flex min-h-[82svh] items-center justify-center overflow-hidden text-center isolate">
       <motion.div className="absolute inset-0 -z-30" style={{ y: bgY }}>
         <Image
           src={CTA_IMAGE}
@@ -669,10 +565,7 @@ function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
       </motion.div>
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.7)_80%)]" />
       <div className="absolute inset-0 -z-20 bg-gradient-to-b from-obsidian via-transparent to-obsidian" />
-      <span
-        aria-hidden
-        className="absolute left-1/2 top-1/2 -z-10 h-[42rem] w-[42rem] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.06] blur-[140px]"
-      />
+      <span aria-hidden className="absolute left-1/2 top-1/2 -z-10 h-[42rem] w-[42rem] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.06] blur-[140px]" />
 
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         {particles.map((p) => (
@@ -681,12 +574,7 @@ function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
             className="absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
             style={{ left: `${p.left}%`, top: `${p.top}%` }}
             animate={{ opacity: [0, 0.8, 0], y: [20, -60, -120] }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              ease: 'easeOut',
-              delay: p.delay,
-            }}
+            transition={{ duration: p.duration, repeat: Infinity, ease: 'easeOut', delay: p.delay }}
           />
         ))}
       </div>
@@ -711,9 +599,7 @@ function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
           className="font-display text-hero-sm font-light leading-[0.98] tracking-tight md:text-hero"
         >
           {t('ctaLine')}
-          <span className="mt-2 block font-editorial text-[0.58em] italic text-platinum">
-            {t('ctaSub')}
-          </span>
+          <span className="mt-2 block font-editorial text-[0.58em] italic text-platinum">{t('ctaSub')}</span>
         </motion.h2>
 
         <div className="mt-11 flex flex-wrap items-center justify-center gap-5">
@@ -730,8 +616,6 @@ function ArchiveCta({ t }: { t: ReturnType<typeof useTranslations> }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════ */
-/*  Shared                                                                */
-/* ════════════════════════════════════════════════════════════════════ */
 function PlatinumDivider() {
   return (
     <div className="relative mx-auto h-px max-w-[1440px] bg-gradient-to-r from-transparent via-platinum/20 to-transparent">
@@ -743,32 +627,16 @@ function PlatinumDivider() {
 function PrimaryPill({ children }: { children: React.ReactNode }) {
   return (
     <span className="group/btn relative inline-block">
-      <span
-        aria-hidden
-        className="absolute -inset-3 rounded-full bg-gradient-to-r from-platinum/50 via-ivory/40 to-platinum/50 opacity-0 blur-2xl transition-opacity duration-700 group-hover/btn:opacity-100"
-      />
-      <span
-        aria-hidden
-        className="absolute -inset-px rounded-full bg-gradient-to-br from-ivory/80 via-platinum/40 to-ivory/55"
-      />
+      <span aria-hidden className="absolute -inset-3 rounded-full bg-gradient-to-r from-platinum/50 via-ivory/40 to-platinum/50 opacity-0 blur-2xl transition-opacity duration-700 group-hover/btn:opacity-100" />
+      <span aria-hidden className="absolute -inset-px rounded-full bg-gradient-to-br from-ivory/80 via-platinum/40 to-ivory/55" />
       <span
         className="relative inline-flex items-center gap-2.5 rounded-full px-9 py-4 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-obsidian transition-transform duration-500 group-hover/btn:-translate-y-0.5"
-        style={{
-          background: 'linear-gradient(135deg,#fff 0%,#cbcdcd 50%,#fff 100%)',
-          boxShadow:
-            'inset 0 1px 0 rgba(255,255,255,0.9),0 18px 60px -15px rgba(203,205,205,0.6)',
-        }}
+        style={{ background: 'linear-gradient(135deg,#fff 0%,#cbcdcd 50%,#fff 100%)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9),0 18px 60px -15px rgba(203,205,205,0.6)' }}
       >
         {children}
-        <ArrowUpRight
-          className="reversible-icon h-4 w-4 transition-transform duration-500 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5"
-          strokeWidth={2.2}
-        />
+        <ArrowUpRight className="reversible-icon h-4 w-4 transition-transform duration-500 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" strokeWidth={2.2} />
       </span>
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden rounded-full"
-      >
+      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
         <span className="absolute -inset-y-2 -left-3/4 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-0 transition-all duration-700 group-hover/btn:left-[120%] group-hover/btn:opacity-100" />
       </span>
     </span>
@@ -779,10 +647,7 @@ function GhostPill({ children }: { children: React.ReactNode }) {
   return (
     <span className="group/btn relative inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.04] px-9 py-4 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-ivory backdrop-blur-md transition-all duration-500 hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.08]">
       {children}
-      <ArrowUpRight
-        className="reversible-icon h-4 w-4 transition-transform duration-500 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5"
-        strokeWidth={1.8}
-      />
+      <ArrowUpRight className="reversible-icon h-4 w-4 transition-transform duration-500 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" strokeWidth={1.8} />
     </span>
   );
 }

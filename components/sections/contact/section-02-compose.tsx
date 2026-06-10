@@ -2,40 +2,18 @@
 
 /**
  * Section 02 — Compose (The Letter)
- *
- * The signature creative move of this page: instead of a stacked form
- * with labels, the visitor *writes a letter*. The form is rendered as
- * a single flowing passage where inputs are inline with prose:
- *
- *   "My name is [_____], and I would like to [_____] regarding my [_____].
- *    You can reach me at [_____] or on [_____]."
- *
- * Each input is an underlined word that ghosts a hint when empty and
- * promotes to ivory when filled. The composition reads like an actual
- * letter on paper — and converts measurably better (Mad Libs forms
- * raise completion rates 25–40% per Wroblewski/Vast.com testing).
- *
- * Visual treatment:
- *   - A vellum-style paper card with deckle-edge corner ornaments
- *   - A "From / Date" header line at the top
- *   - The letter body in editorial italic at large size
- *   - The "Sincerely," sign-off above the seal & send button
- *   - On submit, the entire card folds up into an envelope (CSS rotate)
- *     and a wax-seal stamp appears
- *
- * Inputs auto-resize as you type. The intent field is a custom
- * dropdown styled to look like part of the sentence (not a select).
+ * الفورم الآن يرسل فعليًا إلى /api/contact ويخزّن الرسالة في قاعدة البيانات.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { ChevronDown, Loader2 } from 'lucide-react';
 
 import { ChapterSlate, AtelierMark } from '@/components/sections/about/chapter-slate';
 
 interface FormState {
   name: string;
-  intent: string; // index 0..3 stored as string (or '' for empty)
+  intent: string;
   vehicle: string;
   email: string;
   phone: string;
@@ -55,11 +33,13 @@ const INITIAL: FormState = {
 
 export function Compose() {
   const t = useTranslations('contact.compose');
+  const locale = useLocale();
   const ref = useRef<HTMLElement>(null);
   const [data, setData] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const intentOptions = t.raw('intentOptions') as string[];
 
@@ -78,17 +58,32 @@ export function Compose() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setServerError(null);
     if (!validate()) return;
     setSubmitting(true);
-    // TODO: replace with your real submission endpoint.
-    await new Promise((r) => setTimeout(r, 1800));
-    setSubmitting(false);
-    setSubmitted(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, locale }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json?.error ?? 'failed');
+      }
+      setSubmitted(true);
+    } catch (err) {
+      console.error('contact submit failed:', err);
+      setServerError(t('errors.serverError'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const reset = () => {
     setData(INITIAL);
     setErrors({});
+    setServerError(null);
     setSubmitted(false);
   };
 
@@ -187,6 +182,7 @@ export function Compose() {
                   errors={errors}
                   intentOptions={intentOptions}
                   submitting={submitting}
+                  serverError={serverError}
                   t={t}
                 />
               </motion.form>
@@ -207,6 +203,7 @@ function LetterCard({
   errors,
   intentOptions,
   submitting,
+  serverError,
   t,
 }: {
   data: FormState;
@@ -214,6 +211,7 @@ function LetterCard({
   errors: Partial<Record<keyof FormState, string>>;
   intentOptions: string[];
   submitting: boolean;
+  serverError: string | null;
   t: ReturnType<typeof useTranslations>;
 }) {
   const placeholders = {
@@ -262,7 +260,7 @@ function LetterCard({
 
       {/* THE SENTENCE — the magic happens here */}
       <div className="relative font-editorial text-[clamp(1.1rem,2vw,1.6rem)] leading-[1.85] text-platinum/80">
-        {/* Line 1: My name is [name], and I would like to [intent] regarding my [vehicle]. */}
+        {/* Line 1 */}
         <p className="md:text-balance">
           <span className="italic">{t('sentence1_a')}</span>{' '}
           <InlineInput
@@ -367,13 +365,22 @@ function LetterCard({
           />
         </div>
       </div>
+
+      {/* Server-side error */}
+      {serverError && (
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <span className="block h-px w-6 bg-rose-300/60" />
+          <span className="text-[0.7rem] uppercase tracking-[0.22em] text-rose-300/80">
+            {serverError}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════
-   InlineInput — auto-resizing underline input that lives
-   inside a sentence
+   InlineInput
    ═══════════════════════════════════════════════════════════ */
 function InlineInput({
   value,
@@ -392,7 +399,6 @@ function InlineInput({
   type?: string;
   dir?: 'ltr' | 'rtl';
 }) {
-  // Auto-size based on current value
   const measureRef = useRef<HTMLSpanElement>(null);
   const [w, setW] = useState<number | null>(null);
 
@@ -406,7 +412,6 @@ function InlineInput({
 
   return (
     <span className="relative inline-block align-baseline">
-      {/* Hidden span to measure text width */}
       <span
         ref={measureRef}
         className="invisible whitespace-pre px-2 font-editorial text-[clamp(1.1rem,2vw,1.6rem)]"
@@ -432,7 +437,7 @@ function InlineInput({
 }
 
 /* ═══════════════════════════════════════════════════════════
-   InlineSelect — sentence-inline custom dropdown
+   InlineSelect
    ═══════════════════════════════════════════════════════════ */
 function InlineSelect({
   value,
@@ -450,7 +455,6 @@ function InlineSelect({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
@@ -590,7 +594,7 @@ function ConsentCheckbox({
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SealSendButton — chrome capsule with wax-seal feel
+   SealSendButton
    ═══════════════════════════════════════════════════════════ */
 function SealSendButton({
   submitting,
@@ -638,7 +642,7 @@ function WaxSealIcon() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ErrorBanner — surfaces the first sentence error gently
+   ErrorBanner
    ═══════════════════════════════════════════════════════════ */
 function ErrorBanner({
   errors,
@@ -669,7 +673,7 @@ function ErrorBanner({
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CornerOrnaments — paper deckle marks
+   CornerOrnaments
    ═══════════════════════════════════════════════════════════ */
 function CornerOrnaments() {
   return (
@@ -683,7 +687,7 @@ function CornerOrnaments() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TodayDate — formatted date (Jeddah)
+   TodayDate
    ═══════════════════════════════════════════════════════════ */
 function TodayDate() {
   const [d, setD] = useState('');
@@ -700,7 +704,7 @@ function TodayDate() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SealedSuccess — letter folds into envelope + wax seal
+   SealedSuccess
    ═══════════════════════════════════════════════════════════ */
 function SealedSuccess({
   t,
@@ -729,9 +733,7 @@ function SealedSuccess({
           className="absolute -inset-6 rounded-full bg-platinum/40 blur-2xl"
         />
         <span className="relative grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-platinum via-ivory to-platinum/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_25px_60px_-15px_rgba(203,205,205,0.7)]">
-          {/* Inner emboss ring */}
           <span className="absolute inset-2 rounded-full ring-1 ring-obsidian/15" />
-          {/* ABH monogram */}
           <span className="relative font-display text-2xl tracking-[0.05em] text-obsidian">
             ABH
           </span>

@@ -1,31 +1,24 @@
 'use client';
 
 /**
- * AuthProvider — client membership state for ABH Auto.
- * Path: components/shared/auth-provider.tsx  (exports `AuthProvider`, `useAuth`)
+ * AuthProvider — حالة العضوية، مربوطة بـ APIs الحقيقية (جلسات + bcrypt).
+ * نفس واجهة useAuth() محفوظة بالكامل — لا تغيير في المكوّنات المستهلكة.
  *
- * Holds the signed-in member and everything attached to them:
- *   • profile  — name / email / phone / city (booking pre-fills from this)
- *   • garage   — the member's vehicles (booking lets them pick one)
- *   • bookings — reservation history (upcoming / active / completed)
- *
- * Front-end-only reference implementation backed by localStorage so the whole
- * experience works without a server. When the API is ready, swap the bodies of
- * signIn / register (and the vehicle/booking mutators) for real calls — the
- * `useAuth()` surface stays identical, so no consumer changes.
+ * البروفايل والعربيات تُحفظ الآن في قاعدة البيانات.
+ * الحجوزات (addBooking) ستُربط مع صفحة الحجز.
  */
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
   type ReactNode,
 } from 'react';
 
-import { BRANDS, type VehicleSize } from '@/lib/booking-data';
+import { type VehicleSize } from '@/lib/booking-data';
 
 export interface Vehicle {
   id: string;
-  brandId: string;   // matches BRANDS[].id in booking-data
+  brandId: string;
   model: string;
-  colorKey: string;  // matches COLORS[].key
+  colorKey: string;
   plate: string;
   year: string;
 }
@@ -33,18 +26,22 @@ export interface Vehicle {
 export type BookingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
 export interface BookingRecord {
-  id: string;              // reference, e.g. ABH-7K2P9
+  id: string;
+  dbId?: string; // internal UUID for API operations
   status: BookingStatus;
-  vehicleLabel: string;    // "Mercedes-Benz S-Class"
+  vehicleLabel: string;
   plate: string;
-  serviceSlugs: string[];  // translated in the view via booking.svc.*
-  branchKey: string;       // matches booking.branches.*
-  date: string;            // ISO (yyyy-mm-dd)
+  plateDigits?: string;   // ← جديد
+  plateLetters?: string;
+  serviceSlugs: string[];
+  serviceSnapshots?: Array<{ ar: string; en: string }>; // from booking_items.name_snapshot
+  branchKey: string;
+  date: string;
   time: string;
   total: number;
-  payment?: 'paid' | 'branch';  // 'branch' = settle on arrival (can still add services)
-  size?: VehicleSize;           // vehicle size, for pricing added services
-  stage?: number;          // 0..3 progress for `active`
+  payment?: 'paid' | 'branch';
+  size?: VehicleSize;
+  stage?: number;
   createdAt: string;
 }
 
@@ -70,240 +67,209 @@ interface AuthContextValue {
   updateVehicle: (id: string, patch: Partial<Vehicle>) => void;
   removeVehicle: (id: string) => void;
   addBooking: (b: Omit<BookingRecord, 'id' | 'createdAt' | 'status'> & { status?: BookingStatus }) => BookingRecord;
-  updateBooking: (id: string, patch: Partial<BookingRecord>) => void;
-  cancelBooking: (id: string) => void;
+  updateBooking: (id: string, patch: Partial<BookingRecord>) => Promise<void>;
+  cancelBooking: (id: string) => Promise<void>;
 }
-
-const SESSION_KEY = 'abh.member';
-const ACCOUNTS_KEY = 'abh.accounts';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/* ── helpers ── */
-function readJSON<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch { return fallback; }
-}
-function writeJSON(key: string, value: unknown) {
-  if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
-}
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const newId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const ref = () => `ABH-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-const dayISO = (offset: number) => {
-  const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
-};
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `id_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-/* Demo data so a fresh member sees a living garage + history. Replace with API
-   data when the backend lands. Uses real BRANDS so the booking picker resolves
-   names and the garage -> booking hand-off works end to end. */
-function seedGarage(): Vehicle[] {
-  const picks = (BRANDS ?? []).slice(0, 2);
-  if (picks.length === 0) return [];
-  return picks.map((b: any, i: number) => ({
-    id: newId(),
-    brandId: b.id,
-    model: b.models?.[0] ?? '',
-    colorKey: i === 0 ? 'black' : 'white',
-    plate: i === 0 ? 'RUH 4471' : 'JED 2208',
-    year: i === 0 ? '2024' : '2022',
-  }));
-}
-function labelOf(v: Vehicle | undefined): string {
-  if (!v) return '';
-  const b = (BRANDS ?? []).find((x: any) => x.id === v.brandId);
-  return `${b?.name ?? ''} ${v.model}`.trim();
-}
-function seedBookings(vehicles: Vehicle[]): BookingRecord[] {
-  const v0 = vehicles[0];
-  const v1 = vehicles[1] ?? vehicles[0];
-  return [
-    {
-      id: ref(), status: 'upcoming', vehicleLabel: labelOf(v0), plate: v0?.plate ?? '',
-      serviceSlugs: ['pkg_diamond'], branchKey: 'new_cairo', date: dayISO(6), time: '11:00',
-      total: 9200, payment: 'branch', size: 'large', createdAt: dayISO(-2),
-    },
-    {
-      id: ref(), status: 'active', vehicleLabel: labelOf(v1), plate: v1?.plate ?? '',
-      serviceSlugs: ['ppf_full', 'tint_ceramic'], branchKey: 'nasr_city', date: dayISO(0), time: '09:30',
-      total: 14600, payment: 'paid', size: 'large', stage: 1, createdAt: dayISO(-3),
-    },
-    {
-      id: ref(), status: 'completed', vehicleLabel: labelOf(v0), plate: v0?.plate ?? '',
-      serviceSlugs: ['add_detail', 'add_polish'], branchKey: 'alexandria', date: dayISO(-40), time: '13:00',
-      total: 1850, payment: 'paid', size: 'large', createdAt: dayISO(-44),
-    },
-  ];
-}
-
-/* Repair any persisted member that predates the garage/bookings fields (or a
-   partial object), so the dashboard never reads `undefined.filter`. Legacy
-   sessions (no vehicles AND no bookings keys at all) get the demo seed; an
-   intentionally-empty array is preserved. */
-function normalizeMember(m: any): Member {
-  const legacy = m.vehicles === undefined && m.bookings === undefined;
-  const vehicles: Vehicle[] = Array.isArray(m.vehicles) ? m.vehicles : (legacy ? seedGarage() : []);
-  const bookings: BookingRecord[] = Array.isArray(m.bookings) ? m.bookings : (legacy ? seedBookings(vehicles) : []);
+function buildMember(
+  u: any,
+  vehicles: Vehicle[] = [],
+  bookings: BookingRecord[] = [],
+): Member {
   return {
-    id: m.id ?? newId(),
-    name: m.name ?? 'Member',
-    email: m.email ?? '',
-    phone: m.phone ?? '',
-    city: m.city ?? '',
-    since: m.since ?? new Date().toISOString(),
+    id: u.id,
+    name: u.name ?? '',
+    email: u.email ?? '',
+    phone: u.phone ?? '',
+    city: u.city ?? u.city_code ?? '',
+    since: u.since ?? u.member_since ?? new Date().toISOString(),
     vehicles,
     bookings,
   };
 }
-
-interface StoredAccount extends Member { password: string; }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [member, setMember] = useState<Member | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const raw = readJSON<Member | null>(SESSION_KEY, null);
-    if (raw) {
-      const safe = normalizeMember(raw);
-      setMember(safe);
-      writeJSON(SESSION_KEY, safe); // persist the upgrade so it sticks
-    }
-    setHydrated(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const meRes = await fetch('/api/auth/me');
+        const meJson = await meRes.json();
+        if (cancelled) return;
+        if (meJson?.user) {
+          const acctRes = await fetch('/api/account');
+          const acct = await acctRes.json().catch(() => ({ vehicles: [], bookings: [] }));
+          if (cancelled) return;
+          setMember(buildMember(meJson.user, acct.vehicles ?? [], acct.bookings ?? []));
+        }
+      } catch {
+        /* لا جلسة */
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  const persist = useCallback((m: Member | null) => {
-    setMember(m);
-    if (m) {
-      writeJSON(SESSION_KEY, m);
-      const accounts = readJSON<StoredAccount[]>(ACCOUNTS_KEY, []);
-      const prev = accounts.find((a) => a.id === m.id);
-      writeJSON(ACCOUNTS_KEY, [
-        ...accounts.filter((a) => a.id !== m.id),
-        { ...m, password: prev?.password ?? '' },
-      ]);
-    } else if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(SESSION_KEY);
+  const loadAccount = useCallback(async (): Promise<{ vehicles: Vehicle[]; bookings: BookingRecord[] }> => {
+    try {
+      const res = await fetch('/api/account');
+      const json = await res.json();
+      return { vehicles: json.vehicles ?? [], bookings: json.bookings ?? [] };
+    } catch {
+      return { vehicles: [], bookings: [] };
     }
   }, []);
 
-  const register = useCallback<AuthContextValue['register']>(async (input) => {
-    await wait(900);
-    const accounts = readJSON<StoredAccount[]>(ACCOUNTS_KEY, []);
-    const garage = seedGarage();
-    const m: Member = {
-      id: newId(),
-      name: input.name.trim(),
-      email: input.email.trim().toLowerCase(),
-      phone: input.phone.trim(),
-      city: input.city,
-      since: new Date().toISOString(),
-      vehicles: garage,
-      bookings: seedBookings(garage),
-    };
-    writeJSON(ACCOUNTS_KEY, [
-      ...accounts.filter((a) => a.email !== m.email),
-      { ...m, password: input.password },
-    ]);
-    setMember(m);
-    writeJSON(SESSION_KEY, m);
-    return m;
-  }, []);
+  const refreshAccount = useCallback(async () => {
+    const acct = await loadAccount();
+    setMember((prev) => (prev ? { ...prev, vehicles: acct.vehicles, bookings: acct.bookings } : prev));
+  }, [loadAccount]);
 
   const signIn = useCallback<AuthContextValue['signIn']>(async (email, password) => {
-    await wait(900);
-    const accounts = readJSON<StoredAccount[]>(ACCOUNTS_KEY, []);
-    const found = accounts.find((a) => a.email === email.trim().toLowerCase());
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json?.error ?? 'invalid-credentials');
 
-    if (found) {
-      if (found.password && found.password !== password) throw new Error('invalid-credentials');
-      const { password: _pw, ...rest } = found;
-      const m: Member = { ...rest, vehicles: rest.vehicles ?? [], bookings: rest.bookings ?? [] };
-      setMember(m); writeJSON(SESSION_KEY, m);
-      return m;
-    }
-
-    const local = (email.trim().split('@')[0] || 'Member')
-      .replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
-    const garage = seedGarage();
-    const m: Member = {
-      id: newId(), name: local || 'Member', email: email.trim().toLowerCase(),
-      phone: '', city: '', since: new Date().toISOString(),
-      vehicles: garage, bookings: seedBookings(garage),
-    };
-    setMember(m); writeJSON(SESSION_KEY, m);
+    const meRes = await fetch('/api/auth/me');
+    const meJson = await meRes.json();
+    const acct = await loadAccount();
+    const m = buildMember(meJson.user ?? json.user, acct.vehicles, acct.bookings);
+    setMember(m);
     return m;
+  }, [loadAccount]);
+
+  const register = useCallback<AuthContextValue['register']>(async (input) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json?.error ?? 'register-failed');
+
+    const meRes = await fetch('/api/auth/me');
+    const meJson = await meRes.json();
+    const acct = await loadAccount();
+    const m = buildMember(meJson.user ?? json.user, acct.vehicles, acct.bookings);
+    setMember(m);
+    return m;
+  }, [loadAccount]);
+
+  const signOut = useCallback(() => {
+    setMember(null);
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   }, []);
 
-  const signOut = useCallback(() => persist(null), [persist]);
-
   const updateProfile = useCallback<AuthContextValue['updateProfile']>((patch) => {
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, ...patch };
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    setMember((prev) => (prev ? { ...prev, ...patch } : prev));
+    const { email, ...savable } = patch as any;
+    fetch('/api/account/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(savable),
+    }).catch((e) => console.error('updateProfile failed:', e));
+  }, []);
 
   const addVehicle = useCallback<AuthContextValue['addVehicle']>((v) => {
-    const vehicle: Vehicle = { ...v, id: newId() };
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, vehicles: [...prev.vehicles, vehicle] };
-      persist(next);
-      return next;
-    });
-    return vehicle;
-  }, [persist]);
+    const optimistic: Vehicle = { ...v, id: newId() };
+    setMember((prev) => (prev ? { ...prev, vehicles: [...prev.vehicles, optimistic] } : prev));
+    (async () => {
+      try {
+        const res = await fetch('/api/account/vehicles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(v),
+        });
+        if (res.ok) await refreshAccount();
+      } catch (e) {
+        console.error('addVehicle failed:', e);
+      }
+    })();
+    return optimistic;
+  }, [refreshAccount]);
 
   const updateVehicle = useCallback<AuthContextValue['updateVehicle']>((id, patch) => {
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, vehicles: prev.vehicles.map((x) => (x.id === id ? { ...x, ...patch } : x)) };
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    setMember((prev) =>
+      prev ? { ...prev, vehicles: prev.vehicles.map((x) => (x.id === id ? { ...x, ...patch } : x)) } : prev);
+    (async () => {
+      try {
+        const current = member?.vehicles.find((x) => x.id === id);
+        const merged = { ...current, ...patch, id };
+        const res = await fetch('/api/account/vehicles', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(merged),
+        });
+        if (res.ok) await refreshAccount();
+      } catch (e) {
+        console.error('updateVehicle failed:', e);
+      }
+    })();
+  }, [member, refreshAccount]);
 
   const removeVehicle = useCallback<AuthContextValue['removeVehicle']>((id) => {
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, vehicles: prev.vehicles.filter((x) => x.id !== id) };
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    setMember((prev) =>
+      prev ? { ...prev, vehicles: prev.vehicles.filter((x) => x.id !== id) } : prev);
+    fetch(`/api/account/vehicles?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then((res) => { if (res.ok) refreshAccount(); })
+      .catch((e) => console.error('removeVehicle failed:', e));
+  }, [refreshAccount]);
 
   const addBooking = useCallback<AuthContextValue['addBooking']>((b) => {
-    const record: BookingRecord = { ...b, id: ref(), status: b.status ?? 'upcoming', createdAt: new Date().toISOString() };
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, bookings: [record, ...prev.bookings] };
-      persist(next);
-      return next;
-    });
+    const record: BookingRecord = { ...b, id: `ABH-${Math.random().toString(36).slice(2, 7).toUpperCase()}`, status: b.status ?? 'upcoming', createdAt: new Date().toISOString() };
+    setMember((prev) => (prev ? { ...prev, bookings: [record, ...prev.bookings] } : prev));
     return record;
-  }, [persist]);
+  }, []);
 
-  const updateBooking = useCallback<AuthContextValue['updateBooking']>((id, patch) => {
-    setMember((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) };
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+  const updateBooking = useCallback<AuthContextValue['updateBooking']>(async (id, patch) => {
+    // optimistic update
+    setMember((prev) =>
+      prev ? { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) } : prev);
+    try {
+      const res = await fetch('/api/account/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      if (!res.ok) {
+        // revert optimistic update on failure
+        await refreshAccount();
+      }
+    } catch (e) {
+      console.error('updateBooking failed:', e);
+      await refreshAccount();
+    }
+  }, [refreshAccount]);
 
-  const cancelBooking = useCallback<AuthContextValue['cancelBooking']>((id) => {
-    updateBooking(id, { status: 'cancelled' });
-  }, [updateBooking]);
+  const cancelBooking = useCallback<AuthContextValue['cancelBooking']>(async (id) => {
+    // optimistic update
+    setMember((prev) =>
+      prev ? { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, status: 'cancelled' } : b)) } : prev);
+    try {
+      const res = await fetch(`/api/account/bookings?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        await refreshAccount();
+      }
+    } catch (e) {
+      console.error('cancelBooking failed:', e);
+      await refreshAccount();
+    }
+  }, [refreshAccount]);
 
   const value = useMemo<AuthContextValue>(() => ({
     member, hydrated, signIn, register, signOut, updateProfile,

@@ -2,39 +2,37 @@
 
 /**
  * WhySection — 5-card image grid: "Why ABH Auto".
- *
- * Layout mirrors the reference (manus-style):
- *  - Five tall image cards in a responsive grid (1 / 2 / 5 columns).
- *  - Bottom-anchored title + description over a top-to-bottom black fade.
- *  - Glass-numbered chip in the top-end corner.
- *  - Slow zoom + overlay shift on hover.
- *
- * Adapted to the ABH luxury palette (platinum / ivory / steel) instead
- * of plain greys. Translation-driven, RTL-aware.
+ * العناصر والعناوين والصور تأتي من قاعدة البيانات عبر props.
  */
+import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { useTranslations } from 'next-intl';
 
 import { SectionHeader } from '@/components/ui/section-header';
-import { whyImages } from '@/lib/site-config';
 
 interface WhyItem {
   title: string;
   copy: string;
 }
 
-export function WhySection() {
-  const t = useTranslations('why');
-  const items = t.raw('items') as WhyItem[];
+interface WhyText {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  items: WhyItem[];
+}
+
+export function WhySection({ txt, images }: { txt: WhyText; images: string[] }) {
+  const items = txt.items ?? [];
+  const imgs = images.length ? images : ['/images/why-1.webp'];
 
   return (
     <section className="section relative overflow-hidden" id="about">
       <div className="container">
         {/* Centered header */}
         <SectionHeader
-          eyebrow={t('eyebrow')}
-          title={t('title')}
-          subtitle={t('subtitle')}
+          eyebrow={txt.eyebrow}
+          title={txt.title}
+          subtitle={txt.subtitle}
           align="center"
           className="mx-auto max-w-3xl"
         />
@@ -55,10 +53,15 @@ export function WhySection() {
               className="group relative h-[420px] cursor-pointer overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian"
               data-cursor="hover"
             >
-              {/* ─── Background image ────────────────────────────── */}
-              <div
-                className="absolute inset-0 bg-cover bg-center transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
-                style={{ backgroundImage: `url('${whyImages[idx % whyImages.length]}')` }}
+              {/* ─── Background image (optimized via next/image) ─────── */}
+              <Image
+                src={imgs[idx % imgs.length]}
+                alt={reason.title}
+                fill
+                loading="lazy"
+                quality={70}
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 20vw"
+                className="object-cover transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
               />
 
               {/* ─── Cinematic overlays ──────────────────────────── */}

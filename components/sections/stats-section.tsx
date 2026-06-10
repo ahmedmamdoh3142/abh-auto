@@ -2,26 +2,15 @@
 
 /**
  * StatsSection — dazzling, but quiet.
- * Path: components/sections/stats-section.tsx  (export `StatsSection`)
- *
- * The wow comes from execution, not clutter:
- *  - OVERSIZED Italiana numerals with the metallic chrome sheen.
- *  - Defensive requestAnimationFrame ease-out count-up (no library, cancels
- *    on unmount, fires once on first view).
- *  - A baseline rule that draws itself in sync with the count.
- *  - Hairline vertical dividers between columns on desktop (gradient,
- *    fading top & bottom). No boxes, no badges — just air and figures.
- *
- * Uses i18n key: stats.eyebrow
+ * البيانات تأتي من قاعدة البيانات عبر props (مش من site-config أو next-intl).
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { useTranslations } from 'next-intl';
-
-import { stats } from '@/lib/site-config';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const COUNT_MS = 2000;
+
+type StatRow = { code: string; value: number | string; suffix: string; label: string };
 
 /** Defensive ease-out (cubic) count-up driven by requestAnimationFrame. */
 function useCountUp(target: number, run: boolean, duration = COUNT_MS) {
@@ -79,8 +68,8 @@ function Stat({
 
       <span
         dir="ltr"
-        className="block font-display leading-[0.85] text-metallic tabular-nums"
-        style={{ fontSize: 'clamp(3.2rem, 9vw, 6.75rem)' }}
+        className="block font-display leading-[1.1] text-metallic tabular-nums"
+        style={{ fontSize: 'clamp(2.2rem, 6vw, 4.5rem)' }}
       >
         {current.toLocaleString('en-US')}
         {suffix}
@@ -101,8 +90,7 @@ function Stat({
   );
 }
 
-export function StatsSection() {
-  const t = useTranslations('stats');
+export function StatsSection({ stats, eyebrow }: { stats: StatRow[]; eyebrow: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: '-80px' });
 
@@ -113,7 +101,7 @@ export function StatsSection() {
         <div className="mb-16 flex items-center justify-center gap-4 md:mb-24">
           <span className="block h-px w-12 bg-gradient-to-r from-transparent to-platinum/50" />
           <span className="text-[0.6rem] uppercase tracking-[0.5em] text-platinum/85">
-            {t('eyebrow')}
+            {eyebrow}
           </span>
           <span className="block h-px w-12 bg-gradient-to-l from-transparent to-platinum/50" />
         </div>
@@ -121,10 +109,10 @@ export function StatsSection() {
         <div ref={ref} className="grid grid-cols-2 gap-y-16 lg:grid-cols-4 lg:gap-y-0">
           {stats.map((stat, i) => (
             <Stat
-              key={stat.key}
-              value={stat.value}
+              key={stat.code}
+              value={Number(stat.value)}
               suffix={stat.suffix}
-              label={t(stat.key)}
+              label={stat.label}
               index={i}
               run={inView}
             />

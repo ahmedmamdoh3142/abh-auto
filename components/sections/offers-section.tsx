@@ -2,38 +2,47 @@
 
 /**
  * OffersSection — Editorial luxury offer cards (homepage).
- *
- * The discount is the hero: bold, vertical, on a dark-red accent rail along
- * the card's end edge. Below the grid, a chrome "View all offers" capsule
- * opens a large overlay that renders the FULL collection in the exact same
- * card style — just more of them.
+ * البيانات (العروض + النصوص + الصور) تأتي من قاعدة البيانات عبر props.
  */
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useTranslations } from 'next-intl';
 import { ArrowUpRight, Clock, X } from 'lucide-react';
 
 import { SectionHeader } from '@/components/ui/section-header';
 import { useSpotlight } from '@/hooks/use-mouse';
-import { offerImages } from '@/lib/site-config';
 
-interface OfferItem {
-  tag: string;
+interface OfferRow {
+  slug: string;
+  tag: string | null;
   title: string;
   copy: string;
-  discount: string;
+  discount_label: string;
+  image: string;
+}
+
+// نصوص قسم العروض (من content_blocks: offers)
+interface OffersText {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  save: string;
+  off: string;
+  campaign: string;
+  reserve: string;
+  viewAll: string;
+  allTitle: string;
+  mClose: string;
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-function OfferCard({ item, image, index }: { item: OfferItem; image: string; index: number }) {
+function OfferCard({ item, index, txt }: { item: OfferRow; index: number; txt: OffersText }) {
   const ref = useRef<HTMLDivElement>(null);
   useSpotlight(ref);
-  const t = useTranslations('offers');
 
-  const discountMatch = item.discount.match(/(\d+)/);
+  const discountMatch = item.discount_label.match(/(\d+)/);
   const discountNum = discountMatch ? discountMatch[1] : null;
 
   return (
@@ -46,7 +55,7 @@ function OfferCard({ item, image, index }: { item: OfferItem; image: string; ind
       className="spotlight group relative h-[560px] cursor-pointer overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian md:h-[620px]"
       data-cursor="hover"
     >
-      <Image src={image} alt={item.title} fill
+      <Image src={item.image} alt={item.title} fill
         className="scale-[1.08] object-cover transition-transform duration-[1600ms] ease-out group-hover:scale-[1.16]"
         sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw" />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/70 to-transparent" />
@@ -62,17 +71,17 @@ function OfferCard({ item, image, index }: { item: OfferItem; image: string; ind
         <motion.div aria-hidden className="absolute inset-x-0 h-32 bg-gradient-to-b from-transparent via-white/[0.18] to-transparent"
           animate={{ y: ['-15%', '120%'] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: index * 0.5 }} />
         <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2">
-          <span className="text-[0.5rem] uppercase tracking-[0.4em] text-ivory/60">{t('save')}</span>
+          <span className="text-[0.5rem] uppercase tracking-[0.4em] text-ivory/60">{txt.save}</span>
           {discountNum ? (
             <>
               <span className="font-display text-[clamp(3.5rem,7vw,5.5rem)] font-light leading-none text-ivory drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{discountNum}</span>
               <span className="text-2xl font-light leading-none text-ivory/90">%</span>
             </>
           ) : (
-            <span className="font-display text-2xl text-ivory">{item.discount}</span>
+            <span className="font-display text-2xl text-ivory">{item.discount_label}</span>
           )}
           <div className="mt-3 h-px w-8 bg-ivory/40" />
-          <span className="text-[0.5rem] uppercase tracking-[0.32em] text-ivory/60">{t('off')}</span>
+          <span className="text-[0.5rem] uppercase tracking-[0.32em] text-ivory/60">{txt.off}</span>
         </div>
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ivory/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-ivory/30 to-transparent" />
@@ -80,7 +89,7 @@ function OfferCard({ item, image, index }: { item: OfferItem; image: string; ind
 
       <div className="absolute inset-x-0 bottom-0 z-10 p-7 pe-[110px] md:p-8 md:pe-[124px]">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-obsidian/60 px-3 py-1.5 text-[0.55rem] uppercase tracking-[0.28em] text-platinum/80 ring-1 ring-white/10 backdrop-blur-md">
-          <Clock className="h-2.5 w-2.5" strokeWidth={1.8} />{t('campaign')}
+          <Clock className="h-2.5 w-2.5" strokeWidth={1.8} />{txt.campaign}
         </div>
         <h3 className="font-display text-2xl uppercase leading-[1.05] tracking-tight text-ivory balance md:text-3xl">{item.title}</h3>
         <p className="mt-3 text-sm leading-relaxed text-platinum/80 line-clamp-3 pretty">{item.copy}</p>
@@ -89,7 +98,7 @@ function OfferCard({ item, image, index }: { item: OfferItem; image: string; ind
             <span aria-hidden className="absolute -inset-2 rounded-full bg-ivory/15 opacity-0 blur-lg transition-opacity duration-500 group-hover/btn:opacity-100" />
             <span aria-hidden className="absolute -inset-px rounded-full bg-gradient-to-b from-ivory/40 via-white/5 to-transparent" />
             <span className="relative inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-ivory via-platinum to-ivory/90 px-5 py-2.5 text-[0.6rem] font-semibold uppercase tracking-[0.3em] text-obsidian shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_24px_-8px_rgba(203,205,205,0.5)] transition-all duration-500 group-hover/btn:-translate-y-0.5">
-              {t('reserve')}
+              {txt.reserve}
               <ArrowUpRight className="h-3 w-3 transition-transform duration-500 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" strokeWidth={2.2} />
             </span>
           </Link>
@@ -103,8 +112,8 @@ function OfferCard({ item, image, index }: { item: OfferItem; image: string; ind
   );
 }
 
-/* ── chrome "view all" capsule (mirrors the services CTA) ── */
-function ViewAllOffers({ onOpen, t }: { onOpen: () => void; t: ReturnType<typeof useTranslations> }) {
+/* ── chrome "view all" capsule ── */
+function ViewAllOffers({ onOpen, label }: { onOpen: () => void; label: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-50px' }}
@@ -116,7 +125,7 @@ function ViewAllOffers({ onOpen, t }: { onOpen: () => void; t: ReturnType<typeof
         <span aria-hidden className="absolute -inset-4 rounded-full bg-gradient-to-r from-platinum/40 via-ivory/35 to-platinum/40 opacity-0 blur-2xl transition-opacity duration-700 group-hover:opacity-100" />
         <span aria-hidden className="absolute -inset-px rounded-full bg-gradient-to-br from-ivory/85 via-platinum/40 to-ivory/55" />
         <span className="relative inline-flex items-center gap-4 rounded-full bg-gradient-to-br from-ivory via-platinum to-ivory/95 px-9 py-4 text-[0.7rem] font-semibold uppercase tracking-[0.32em] text-obsidian shadow-[inset_0_1px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(0,0,0,0.15),0_22px_60px_-12px_rgba(203,205,205,0.55)] transition-all duration-500 group-hover:-translate-y-0.5">
-          {t('viewAll')}
+          {label}
           <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={2.2} />
         </span>
         <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
@@ -128,8 +137,8 @@ function ViewAllOffers({ onOpen, t }: { onOpen: () => void; t: ReturnType<typeof
   );
 }
 
-/* ── large overlay: the full collection in the same card style ── */
-function AllOffersModal({ open, onClose, items, t }: { open: boolean; onClose: () => void; items: OfferItem[]; t: ReturnType<typeof useTranslations> }) {
+/* ── large overlay: the full collection ── */
+function AllOffersModal({ open, onClose, items, txt }: { open: boolean; onClose: () => void; items: OfferRow[]; txt: OffersText }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     if (open) { document.addEventListener('keydown', onKey); document.body.style.overflow = 'hidden'; }
@@ -153,11 +162,11 @@ function AllOffersModal({ open, onClose, items, t }: { open: boolean; onClose: (
             <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/[0.06] bg-gradient-to-b from-[rgba(10,11,12,0.95)] via-[rgba(10,11,12,0.7)] to-transparent px-6 py-5 backdrop-blur-md md:px-9">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[0.55rem] uppercase tracking-[0.32em] text-platinum/70">
-                  <span className="h-px w-7 bg-platinum/50" />{t('eyebrow')}
+                  <span className="h-px w-7 bg-platinum/50" />{txt.eyebrow}
                 </div>
-                <h2 className="mt-1.5 truncate font-display text-2xl uppercase tracking-tight text-ivory md:text-3xl">{t('allTitle')}</h2>
+                <h2 className="mt-1.5 truncate font-display text-2xl uppercase tracking-tight text-ivory md:text-3xl">{txt.allTitle}</h2>
               </div>
-              <button onClick={onClose} data-cursor="hover" aria-label={t('mClose')}
+              <button onClick={onClose} data-cursor="hover" aria-label={txt.mClose}
                 className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.05] text-ivory transition-all duration-300 hover:rotate-90 hover:bg-ivory hover:text-obsidian">
                 <X className="h-4 w-4" strokeWidth={1.8} />
               </button>
@@ -166,7 +175,7 @@ function AllOffersModal({ open, onClose, items, t }: { open: boolean; onClose: (
             <div className="overflow-y-auto p-6 md:p-9">
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {items.map((item, i) => (
-                  <OfferCard key={`${item.title}-${i}`} item={item} image={offerImages[i % offerImages.length]} index={i} />
+                  <OfferCard key={`${item.slug}-${i}`} item={item} index={i} txt={txt} />
                 ))}
               </div>
             </div>
@@ -177,31 +186,33 @@ function AllOffersModal({ open, onClose, items, t }: { open: boolean; onClose: (
   );
 }
 
-export function OffersSection() {
-  const t = useTranslations('offers');
-  const items = t.raw('items') as OfferItem[];
-  // Full collection for the overlay. Falls back to the homepage items if the
-  // richer `all` set hasn't been merged into the namespace yet.
-  let allItems: OfferItem[] = items;
-  try { const a = t.raw('all') as OfferItem[]; if (Array.isArray(a) && a.length) allItems = a; } catch { /* keep fallback */ }
-
+export function OffersSection({
+  offers,
+  offersAll,
+  txt,
+}: {
+  offers: OfferRow[];
+  offersAll: OfferRow[];
+  txt: OffersText;
+}) {
   const [openAll, setOpenAll] = useState(false);
+  const allItems = offersAll.length ? offersAll : offers;
 
   return (
     <section className="section overflow-hidden" id="offers">
       <div className="container">
-        <SectionHeader eyebrow={t('eyebrow')} title={t('title')} subtitle={t('subtitle')} />
+        <SectionHeader eyebrow={txt.eyebrow} title={txt.title} subtitle={txt.subtitle} />
 
         <div className="mt-20 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((item, i) => (
-            <OfferCard key={item.title} item={item} image={offerImages[i % offerImages.length]} index={i} />
+          {offers.map((item, i) => (
+            <OfferCard key={item.slug} item={item} index={i} txt={txt} />
           ))}
         </div>
 
-        <ViewAllOffers onOpen={() => setOpenAll(true)} t={t} />
+        <ViewAllOffers onOpen={() => setOpenAll(true)} label={txt.viewAll} />
       </div>
 
-      <AllOffersModal open={openAll} onClose={() => setOpenAll(false)} items={allItems} t={t} />
+      <AllOffersModal open={openAll} onClose={() => setOpenAll(false)} items={allItems} txt={txt} />
     </section>
   );
 }

@@ -2,22 +2,34 @@
 
 /**
  * TestimonialsSection
- * Path: components/sections/testimonials-section.tsx  (export `TestimonialsSection`)
- *
- * - No photos. Each speaker is represented by an elegant monogram (initials),
- *   in the house display face — cleaner and more editorial than avatars.
- * - 3D rotating ring is desktop-only; mobile gets clear prev / dots / next nav.
- * - Autoplay pauses when off-screen or tab hidden.
+ * التقييمات والنصوص تأتي من قاعدة البيانات عبر props.
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslations } from 'next-intl';
 import { Quote, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SectionHeader } from '@/components/ui/section-header';
-import { testimonials } from '@/lib/site-config';
 
-export function TestimonialsSection() {
-  const t = useTranslations('testimonials');
+interface TestimonialRow {
+  name: string;
+  role: string;
+  quote: string;
+  rating: number;
+  avatar_url: string | null;
+}
+
+interface TestimonialsText {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+}
+
+export function TestimonialsSection({
+  testimonials,
+  txt,
+}: {
+  testimonials: TestimonialRow[];
+  txt: TestimonialsText;
+}) {
   const [active, setActive] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
   const [inView, setInView] = useState(false);
@@ -52,7 +64,7 @@ export function TestimonialsSection() {
       <div className="absolute inset-0 grid-lines opacity-30" />
 
       <div className="container relative">
-        <SectionHeader eyebrow={t('eyebrow')} title={t('title')} subtitle={t('subtitle')} />
+        <SectionHeader eyebrow={txt.eyebrow} title={txt.title} subtitle={txt.subtitle} />
 
         <div className="mt-14 grid items-center gap-12 md:mt-20 lg:grid-cols-[1fr_1.2fr] lg:gap-20">
           {/* Left — current quote (animated) */}
