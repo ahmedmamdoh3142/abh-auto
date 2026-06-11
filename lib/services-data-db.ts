@@ -15,7 +15,7 @@ export async function getServicesData(_locale?: Locale) {
      ORDER BY sort`
   );
 
-  // الخدمات الخمسة عشرة بأسعارها وincludes وضمانها وتصنيفها
+  // الخدمات بأسعارها (الجديدة والقديمة) وincludes وضمانها وتصنيفها
   const rows = await query(
     `SELECT s.slug,
             c.slug AS category,
@@ -28,6 +28,9 @@ export async function getServicesData(_locale?: Locale) {
             s.warranty_duration AS warranty_raw,
             COALESCE((SELECT jsonb_object_agg(sp.size_code, sp.price)
                       FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices_raw,
+            COALESCE((SELECT jsonb_object_agg(sp.size_code, sp.old_price)
+                      FROM service_prices sp
+                      WHERE sp.service_id = s.id AND sp.old_price IS NOT NULL), '{}'::jsonb) AS old_prices_raw,
             COALESCE((SELECT json_agg(si.label ORDER BY si.sort)
                       FROM service_includes si WHERE si.service_id = s.id), '[]') AS includes_raw
      FROM services s
@@ -44,6 +47,15 @@ export async function getServicesData(_locale?: Locale) {
       const key = SIZE_MAP[k];
       if (key) prices[key] = Number(v);
     }
+
+    // الأسعار القديمة (لو موجودة فقط) — نفس التحويل
+    const oldDb = r.old_prices_raw ?? {};
+    const oldPrices: Record<string, number> = {};
+    for (const [k, v] of Object.entries(oldDb)) {
+      const key = SIZE_MAP[k];
+      if (key && v != null) oldPrices[key] = Number(v);
+    }
+
     return {
       slug: r.slug,
       category: r.category,
@@ -54,6 +66,8 @@ export async function getServicesData(_locale?: Locale) {
       badge: r.badge ?? undefined,
       duration: r.duration_raw ?? { en: "", ar: "" },
       prices,
+      // نرجّعها فقط لو فيها قيمة — الواجهة تتعامل معها كاختيارية
+      oldPrices: Object.keys(oldPrices).length ? oldPrices : undefined,
       includes: r.includes_raw ?? [],
       warranty: {
         duration: r.warranty_raw ?? { en: "", ar: "" },

@@ -1,28 +1,31 @@
 'use client';
 
 /**
- * ServiceCardLarge — featured service card.
+ * ServiceCardLarge — "The Plate"
  *
- * Added "soul" within the monochrome palette: the three size tiles are now
- * tiered (S → M → L) with progressively richer platinum→ivory borders, a thin
- * top accent line, and a faint halo on the flagship (L) tile — so the price
- * hierarchy reads at a glance without leaving the brand's colour world.
+ * تخطيطان منفصلان:
+ *  • MOBILE (< md): هيرو احترافي زي كروت العروض — صورة بنسبة 4:3 مع الاسم والمدة
+ *    فوقها بتدرّج قوي (تبقى مقروءة فوق أي صورة)، وتحتها كل المحتوى متستّك
+ *    (سعر/أحجام/مشمولات/ضمان/زر) بمقاسات مناسبة. الكرت بياخد عرض الشاشة كامل.
+ *  • DESKTOP (md+): نفس التخطيط القديم (صورة شمال + محتوى يمين، عناصر جنب بعض).
+ *  • على الموبايل العناصر اللي جنب بعض في اللاب بتبقى تحت بعض.
+ *  • الخصم: شطب نظيف + شارة — لون واحد متغيّر (ACCENT).
+ *
+ * كل الأسعار من الـprops (service.prices / service.oldPrices) = جدول service_prices.
  */
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useLocale } from 'next-intl';
-import {
-  ArrowUpRight,
-  Check,
-  Shield,
-  Plus,
-  Clock,
-  Star,
-} from 'lucide-react';
+import { ArrowUpRight, Check, ShieldCheck, Clock, Star, Plus } from 'lucide-react';
 
 import { ROMANS, formatPrice, sizes, type Service, type SizeSlug } from '@/lib/services-data';
-import { useState } from 'react';
+
+/* ── لون التنبيه للخصم — غيّره من هنا بس ───────────────────────── */
+const ACCENT = '#d2453f';
+const ACCENT_RGB = '210,69,63';
+/* ──────────────────────────────────────────────────────────────── */
 
 interface Props {
   service: Service;
@@ -30,218 +33,436 @@ interface Props {
   total: number;
 }
 
-/* size tiers → richer treatment as the size grows (monochrome) */
-const TIER: Record<string, number> = { s: 0, m: 1, l: 2 };
-const REST_BORDER = ['border-white/[0.06]', 'border-white/[0.12]', 'border-platinum/25'];
-const TOP_ACCENT = ['via-platinum/25', 'via-platinum/45', 'via-ivory/70'];
+function priceInfo(service: Service, size: SizeSlug) {
+  const current = service.prices[size];
+  const old = service.oldPrices?.[size];
+  const discounted = typeof old === 'number' && old > current;
+  const pct = discounted ? Math.round((1 - current / (old as number)) * 100) : 0;
+  const saved = discounted ? (old as number) - current : 0;
+  return { current, old: old as number | undefined, discounted, pct, saved };
+}
 
 export function ServiceCardLarge({ service, index, total }: Props) {
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const reduce = useReducedMotion();
   const [activeSize, setActiveSize] = useState<SizeSlug>('m');
 
-  return (
-    <article className="group relative overflow-hidden rounded-[2rem] border border-white/[0.06] bg-gradient-to-br from-white/[0.04] via-transparent to-white/[0.02] backdrop-blur-md">
-      {/* Ambient glow on hover */}
-      <div className="pointer-events-none absolute -inset-px rounded-[2rem] opacity-0 transition-opacity duration-700 group-hover:opacity-100">
-        <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-r from-platinum/20 via-transparent to-platinum/10 blur-xl" />
-      </div>
+  const shared = { service, isAr, activeSize, setActiveSize };
 
-      <div className="relative grid min-h-[70vh] md:grid-cols-2">
-        {/* LEFT: Image section */}
-        <div className="relative h-[45vh] overflow-hidden md:h-auto">
+  return (
+    <article className="relative w-full min-w-0">
+      {/* ============ MOBILE — hero + stacked ============ */}
+      <div className="w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian md:hidden">
+        {/* IMAGE HERO — الاسم فوقها بتدرّج قوي */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden">
           <motion.div
             className="absolute inset-0"
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut' }}
+            animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
+            transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
           >
             <Image
               src={service.image}
               alt={service.name.en}
               fill
-              sizes="(max-width: 768px) 100vw, 50vw"
+              sizes="100vw"
               priority
               className="object-cover"
-              style={{ filter: 'grayscale(0.25) brightness(0.85) contrast(1.05)' }}
+              style={{ filter: 'grayscale(0.15) brightness(0.92) contrast(1.04)' }}
             />
           </motion.div>
+          {/* تدرّج قوي لقراءة الاسم */}
+          <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-obsidian/40" />
 
-          <div className="absolute inset-0 bg-gradient-to-r from-obsidian/20 via-transparent to-obsidian/60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent" />
-
-          <div
-            className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
-            style={{
-              backgroundImage:
-                "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-            }}
-          />
-
-          <div className="pointer-events-none absolute inset-6">
-            <span className="absolute start-0 top-0 h-8 w-8 border-s-2 border-t-2 border-ivory/30" />
-            <span className="absolute end-0 top-0 h-8 w-8 border-e-2 border-t-2 border-ivory/30" />
-            <span className="absolute bottom-0 start-0 h-8 w-8 border-b-2 border-s-2 border-ivory/30" />
-            <span className="absolute bottom-0 end-0 h-8 w-8 border-b-2 border-e-2 border-ivory/30" />
-          </div>
-
-          <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-6 md:p-8">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-ivory/30 bg-obsidian/50 backdrop-blur-md">
-                <span className="font-mono text-xs text-ivory" dir="ltr">{ROMANS[index]}</span>
-              </span>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[0.55rem] uppercase tracking-[0.3em] text-ivory/60">{isAr ? 'الفصل' : 'Chapter'}</span>
-                <span className="font-mono text-[0.55rem] text-ivory/40" dir="ltr">{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
-              </div>
-            </div>
+          <div className="absolute inset-x-0 top-0 flex items-start justify-between p-4">
+            <Chapter index={index} total={total} isAr={isAr} />
             {service.badge && <BadgeChip kind={service.badge} isAr={isAr} />}
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 z-10 p-6 md:p-8">
-            <div className="flex items-center gap-2 text-platinum/70">
+          <div className="absolute inset-x-0 bottom-0 p-5">
+            <div className="flex items-center gap-2 text-platinum/80">
               <Clock className="h-3.5 w-3.5" />
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.3em]">{service.duration[isAr ? 'ar' : 'en']}</span>
+              <span className="font-mono text-[0.55rem] uppercase tracking-[0.3em]">
+                {service.duration[isAr ? 'ar' : 'en']}
+              </span>
             </div>
-            <h2 className="mt-3 font-display text-[clamp(1.8rem,5vw,3rem)] leading-[0.95] tracking-tight text-ivory">{service.name[isAr ? 'ar' : 'en']}</h2>
+            <h2 className="mt-2 break-words font-display text-[1.75rem] font-light leading-[1] tracking-tight text-ivory drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+              {service.name[isAr ? 'ar' : 'en']}
+            </h2>
           </div>
         </div>
 
-        {/* RIGHT: Content section */}
-        <div className="relative flex flex-col p-6 md:p-8 lg:p-10">
-          <motion.p
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="font-editorial text-lg italic text-platinum/80 md:text-xl"
-          >
-            {service.tagline[isAr ? 'ar' : 'en']}
-          </motion.p>
+        {/* CONTENT — متستّك */}
+        <div className="flex flex-col gap-5 p-5">
+          <div>
+            <p className="font-editorial text-base italic text-platinum/80">
+              {service.tagline[isAr ? 'ar' : 'en']}
+            </p>
+            <p className="mt-2 text-[0.82rem] leading-relaxed text-platinum/60">
+              {service.description[isAr ? 'ar' : 'en']}
+            </p>
+          </div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-            className="mt-4 text-sm leading-relaxed text-platinum/60 md:text-base"
-          >
-            {service.description[isAr ? 'ar' : 'en']}
-          </motion.p>
+          <PricePlate {...shared} />
 
-          <div className="my-6 h-px bg-gradient-to-r from-transparent via-platinum/20 to-transparent" />
+          <div>
+            <Label>{isAr ? 'اختر الحجم' : 'Select size'}</Label>
+            <div className="mt-3">
+              <SizeTiles {...shared} />
+            </div>
+          </div>
 
-          {/* SIZE SELECTOR — tiered (S → M → L) */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
-            <div className="mb-4 flex items-center gap-3">
-              <span className="h-px w-6 bg-platinum/40" />
-              <span className="font-mono text-[0.55rem] uppercase tracking-[0.4em] text-platinum/60">{isAr ? 'اختر الحجم' : 'Select Size'}</span>
+          <div>
+            <Label>{isAr ? 'يشمل' : 'Included'}</Label>
+            <IncludesList service={service} isAr={isAr} className="mt-3 grid gap-2" />
+          </div>
+
+          {/* في اللاب جنب بعض — في الموبايل تحت بعض */}
+          <div className="flex flex-col gap-4 border-t border-white/[0.06] pt-5">
+            <WarrantyMark service={service} isAr={isAr} />
+            <ReserveButton service={service} isAr={isAr} />
+          </div>
+        </div>
+      </div>
+
+      {/* ============ DESKTOP ============ */}
+      <div className="hidden w-full overflow-hidden rounded-[2rem] border border-white/[0.07] bg-gradient-to-br from-white/[0.04] via-transparent to-white/[0.02] backdrop-blur-md md:block">
+        <div className="group relative grid min-h-[70vh] grid-cols-[1.05fr_1fr]">
+          <div className="pointer-events-none absolute -inset-px rounded-[2rem] opacity-0 transition-opacity duration-700 group-hover:opacity-100">
+            <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-r from-platinum/15 via-transparent to-platinum/10 blur-xl" />
+          </div>
+
+          {/* image */}
+          <div className="relative overflow-hidden">
+            <motion.div
+              className="absolute inset-0"
+              animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
+              transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Image
+                src={service.image}
+                alt={service.name.en}
+                fill
+                sizes="55vw"
+                priority
+                className="object-cover"
+                style={{ filter: 'grayscale(0.3) brightness(0.82) contrast(1.06)' }}
+              />
+            </motion.div>
+            <div className="absolute inset-0 bg-gradient-to-r from-obsidian/30 via-transparent to-obsidian/70" />
+            <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/15 to-transparent" />
+
+            <div className="pointer-events-none absolute inset-7">
+              <span className="absolute start-0 top-0 h-7 w-7 border-s border-t border-ivory/25" />
+              <span className="absolute end-0 top-0 h-7 w-7 border-e border-t border-ivory/25" />
+              <span className="absolute bottom-0 start-0 h-7 w-7 border-b border-s border-ivory/25" />
+              <span className="absolute bottom-0 end-0 h-7 w-7 border-b border-e border-ivory/25" />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {sizes.map((size) => {
-                const isActive = activeSize === size.slug;
-                const tier = TIER[size.slug] ?? 0;
-                return (
-                  <button
-                    key={size.slug}
-                    onClick={() => setActiveSize(size.slug)}
-                    data-cursor="hover"
-                    className={`group/size relative overflow-hidden rounded-xl border p-4 text-center transition-all duration-500 ${
-                      isActive
-                        ? 'border-platinum/40 bg-gradient-to-b from-platinum/15 to-platinum/5'
-                        : `${REST_BORDER[tier]} bg-white/[0.02] hover:border-platinum/30 hover:bg-white/[0.04]`
-                    }`}
-                  >
-                    {/* tier accent line (always visible) */}
-                    <span aria-hidden className={`pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent ${TOP_ACCENT[tier]} to-transparent`} />
-                    {/* flagship halo on L */}
-                    {tier === 2 && (
-                      <span aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(203,205,205,0.12),transparent_62%)]" />
-                    )}
-
-                    <span className={`relative block font-mono text-[0.55rem] uppercase tracking-[0.4em] transition-colors ${isActive ? 'text-ivory' : 'text-platinum/50'}`}>
-                      {size.slug.toUpperCase()}
-                    </span>
-                    <span className={`relative mt-2 block font-display text-2xl tabular-nums transition-all md:text-3xl ${isActive ? 'scale-105 text-ivory' : 'text-platinum/80'}`}>
-                      {formatPrice(service.prices[size.slug])}
-                    </span>
-                    <span className="relative mt-1 block font-mono text-[0.5rem] uppercase tracking-[0.3em] text-platinum/50">SAR</span>
-                    <span className={`relative mt-2 block font-editorial text-[0.65rem] italic transition-colors ${isActive ? 'text-platinum/80' : 'text-platinum/40'}`}>
-                      {size.label[isAr ? 'ar' : 'en']}
-                    </span>
-
-                    {isActive && (
-                      <motion.span layoutId="size-indicator" className="absolute -bottom-px left-1/2 h-0.5 w-12 -translate-x-1/2 bg-gradient-to-r from-transparent via-ivory to-transparent" />
-                    )}
-                  </button>
-                );
-              })}
+            <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-8">
+              <Chapter index={index} total={total} isAr={isAr} />
+              {service.badge && <BadgeChip kind={service.badge} isAr={isAr} />}
             </div>
-          </motion.div>
 
-          <div className="my-6 h-px bg-gradient-to-r from-transparent via-platinum/20 to-transparent" />
-
-          {/* INCLUDED */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}>
-            <div className="mb-4 flex items-center gap-3">
-              <span className="h-px w-6 bg-platinum/40" />
-              <span className="font-mono text-[0.55rem] uppercase tracking-[0.4em] text-platinum/60">{isAr ? 'يشمل' : 'Included'}</span>
+            <div className="absolute inset-x-0 bottom-0 z-10 p-8">
+              <div className="flex items-center gap-2 text-platinum/70">
+                <Clock className="h-3.5 w-3.5" />
+                <span className="font-mono text-[0.55rem] uppercase tracking-[0.3em]">
+                  {service.duration[isAr ? 'ar' : 'en']}
+                </span>
+              </div>
+              <h2 className="mt-3 font-display text-[clamp(2rem,4vw,3.2rem)] font-light leading-[0.95] tracking-tight text-ivory">
+                {service.name[isAr ? 'ar' : 'en']}
+              </h2>
             </div>
-            <ul className="grid gap-2.5 sm:grid-cols-2">
-              {service.includes.map((item, i) => (
-                <motion.li
-                  key={i}
-                  initial={{ opacity: 0, x: isAr ? 10 : -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: 0.5 + i * 0.05 }}
-                  className="flex items-center gap-2.5"
-                >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-platinum/10">
-                    <Check className="h-3 w-3 text-platinum/80" strokeWidth={2.5} />
-                  </span>
-                  <span className="text-sm text-platinum/75">{item[isAr ? 'ar' : 'en']}</span>
-                </motion.li>
-              ))}
-            </ul>
-          </motion.div>
+          </div>
 
-          <div className="flex-1" />
+          {/* content */}
+          <div className="relative flex min-w-0 flex-col p-8 lg:p-10">
+            <p className="font-editorial text-xl italic text-platinum/80">
+              {service.tagline[isAr ? 'ar' : 'en']}
+            </p>
+            <p className="mt-3 text-[0.95rem] leading-relaxed text-platinum/60">
+              {service.description[isAr ? 'ar' : 'en']}
+            </p>
 
-          {/* Warranty + CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }}
-            className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-platinum/20 bg-platinum/[0.05]">
-                <Shield className="h-4 w-4 text-platinum/80" />
-              </span>
-              <div className="flex flex-col">
-                <span className="font-display text-lg text-ivory">{service.warranty.duration[isAr ? 'ar' : 'en']}</span>
-                <span className="font-mono text-[0.5rem] uppercase tracking-[0.3em] text-platinum/50">{isAr ? 'الضمان' : 'Warranty'}</span>
+            <div className="mt-6">
+              <PricePlate {...shared} />
+            </div>
+
+            <div className="mt-6">
+              <Label>{isAr ? 'اختر الحجم' : 'Select size'}</Label>
+              <div className="mt-3">
+                <SizeTiles {...shared} />
               </div>
             </div>
 
-            <Link
-              href={`/contact?service=${service.slug}`}
-              data-cursor="hover"
-              className="group/btn relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-gradient-to-r from-ivory via-platinum to-ivory px-8 py-4 font-mono text-[0.65rem] font-medium uppercase tracking-[0.3em] text-obsidian shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] transition-all duration-500 hover:shadow-[0_0_60px_-5px_rgba(255,255,255,0.5)]"
-            >
-              <span className="relative z-10">{isAr ? 'احجز الآن' : 'Reserve Now'}</span>
-              <ArrowUpRight className="relative z-10 h-4 w-4 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
-              <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover/btn:translate-x-full" />
-            </Link>
-          </motion.div>
+            <div className="mt-7">
+              <Label>{isAr ? 'يشمل' : 'Included'}</Label>
+              <IncludesList service={service} isAr={isAr} className="mt-3 grid gap-2 sm:grid-cols-2" />
+            </div>
+
+            <div className="flex-1" />
+
+            {/* في اللاب جنب بعض */}
+            <div className="mt-7 flex items-end justify-between gap-4">
+              <WarrantyMark service={service} isAr={isAr} />
+              <ReserveButton service={service} isAr={isAr} />
+            </div>
+          </div>
         </div>
       </div>
     </article>
   );
 }
 
-/* Badge Chip */
+/* ───────────────────────── Shared pieces ───────────────────────── */
+
+function PricePlate({
+  service,
+  isAr,
+  activeSize,
+}: {
+  service: Service;
+  isAr: boolean;
+  activeSize: SizeSlug;
+  setActiveSize: (s: SizeSlug) => void;
+}) {
+  const info = priceInfo(service, activeSize);
+  const sizeLabel = sizes.find((s) => s.slug === activeSize)?.label[isAr ? 'ar' : 'en'];
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-platinum/15 bg-gradient-to-br from-white/[0.05] to-transparent p-4">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-5 top-0 h-px"
+        style={{
+          background: info.discounted
+            ? `linear-gradient(90deg, transparent, rgba(${ACCENT_RGB},0.55), transparent)`
+            : 'linear-gradient(90deg, transparent, rgba(203,205,205,0.4), transparent)',
+        }}
+      />
+      <span className="font-mono text-[0.5rem] uppercase tracking-[0.35em] text-platinum/45">
+        {isAr ? `لمقاس ${sizeLabel}` : `For ${sizeLabel}`}
+      </span>
+
+      {info.discounted && (
+        <span className="mt-1.5 flex items-center gap-2">
+          <span
+            dir="ltr"
+            className="font-mono text-sm tabular-nums text-platinum/45 line-through"
+            style={{ textDecorationColor: ACCENT, textDecorationThickness: '2px' }}
+          >
+            {formatPrice(info.old as number)}
+          </span>
+          <span
+            className="rounded-full px-2 py-0.5 font-mono text-[0.6rem] font-semibold tabular-nums text-white"
+            style={{ backgroundColor: ACCENT }}
+          >
+            −{info.pct}%
+          </span>
+        </span>
+      )}
+
+      <span className="mt-1 flex items-baseline gap-2">
+        <span
+          dir="ltr"
+          className="font-display text-[clamp(1.7rem,7vw,2.6rem)] font-light leading-none tabular-nums text-ivory"
+        >
+          {formatPrice(info.current)}
+        </span>
+        <span className="font-mono text-[0.55rem] uppercase tracking-[0.3em] text-platinum/50">SAR</span>
+      </span>
+
+      {info.discounted && (
+        <span className="mt-2 block font-mono text-[0.6rem] tracking-[0.15em]" style={{ color: ACCENT }}>
+          {isAr ? `وفّر ${formatPrice(info.saved)} SAR` : `Save ${formatPrice(info.saved)} SAR`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SizeTiles({
+  service,
+  isAr,
+  activeSize,
+  setActiveSize,
+}: {
+  service: Service;
+  isAr: boolean;
+  activeSize: SizeSlug;
+  setActiveSize: (s: SizeSlug) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+      {sizes.map((size) => {
+        const isOn = activeSize === size.slug;
+        const info = priceInfo(service, size.slug);
+        return (
+          <button
+            key={size.slug}
+            onClick={() => setActiveSize(size.slug)}
+            data-cursor="hover"
+            aria-pressed={isOn}
+            className={`relative min-w-0 overflow-hidden rounded-xl border p-2.5 text-center transition-all duration-500 sm:p-3 ${
+              isOn
+                ? 'border-platinum/45 bg-gradient-to-b from-platinum/15 to-platinum/[0.03]'
+                : 'border-white/[0.08] bg-white/[0.02] hover:border-platinum/25 hover:bg-white/[0.04]'
+            }`}
+          >
+            <span
+              className={`block font-mono text-[0.5rem] uppercase tracking-[0.3em] ${
+                isOn ? 'text-ivory' : 'text-platinum/45'
+              }`}
+            >
+              {size.slug.toUpperCase()}
+            </span>
+            {info.discounted && (
+              <span
+                dir="ltr"
+                className="mt-1 block truncate font-mono text-[0.55rem] tabular-nums text-platinum/45 line-through"
+                style={{ textDecorationColor: ACCENT, textDecorationThickness: '1.5px' }}
+              >
+                {formatPrice(info.old as number)}
+              </span>
+            )}
+            <span
+              dir="ltr"
+              className={`mt-0.5 block truncate font-display text-[0.95rem] tabular-nums sm:text-lg ${
+                isOn ? 'text-ivory' : 'text-platinum/80'
+              }`}
+            >
+              {formatPrice(info.current)}
+            </span>
+            <span
+              className={`mt-1 block truncate font-editorial text-[0.6rem] italic ${
+                isOn ? 'text-platinum/80' : 'text-platinum/40'
+              }`}
+            >
+              {size.label[isAr ? 'ar' : 'en']}
+            </span>
+            {isOn && (
+              <motion.span
+                aria-hidden
+                initial={{ opacity: 0, scaleX: 0.5 }}
+                animate={{ opacity: 1, scaleX: 1 }}
+                transition={{ duration: 0.3 }}
+                className="absolute -bottom-px left-1/2 h-0.5 w-10 -translate-x-1/2 bg-gradient-to-r from-transparent via-ivory to-transparent"
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function IncludesList({
+  service,
+  isAr,
+  className,
+}: {
+  service: Service;
+  isAr: boolean;
+  className?: string;
+}) {
+  return (
+    <ul className={className}>
+      {service.includes.map((item, i) => (
+        <li key={i} className="flex items-center gap-2.5">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-platinum/10">
+            <Check className="h-3 w-3 text-platinum/80" strokeWidth={2.5} />
+          </span>
+          <span className="text-sm text-platinum/75">{item[isAr ? 'ar' : 'en']}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function WarrantyMark({ service, isAr }: { service: Service; isAr: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-platinum/20 bg-platinum/[0.05]">
+        <ShieldCheck className="h-4 w-4 text-platinum/80" />
+      </span>
+      <div className="flex flex-col">
+        <span className="font-display text-lg text-ivory">
+          {service.warranty.duration[isAr ? 'ar' : 'en']}
+        </span>
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.3em] text-platinum/50">
+          {isAr ? 'الضمان' : 'Warranty'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ReserveButton({ service, isAr }: { service: Service; isAr: boolean }) {
+  return (
+    <Link
+      href={`/booking?service=${service.slug}`}
+      data-cursor="hover"
+      className="group/btn relative inline-flex w-full items-center justify-center gap-3 overflow-hidden rounded-full bg-gradient-to-r from-ivory via-platinum to-ivory px-8 py-3.5 font-mono text-[0.65rem] font-medium uppercase tracking-[0.3em] text-obsidian transition-shadow duration-500 hover:shadow-[0_0_50px_-8px_rgba(255,255,255,0.5)] sm:w-auto sm:py-4"
+    >
+      <span className="relative z-10">{isAr ? 'احجز الآن' : 'Reserve now'}</span>
+      <ArrowUpRight className="relative z-10 h-4 w-4 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/50 to-transparent transition-transform duration-700 group-hover/btn:translate-x-full"
+      />
+    </Link>
+  );
+}
+
+function Chapter({ index, total, isAr }: { index: number; total: number; isAr: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-ivory/25 bg-obsidian/40 backdrop-blur-md sm:h-11 sm:w-11">
+        <span className="font-display text-base text-ivory" dir="ltr">
+          {ROMANS[index]}
+        </span>
+      </span>
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.4em] text-ivory/55">
+          {isAr ? 'الفصل' : 'Chapter'}
+        </span>
+        <span className="font-mono text-[0.5rem] text-ivory/40" dir="ltr">
+          {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="h-px w-6 bg-platinum/40" />
+      <span className="font-mono text-[0.55rem] uppercase tracking-[0.4em] text-platinum/60">
+        {children}
+      </span>
+    </div>
+  );
+}
+
 function BadgeChip({ kind, isAr }: { kind: 'signature' | 'new'; isAr: boolean }) {
-  const label = kind === 'signature' ? (isAr ? 'موقّعة' : 'Signature') : (isAr ? 'جديد' : 'New');
+  const label = kind === 'signature' ? (isAr ? 'موقّعة' : 'Signature') : isAr ? 'جديد' : 'New';
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 font-mono text-[0.55rem] uppercase tracking-[0.3em] backdrop-blur-md ${
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-[0.3em] backdrop-blur-md sm:px-4 sm:py-2 ${
         kind === 'signature'
           ? 'border border-amber-400/30 bg-amber-500/10 text-amber-300'
           : 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
       }`}
     >
-      {kind === 'signature' ? <Star className="h-3 w-3" fill="currentColor" /> : <Plus className="h-3 w-3" strokeWidth={2.5} />}
+      {kind === 'signature' ? (
+        <Star className="h-3 w-3" fill="currentColor" />
+      ) : (
+        <Plus className="h-3 w-3" strokeWidth={2.5} />
+      )}
       {label}
     </span>
   );

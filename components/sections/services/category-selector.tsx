@@ -1,11 +1,15 @@
 'use client';
 
 /**
- * CategorySelector — التصنيفات تأتي كـ prop من القاعدة.
+ * CategorySelector — "The Index"
+ *
+ * إصلاح هذه النسخة: الخط الأبيض اللي بيبيّن التاب المختار كان معمول بـ layoutId
+ * (عنصر مشترك بيتحرّك بين التابات). مع السكرول الأفقي على الموبايل، حساب الموضع
+ * بيتلخبط فالخط ما بييجيش تحت التاب المختار مباشرة. الحل: شِلنا الـlayoutId
+ * وخلّينا كل تاب نشط يرسم خطّه تحته مباشرة (مع fade بسيط) — فالموضع دايمًا مظبوط.
  */
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useLocale } from 'next-intl';
-import { Droplets, Shield, Lock, Sparkles, Package } from 'lucide-react';
 
 import type { Category, CategorySlug } from '@/lib/services-data';
 
@@ -13,95 +17,119 @@ interface Props {
   categories: Category[];
   active: CategorySlug;
   onChange: (slug: CategorySlug) => void;
+  counts?: Record<string, number>;
 }
 
-const categoryIcons: Record<string, React.ReactNode> = {
-  coatings: <Droplets className="h-4 w-4" />,
-  protection: <Shield className="h-4 w-4" />,
-  security: <Lock className="h-4 w-4" />,
-  detailing: <Sparkles className="h-4 w-4" />,
-  bundles: <Package className="h-4 w-4" />,
-};
-
-export function CategorySelector({ categories, active, onChange }: Props) {
+export function CategorySelector({ categories, active, onChange, counts }: Props) {
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const reduce = useReducedMotion();
   const activeCategory = categories.find((c) => c.slug === active);
 
   return (
-    <div className="sticky top-24 z-40 mx-auto w-full max-w-5xl px-4 pb-8 pt-4">
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/60 p-2 backdrop-blur-2xl shadow-[0_8px_60px_-15px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.05)]"
-      >
-        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.03] to-transparent" />
+    <div className="sticky top-20 z-40 mx-auto w-full max-w-6xl px-4 pb-10 pt-6">
+      {/* eyebrow */}
+      <div className="mb-5 flex items-center justify-center gap-4">
+        <span className="h-px w-10 bg-gradient-to-r from-transparent to-platinum/30" />
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.5em] text-platinum/45">
+          {isAr ? 'الفهرس' : 'The Index'}
+        </span>
+        <span className="h-px w-10 bg-gradient-to-l from-transparent to-platinum/30" />
+      </div>
 
-        <div className="relative flex items-center justify-center gap-1" role="tablist">
+      {/* ledger bar */}
+      <div className="relative rounded-2xl">
+        <span className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-platinum/20 to-transparent" />
+        <span className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-platinum/20 to-transparent" />
+
+        <div
+          role="tablist"
+          aria-label={isAr ? 'تصنيفات الخدمات' : 'Service categories'}
+          className="mask-fade-x flex items-stretch justify-start gap-1 overflow-x-auto overflow-y-hidden px-2 py-4 md:justify-center"
+          style={{ scrollbarWidth: 'none' }}
+        >
           {categories.map((cat) => {
             const isActive = cat.slug === active;
+            const count = counts?.[cat.slug];
             return (
               <button
                 key={cat.slug}
-                type="button"
                 role="tab"
+                type="button"
                 aria-selected={isActive}
                 onClick={() => onChange(cat.slug)}
                 data-cursor="hover"
-                className="group relative flex items-center gap-2.5 rounded-xl px-4 py-3 transition-all md:px-6"
+                className="group relative flex shrink-0 scroll-mx-6 flex-col items-center gap-1.5 rounded-xl px-5 py-2.5 transition-colors md:px-8"
               >
+                {/* ambient glow (per-button, no shared layout) */}
                 {isActive && (
                   <motion.span
-                    layoutId="category-active-bg"
-                    transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                    className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/[0.12] via-white/[0.06] to-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+                    aria-hidden
+                    initial={reduce ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                    className="pointer-events-none absolute inset-0 -z-10 rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(203,205,205,0.10),transparent_70%)]"
                   />
                 )}
 
                 <span
-                  className={`relative transition-all duration-300 ${
-                    isActive
-                      ? 'text-ivory scale-110'
-                      : 'text-platinum/40 group-hover:text-platinum/70 group-hover:scale-105'
+                  dir="ltr"
+                  className={`font-mono text-[0.6rem] tracking-[0.45em] transition-all duration-300 ${
+                    isActive ? 'text-metallic' : 'text-platinum/30 group-hover:text-platinum/55'
                   }`}
                 >
-                  {categoryIcons[cat.slug]}
+                  {cat.numeral}
                 </span>
 
                 <span
-                  className={`relative hidden font-sans text-sm tracking-wide transition-colors md:block ${
-                    isActive ? 'text-ivory' : 'text-platinum/50 group-hover:text-ivory'
+                  className={`whitespace-nowrap font-display text-2xl font-light leading-none tracking-tight transition-all duration-300 ${
+                    isActive ? 'text-ivory' : 'text-platinum/45 group-hover:text-platinum/80'
                   }`}
                 >
                   {cat.short[isAr ? 'ar' : 'en']}
                 </span>
 
                 <span
-                  className={`relative hidden font-mono text-[0.5rem] tracking-[0.3em] transition-colors lg:block ${
-                    isActive ? 'text-platinum/70' : 'text-platinum/30'
+                  dir="ltr"
+                  className={`font-mono text-[0.5rem] tracking-[0.3em] transition-colors ${
+                    isActive ? 'text-platinum/70' : 'text-platinum/25'
                   }`}
                 >
-                  {cat.numeral}
+                  {count != null ? `· ${String(count).padStart(2, '0')} ·` : '·'}
                 </span>
+
+                {/* الخط تحت التاب المختار — مرسوم تحته مباشرة (بدون layoutId) */}
+                {isActive && (
+                  <motion.span
+                    aria-hidden
+                    initial={reduce ? false : { opacity: 0, scaleX: 0.6 }}
+                    animate={{ opacity: 1, scaleX: 1 }}
+                    transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute bottom-0 left-1/2 flex w-14 -translate-x-1/2 flex-col items-center"
+                  >
+                    <span className="block h-px w-full bg-gradient-to-r from-transparent via-ivory to-transparent" />
+                    <span className="-mt-px h-1 w-1 rounded-full bg-ivory" />
+                  </motion.span>
+                )}
               </button>
             );
           })}
         </div>
-      </motion.div>
+      </div>
 
+      {/* active tagline */}
       <motion.div
         key={active}
-        initial={{ opacity: 0, y: 8 }}
+        initial={reduce ? false : { opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="mt-6 flex items-center justify-center gap-4"
       >
-        <span className="h-px w-12 bg-gradient-to-r from-transparent to-platinum/30" />
-        <span className="font-editorial text-sm italic text-platinum/60">
+        <span className="h-px w-12 bg-gradient-to-r from-transparent to-platinum/25" />
+        <span className="text-center font-editorial text-sm italic text-platinum/60 md:text-base">
           {activeCategory?.tagline[isAr ? 'ar' : 'en']}
         </span>
-        <span className="h-px w-12 bg-gradient-to-l from-transparent to-platinum/30" />
+        <span className="h-px w-12 bg-gradient-to-l from-transparent to-platinum/25" />
       </motion.div>
     </div>
   );

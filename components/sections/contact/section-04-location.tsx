@@ -23,8 +23,8 @@ const MAPS_SHORT = 'https://maps.app.goo.gl/XGn5z3oAdghRhqNB6';
 const MAPS_EMBED = `https://www.google.com/maps?q=${LAT},${LNG}&hl=ar&z=16&output=embed`;
 
 const ADDRESS = {
-  en: ['ABH Auto — Atelier', 'Prince Mohammed bin Abdulaziz St (Al Tahlia)', 'Jeddah, Saudi Arabia'],
-  ar: ['ABH Auto — الأتيليه', 'شارع الأمير محمد بن عبد العزيز (التحلية)', 'جدة، المملكة العربية السعودية'],
+  en: ['ABH Auto — Center', 'Prince Mohammed bin Abdulaziz St (Al Tahlia)', 'Jeddah, Saudi Arabia'],
+  ar: ['ABH Auto — المركز', 'شارع الأمير محمد بن عبد العزيز (التحلية)', 'جدة، المملكة العربية السعودية'],
 };
 const HOURS = {
   en: [{ d: 'Saturday – Thursday', h: '10:00 AM – 9:00 PM', open: true }, { d: 'Friday', h: 'Closed', open: false }],
@@ -34,7 +34,7 @@ const T = {
   eyebrow: { en: 'Find us', ar: 'مكاننا' },
   titleA: { en: 'Jeddah', ar: 'جدة' },
   titleB: { en: 'Al Tahlia', ar: 'التحلية' },
-  subtitle: { en: 'The atelier sits on Prince Mohammed bin Abdulaziz Street.', ar: 'الأتيليه في شارع الأمير محمد بن عبد العزيز.' },
+  subtitle: { en: 'The center sits on Prince Mohammed bin Abdulaziz Street.', ar: 'المركز في شارع الأمير محمد بن عبد العزيز.' },
   hoursTitle: { en: 'Opening hours', ar: 'مواعيد العمل' },
   directions: { en: 'Open in Maps', ar: 'افتح على الخريطة' },
   whatsapp: { en: 'WhatsApp', ar: 'واتساب' },

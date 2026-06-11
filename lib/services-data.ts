@@ -30,6 +30,7 @@ export interface Service {
   badge?: 'signature' | 'new';
   duration: { en: string; ar: string };
   prices: Record<SizeSlug, number>;
+  oldPrices?: Partial<Record<SizeSlug, number>>; 
   includes: Array<{ en: string; ar: string }>;
   warranty: {
     duration: { en: string; ar: string };

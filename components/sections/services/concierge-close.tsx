@@ -3,6 +3,10 @@
 /**
  * ConciergeClose — Elegant closing CTA section,
  * now with the cinematic treatment from the main CTA.
+ *
+ * تعديل: على الموبايل السكشن بقى بارتفاع محتوى + padding معقول (py-16) بدل
+ * ما يفرض 82svh/620px، عشان ما ياخدش مساحة رأسية كبيرة. الارتفاع السينمائي
+ * الكامل بيبقى من md فأكتر.
  */
 import { useRef } from 'react';
 import Image from 'next/image';
@@ -12,7 +16,7 @@ import { useLocale } from 'next-intl';
 import { ArrowUpRight, MessageCircle } from 'lucide-react';
 
 const CTA_IMAGE =
-  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=70&w=1920';
+  '/images/cta-service.webp';
 
 export function ConciergeClose() {
   const locale = useLocale();
@@ -44,7 +48,7 @@ export function ConciergeClose() {
   return (
     <section
       ref={ref}
-      className="relative isolate h-[82svh] min-h-[620px] w-full overflow-hidden"
+      className="relative isolate flex w-full items-center overflow-hidden py-16 sm:py-20 md:h-[82svh] md:min-h-[620px] md:py-0"
     >
       {/* Background image with parallax */}
       <motion.div
@@ -103,7 +107,7 @@ export function ConciergeClose() {
       <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[40rem] w-[40rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.05] blur-[140px]" />
 
       {/* Content */}
-      <div className="relative z-10 flex h-full items-center justify-center">
+      <div className="relative z-10 flex w-full items-center justify-center">
         <div className="container mx-auto px-6 md:px-10">
           <div className="mx-auto max-w-5xl text-center">
             {/* Decorative element – replaces the original eyebrow */}
@@ -122,7 +126,7 @@ export function ConciergeClose() {
             </motion.div>
 
             {/* Headline – same content, lifted typography */}
-            <h2 className="mt-10 font-display text-hero-sm md:text-hero font-light italic leading-[0.92] tracking-tight text-ivory">
+            <h2 className="mt-8 font-display text-hero-sm md:mt-10 md:text-hero font-light italic leading-[0.92] tracking-tight text-ivory">
               {isAr
                 ? 'هل تفكّر في أكثر من خدمة؟'
                 : 'Considering several services?'}
@@ -140,7 +144,7 @@ export function ConciergeClose() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-80px' }}
               transition={{ duration: 1, delay: 0.85, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-10 flex justify-center"
+              className="mt-8 flex justify-center md:mt-10"
             >
               <ChromePrimaryButton href="/contact">
                 {isAr ? 'تحدّث مع الفريق' : 'Speak with the team'}

@@ -1,11 +1,3 @@
-/**
- * WhatsAppFab — Floating action button bottom-end of viewport.
- *
- * - Pulsing platinum halo.
- * - Reveals delayed after page mount so it doesn't compete with the
- *   loading screen and hero intro.
- * - Tooltip slides out on hover.
- */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,7 +12,6 @@ export function WhatsAppFab() {
   const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
-    // Reveal after loading screen + hero settle
     const timer = setTimeout(() => setVisible(true), 2000);
     return () => clearTimeout(timer);
   }, []);
@@ -45,9 +36,9 @@ export function WhatsAppFab() {
           onMouseLeave={() => setHovered(false)}
           className="group fixed bottom-6 end-6 z-40 md:bottom-10 md:end-10"
         >
-          {/* Outer pulsing ring */}
-          <span className="pointer-events-none absolute inset-0 -m-2 rounded-full bg-platinum/20 blur-md animate-pulse-glow" />
-          <span className="pointer-events-none absolute inset-0 rounded-full bg-platinum/[0.08] ring-1 ring-platinum/20" />
+          {/* حلقة النبض الخارجية بلون واتساب */}
+          <span className="pointer-events-none absolute inset-0 -m-2 rounded-full bg-green-400/20 blur-md animate-pulse-glow" />
+          <span className="pointer-events-none absolute inset-0 rounded-full bg-green-500/10 ring-1 ring-green-500/20" />
 
           {/* Tooltip */}
           <AnimatePresence>
@@ -64,11 +55,11 @@ export function WhatsAppFab() {
             )}
           </AnimatePresence>
 
-          {/* Button face */}
-          <span className="relative grid h-14 w-14 md:h-16 md:w-16 place-items-center rounded-full border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] shadow-glass backdrop-blur-xl transition-all duration-500 group-hover:border-white/30">
+          {/* الزر الرئيسي */}
+          <span className="relative grid h-12 w-12 md:h-14 md:w-14 place-items-center rounded-full shadow-lg shadow-green-500/30 transition-all duration-500 group-hover:shadow-green-500/50 bg-gradient-to-br from-green-500 to-green-600 border border-green-400/30">
             <svg
               viewBox="0 0 32 32"
-              className="h-7 w-7 md:h-8 md:w-8 text-ivory transition-transform duration-500 group-hover:scale-110"
+              className="h-6 w-6 md:h-7 md:w-7 text-white transition-transform duration-500 group-hover:scale-110"
               fill="currentColor"
               aria-hidden
             >

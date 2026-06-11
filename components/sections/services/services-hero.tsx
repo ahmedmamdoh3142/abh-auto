@@ -72,7 +72,7 @@ export function ServicesHero() {
           <span className="inline-flex items-center gap-3 rounded-full border border-white/[0.08] bg-white/[0.025] px-5 py-2.5 backdrop-blur-md">
             <Sparkles className="h-4 w-4 text-platinum/80" />
             <span className="font-mono text-[0.65rem] uppercase tracking-[0.4em] text-platinum/80">
-              {isAr ? 'الأتيليه · جدّة' : 'The Atelier · Jeddah'}
+              {isAr ? 'المركز · جدّة' : 'The Center · Jeddah'}
             </span>
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           </span>
@@ -88,7 +88,7 @@ export function ServicesHero() {
               transition={{ duration: 1, ease: EASE }}
               className="inline-block bg-gradient-to-b from-ivory via-platinum/90 to-ivory/60 bg-clip-text text-transparent"
             >
-              {isAr ? 'خدماتنا' : 'Services'}
+              {isAr ? 'خدمات احترافية' : 'Premium Services'}
             </motion.span>
           </span>
           <span className="block overflow-hidden mt-1 md:mt-2">
@@ -98,7 +98,7 @@ export function ServicesHero() {
               transition={{ duration: 1, delay: 0.2, ease: EASE }}
               className="inline-block font-editorial italic text-platinum/85"
             >
-              {isAr ? 'حرفة الحماية.' : 'The craft of protection.'}
+              {isAr ? 'تعكس فخامة سيارتك.' : 'That Reflect Your Vehicle’s Prestige.'}
             </motion.span>
           </span>
         </h1>
@@ -111,8 +111,8 @@ export function ServicesHero() {
           className="pretty mx-auto mt-6 max-w-[48ch] text-base leading-[1.85] text-platinum/70 md:text-lg"
         >
           {isAr
-            ? 'اختر الفئة. استكشف الخدمات. جميع الأسعار معروضة بوضوح.'
-            : 'Choose a category. Explore the services. All prices displayed transparently.'}
+            ? 'استكشف حلول العناية والتجهيز المصممة للحفاظ على المظهر المثالي والأداء الاستثنائي.'
+            : 'Explore advanced detailing and care solutions designed to maintain a flawless look and exceptional presence.'}
         </motion.p>
 
         {/* Drawn baseline */}

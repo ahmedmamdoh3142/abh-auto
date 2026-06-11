@@ -20,7 +20,7 @@ import { ChapterSlate, AtelierMark } from '@/components/sections/about/chapter-s
 import { useAtelierStatus } from '@/hooks/use-atelier-status';
 
 const CLOSING_IMAGE =
-  'https://images.unsplash.com/photo-1525609004556-c46c7d6cf023?auto=format&fit=crop&w=1800&q=85';
+  '/images/cta-service.webp';
 
 interface HoursRow {
   days: string;

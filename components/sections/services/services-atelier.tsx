@@ -2,9 +2,15 @@
 
 /**
  * ServicesAtelier — DB-driven. يستقبل categories + services كـ props.
+ *
+ * ⚠️ إصلاح البَج: كان فيه <AnimatePresence mode="wait"> حوالين محتوى التصنيف.
+ * الـ"wait" بيمنع التصنيف الجديد ما يركّبش (mount) لحد ما الـexit بتاع القديم
+ * يخلّص. لما بتدوس بسرعة على التابات، framer ساعات بيدخل في حالة قفل (deadlock)
+ * فالخدمات الجديدة عمرها ما بتظهر إلا بعد ريفرش. الحل: شِلنا الـAnimatePresence
+ * خالص، والمحتوى دلوقتي بيتركّب فورًا مع كل تغيير تصنيف وبيعمل أنيميشن دخول بس.
  */
-import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 
 import { ServicesHero } from './services-hero';
 import { CategorySelector } from './category-selector';
@@ -20,7 +26,18 @@ export function ServicesAtelier({
   services: Service[];
 }) {
   const [category, setCategory] = useState<CategorySlug>(categories[0]?.slug ?? 'coatings');
-  const visibleServices = services.filter((s) => s.category === category);
+
+  const visibleServices = useMemo(
+    () => services.filter((s) => s.category === category),
+    [services, category],
+  );
+
+  // عدد الخدمات في كل تصنيف — يظهر كرقم صغير جوه التاب
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const s of services) m[s.category] = (m[s.category] ?? 0) + 1;
+    return m;
+  }, [services]);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
@@ -53,20 +70,23 @@ export function ServicesAtelier({
 
       <ServicesHero />
 
-      <CategorySelector categories={categories} active={category} onChange={setCategory} />
+      <CategorySelector
+        categories={categories}
+        active={category}
+        onChange={setCategory}
+        counts={counts}
+      />
 
       <div className="relative z-10 pb-20">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={category}
-            initial={{ opacity: 0, y: 40, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -40, scale: 0.98 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <ServiceShowcase services={visibleServices} categorySlug={category} />
-          </motion.div>
-        </AnimatePresence>
+        {/* بدون AnimatePresence — تركيب فوري + أنيميشن دخول فقط */}
+        <motion.div
+          key={category}
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <ServiceShowcase services={visibleServices} categorySlug={category} />
+        </motion.div>
       </div>
 
       <ConciergeClose />
