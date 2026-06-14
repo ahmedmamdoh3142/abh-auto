@@ -11,13 +11,8 @@
  *
  * Three console states, plus a welcome seal:
  *   SIGN IN          email → password, remember, forgot-password link.
- *   CREATE ACCOUNT   full name, email, phone, city, password — the exact
- *                    profile the booking flow pre-fills from.
+ *   CREATE ACCOUNT   full name, email, phone (country code), city, password.
  *   FORGOT           email → reset-link confirmation.
- *
- * On success a welcome seal plays, then we route to ?redirect (or home).
- * Strict palette (obsidian / ivory / platinum / steel). next-intl + RTL,
- * framer-motion, deterministic particles, no third-party sign-in.
  */
 import { Suspense, useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
@@ -30,16 +25,15 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/components/shared/auth-provider';
+import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/* The car that carries the stage. Swap for any cinematic vehicle asset
-   (e.g. '/images/project-1.webp' or '/images/why-5.webp'). */
+/* The car that carries the stage. */
 const PORTAL_IMAGE = '/images/hero-bg.webp';
 
-/* Self-contained city list so login never couples to booking internals.
-   Labels are read from the existing `booking.cities` namespace. */
+/* Self-contained city list so login never couples to booking internals. */
 const CITY_KEYS = [
   'cairo', 'alexandria', 'giza', 'nasr_city',
   'new_cairo', 'maadi', 'zamalek', 'october',
@@ -382,6 +376,8 @@ function RegisterForm({
   t, onSuccess,
 }: { t: ReturnType<typeof useTranslations>; onSuccess: (name: string) => void }) {
   const { register } = useAuth();
+  const locale = useLocale();
+  const isAr = locale === 'ar';
   const [v, setV] = useState({ name: '', email: '', phone: '', city: '', password: '' });
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -391,7 +387,8 @@ function RegisterForm({
     name: v.name.trim() ? null : t('validation.nameRequired'),
     email: !v.email.trim() ? t('validation.emailRequired')
       : EMAIL_RE.test(v.email) ? null : t('validation.emailInvalid'),
-    phone: v.phone.trim() ? null : t('validation.phoneRequired'),
+    phone: !v.phone.trim() ? t('validation.phoneRequired')
+      : isValidPhone(v.phone) ? null : t('validation.phoneInvalid'),
     city: v.city ? null : t('validation.cityRequired'),
     password: !v.password ? t('validation.passwordRequired')
       : v.password.length >= 8 ? null : t('validation.passwordShort'),
@@ -420,9 +417,9 @@ function RegisterForm({
             placeholder={t('emailPlaceholder')} error={touched ? errors.email : null} />
         </Field>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5">
           <Field label={t('phone')}>
-            <TextInput icon={Phone} value={v.phone} onChange={(x) => set({ phone: x })} dir="ltr"
+            <PhoneField isAr={isAr} value={v.phone} onChange={(p) => set({ phone: p })}
               placeholder={t('phonePlaceholder')} error={touched ? errors.phone : null} />
           </Field>
           <Field label={t('city')}>
@@ -661,13 +658,39 @@ function CitySelect({
   t, value, onChange,
 }: { t: ReturnType<typeof useTranslations>; value: string; onChange: (v: string) => void }) {
   const tc = useTranslations('booking.cities');
+  const locale = useLocale();
+  const isAr = locale === 'ar';
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // مدن القاعدة: [{ code, name:{ar,en} }]
+  const [dbCities, setDbCities] = useState<{ code: string; name: { ar?: string; en?: string } }[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/cities');
+        const j = await res.json();
+        if (alive && j?.ok && Array.isArray(j.cities) && j.cities.length) setDbCities(j.cities);
+      } catch { /* fallback للستاتيك */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  // العناصر المعروضة: من القاعدة إن وُجدت، وإلا من المفاتيح الستاتيك (مع الترجمة)
+  const items: { code: string; label: string }[] = dbCities
+    ? dbCities.map((c) => ({ code: c.code, label: (isAr ? c.name?.ar : c.name?.en) || c.name?.ar || c.name?.en || c.code }))
+    : CITY_KEYS.map((c) => ({ code: c, label: tc(c) }));
+
+  const selectedLabel = items.find((c) => c.code === value)?.label
+    ?? (dbCities ? value : (value ? tc(value) : ''));
 
   return (
     <div className="relative" ref={ref}>
@@ -679,7 +702,7 @@ function CitySelect({
         ].join(' ')}
       >
         <MapPin className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-platinum/60" strokeWidth={1.8} />
-        <span className={value ? 'text-ivory' : 'text-steel/70'}>{value ? tc(value) : t('cityPlaceholder')}</span>
+        <span className={value ? 'text-ivory' : 'text-steel/70'}>{value ? selectedLabel : t('cityPlaceholder')}</span>
         <ChevronDown className={`h-4 w-4 flex-none text-platinum transition-transform duration-300 ${open ? 'rotate-180' : ''}`} strokeWidth={1.8} />
       </button>
       <AnimatePresence>
@@ -689,18 +712,18 @@ function CitySelect({
             transition={{ duration: 0.2 }}
             className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-white/12 bg-[#0c0d0e]/96 p-1.5 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
           >
-            {CITY_KEYS.map((c) => {
-              const on = c === value;
+            {items.map((c) => {
+              const on = c.code === value;
               return (
                 <button
-                  key={c} type="button" data-cursor="hover"
-                  onMouseDown={(e) => { e.preventDefault(); onChange(c); setOpen(false); }}
+                  key={c.code} type="button" data-cursor="hover"
+                  onMouseDown={(e) => { e.preventDefault(); onChange(c.code); setOpen(false); }}
                   className={[
                     'flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-start text-sm transition-colors duration-200',
                     on ? 'bg-white/[0.08] text-ivory' : 'text-platinum/80 hover:bg-white/[0.05] hover:text-ivory',
                   ].join(' ')}
                 >
-                  {tc(c)}
+                  {c.label}
                   {on && <Check className="h-3.5 w-3.5 text-platinum" strokeWidth={2.4} />}
                 </button>
               );

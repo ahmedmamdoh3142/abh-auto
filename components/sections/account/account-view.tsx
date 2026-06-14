@@ -4,25 +4,28 @@
  * AccountView — the /account member dashboard for ABH Auto.
  * Path: components/sections/account/account-view.tsx  (export `AccountView`)
  *
- * Cinematic, image-led owner portal (obsidian / ivory / platinum / steel,
- * Italiana display, EASE, framer-motion, RTL, next-intl):
- *   OVERVIEW · BOOKINGS (detail drawer: reschedule / cancel / payment) · GARAGE · PROFILE.
- * Car imagery is drawn from the shipping /images/project-*.webp plates.
+ * الألوان تأتي من القاعدة (جدول colors) عبر prop `colors`، والمدن من /api/cities.
+ * نظام الحالة (status) صار له "روح": نقطة لونية محسوبة لكل حالة
+ *   upcoming → ذهبي/كهرماني   active → برتقالي نابض   completed → أخضر زمردي   cancelled → أحمر هادئ
+ * مع الحفاظ على لغة الثيم (obsidian / platinum / ivory).
  */
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   LayoutGrid, CalendarCheck, Car, UserRound, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowLeft, Clock, MapPin,
   ShieldCheck, CircleDot, Calendar, LogOut, CreditCard, Wallet, CalendarClock, Sparkles,
+  Gauge, Hourglass, History, KeyRound, Hash,
 } from 'lucide-react';
 
 import {
-  BRANDS, COLORS, SERVICES, priceFor, currencyFmt, type VehicleSize,
+  BRANDS, SERVICES, priceFor, currencyFmt, type VehicleSize,
 } from '@/lib/booking-data';
+import type { DbColor } from '@/lib/booking-data-db';
+import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 import { useAuth, type Vehicle, type BookingRecord, type BookingStatus } from '@/components/shared/auth-provider';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -35,11 +38,51 @@ const COVER_IMAGE = '/images/cta-bg.webp';
 function hash(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
 function carImg(seed: string) { return CAR_IMAGES[hash(seed || 'x') % CAR_IMAGES.length]; }
 
+/* ─── Status palette ──────────────────────────────────────────────────
+ * كل حالة لها لون "حقيقي" مكتوم (مش صارخ) عشان يدّي روح من غير ما يكسر فخامة الثيم.
+ * النقطة (dot) هي اللمسة اللونية، وكل ما حواليها بلاتيني/عاجي. */
+type StatusTone = {
+  dot: string;        // لون النقطة (الـ accent الحقيقي)
+  glow: string;       // هالة النقطة
+  text: string;       // لون النص داخل الشِيب
+  border: string;     // حد الشِيب
+  bg: string;         // خلفية الشِيب
+  bar: string;        // تدرّج شريط التقدّم (للـ active)
+};
+const STATUS_TONES: Record<BookingStatus, StatusTone> = {
+  upcoming:  { dot: '#d9b25f', glow: 'rgba(217,178,95,0.55)',  text: '#e8d6a8', border: 'rgba(217,178,95,0.32)', bg: 'rgba(217,178,95,0.08)',  bar: 'linear-gradient(90deg,#d9b25f,#f0dca6)' },
+  active:    { dot: '#e8893f', glow: 'rgba(232,137,63,0.6)',   text: '#f3c69c', border: 'rgba(232,137,63,0.34)', bg: 'rgba(232,137,63,0.09)',  bar: 'linear-gradient(90deg,#e8893f,#f6b27a)' },
+  completed: { dot: '#46b98a', glow: 'rgba(70,185,138,0.5)',   text: '#a8e6cb', border: 'rgba(70,185,138,0.30)', bg: 'rgba(70,185,138,0.08)',  bar: 'linear-gradient(90deg,#46b98a,#7fe0b7)' },
+  cancelled: { dot: '#c98a8a', glow: 'rgba(201,138,138,0.4)',  text: '#e7b4b4', border: 'rgba(124,26,26,0.4)',   bg: 'rgba(42,20,20,0.4)',     bar: 'linear-gradient(90deg,#7c1a1a,#c98a8a)' },
+};
+
 type SectionId = 'overview' | 'bookings' | 'garage' | 'profile';
 type Tr = ReturnType<typeof useTranslations>;
 type Mem = NonNullable<ReturnType<typeof useAuth>['member']>;
 
-export function AccountView() {
+/* مدن من القاعدة (هوك مشترك) */
+function useDbCities(isAr: boolean) {
+  const [cities, setCities] = useState<{ code: string; label: string }[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/cities');
+        const j = await res.json();
+        if (alive && j?.ok && Array.isArray(j.cities) && j.cities.length) {
+          setCities(j.cities.map((c: any) => ({
+            code: c.code,
+            label: (isAr ? c.name?.ar : c.name?.en) || c.name?.ar || c.name?.en || c.code,
+          })));
+        }
+      } catch { /* fallback handled by caller */ }
+    })();
+    return () => { alive = false; };
+  }, [isAr]);
+  return cities;
+}
+
+export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
   const t = useTranslations('account');
   const tb = useTranslations('booking');
   const locale = useLocale();
@@ -71,17 +114,19 @@ export function AccountView() {
 
       <section className="relative pb-28 pt-12 md:pt-14">
         <div className="container">
-          <AnimatePresence mode="wait">
+          <div className="grid [&>*]:col-start-1 [&>*]:row-start-1">
+          <AnimatePresence initial={false}>
             <motion.div key={section}
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}
-              transition={{ duration: 0.5, ease: EASE }}
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.35, ease: EASE }}
             >
-              {section === 'overview' && <Overview t={t} tb={tb} isAr={isAr} member={member} onGo={setSection} onOpen={setDetailId} />}
+              {section === 'overview' && <Overview t={t} tb={tb} isAr={isAr} member={member} colors={colors} onGo={setSection} onOpen={setDetailId} />}
               {section === 'bookings' && <Bookings t={t} tb={tb} isAr={isAr} member={member} onOpen={setDetailId} />}
-              {section === 'garage' && <Garage t={t} tb={tb} member={member} />}
-              {section === 'profile' && <Profile t={t} tb={tb} member={member} />}
+              {section === 'garage' && <Garage t={t} tb={tb} member={member} colors={colors} />}
+              {section === 'profile' && <Profile t={t} tb={tb} isAr={isAr} member={member} />}
             </motion.div>
           </AnimatePresence>
+          </div>
         </div>
       </section>
 
@@ -95,9 +140,10 @@ export function AccountView() {
 /* ─── Hero ─────────────────────────────────────────────────────────── */
 function useCountUp(target: number, run: boolean) {
   const [n, setN] = useState(0);
+  const reduce = useReducedMotion();
   useEffect(() => {
-    if (!run) { setN(target); return; }
-    let raf = 0; const start = performance.now(); const dur = 1000;
+    if (!run || reduce) { setN(target); return; }
+    let raf = 0; const start = performance.now(); const dur = 1100;
     const tick = (now: number) => {
       const p = Math.min(1, (now - start) / dur);
       setN(Math.round(target * (1 - Math.pow(1 - p, 3))));
@@ -105,32 +151,33 @@ function useCountUp(target: number, run: boolean) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, run]);
+  }, [target, run, reduce]);
   return n;
 }
 
 function AccountHero({ t, member }: { t: Tr; member: Mem }) {
   const since = new Date(member.since).getFullYear();
   const upcoming = member.bookings.filter((b) => b.status === 'upcoming' || b.status === 'active').length;
+  const reduce = useReducedMotion();
   const particles = useMemo(
     () => Array.from({ length: 18 }, (_, i) => ({ id: i, left: (i * 61) % 100, top: ((i * 29) % 70) + 10, delay: (i % 6) * 0.6, duration: 6 + (i % 4) })),
     [],
   );
   const stats = [
-    { label: t('stats.vehicles'), value: member.vehicles.length, count: true },
-    { label: t('stats.upcoming'), value: upcoming, count: true },
-    { label: t('stats.visits'), value: member.bookings.filter((b) => b.status === 'completed').length, count: true },
-    { label: t('stats.since'), value: since, count: false },
+    { label: t('stats.vehicles'), value: member.vehicles.length, count: true, icon: Car },
+    { label: t('stats.upcoming'), value: upcoming, count: true, icon: Hourglass },
+    { label: t('stats.visits'), value: member.bookings.filter((b) => b.status === 'completed').length, count: true, icon: History },
+    { label: t('stats.since'), value: since, count: false, icon: ShieldCheck },
   ];
 
   return (
-    <section className="relative isolate overflow-hidden pb-12 pt-32 md:pb-14 md:pt-40">
+    <section className="relative isolate overflow-hidden pb-12 pt-32 md:pb-16 md:pt-40">
       <div aria-hidden className="absolute inset-0 -z-20">
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${COVER_IMAGE}')`, filter: 'grayscale(0.7) brightness(0.38) contrast(1.08)' }} />
+        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${COVER_IMAGE}')`, filter: 'grayscale(0.7) brightness(0.36) contrast(1.08)' }} />
       </div>
-      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/88 via-obsidian/72 to-obsidian" />
+      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/90 via-obsidian/74 to-obsidian" />
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        {particles.map((p) => (
+        {!reduce && particles.map((p) => (
           <motion.span key={p.id} className="absolute h-0.5 w-0.5 rounded-full bg-platinum/40"
             style={{ left: `${p.left}%`, top: `${p.top}%` }}
             animate={{ opacity: [0, 0.7, 0], y: [10, -46, -92] }}
@@ -169,7 +216,7 @@ function AccountHero({ t, member }: { t: Tr; member: Mem }) {
   );
 }
 
-function StatTile({ label, value, count, index }: { label: string; value: number; count: boolean; index: number }) {
+function StatTile({ label, value, count, icon: Icon, index }: { label: string; value: number; count: boolean; icon: React.ElementType; index: number }) {
   const [run, setRun] = useState(false);
   useEffect(() => { const id = setTimeout(() => setRun(true), 250 + index * 90); return () => clearTimeout(id); }, [index]);
   const shown = useCountUp(value, count && run);
@@ -177,6 +224,7 @@ function StatTile({ label, value, count, index }: { label: string; value: number
     <motion.div variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }} transition={{ duration: 0.55, ease: EASE }}
       className="group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 transition-colors duration-500 hover:border-white/[0.16]">
       <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-platinum/40 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+      <Icon aria-hidden className="absolute end-4 top-4 h-4 w-4 text-platinum/25 transition-colors duration-500 group-hover:text-platinum/45" strokeWidth={1.6} />
       <div className="font-display text-[2.4rem] leading-none tabular-nums text-ivory md:text-[2.7rem]">{count ? shown : value}</div>
       <div className="mt-2.5 text-[0.55rem] uppercase tracking-[0.22em] text-steel">{label}</div>
     </motion.div>
@@ -219,7 +267,7 @@ function SectionNav({ t, section, setSection }: { t: Tr; section: SectionId; set
 }
 
 /* ─── Overview ─────────────────────────────────────────────────────── */
-function Overview({ t, tb, isAr, member, onGo, onOpen }: { t: Tr; tb: Tr; isAr: boolean; member: Mem; onGo: (s: SectionId) => void; onOpen: (id: string) => void }) {
+function Overview({ t, tb, isAr, member, colors, onGo, onOpen }: { t: Tr; tb: Tr; isAr: boolean; member: Mem; colors: DbColor[]; onGo: (s: SectionId) => void; onOpen: (id: string) => void }) {
   const next = useMemo(() => {
     const live = member.bookings.filter((b) => b.status === 'upcoming' || b.status === 'active');
     return live.sort((a, b) => +new Date(a.date) - +new Date(b.date))[0] ?? null;
@@ -241,7 +289,7 @@ function Overview({ t, tb, isAr, member, onGo, onOpen }: { t: Tr; tb: Tr; isAr: 
         </div>
         {member.vehicles.length ? (
           <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-3">
-            {member.vehicles.map((v) => <div key={v.id} className="w-[280px] flex-none snap-start"><VehicleCard tb={tb} t={t} v={v} compact /></div>)}
+            {member.vehicles.map((v) => <div key={v.id} className="w-[280px] flex-none snap-start"><VehicleCard t={t} v={v} colors={colors} compact /></div>)}
             <button data-cursor="hover" onClick={() => onGo('garage')}
               className="group grid w-[200px] flex-none snap-start place-items-center rounded-[24px] border border-dashed border-white/15 transition-all duration-300 hover:border-platinum/40 hover:bg-white/[0.02]">
               <span className="flex flex-col items-center gap-2.5 text-platinum/55 transition-colors group-hover:text-platinum">
@@ -268,13 +316,16 @@ function Overview({ t, tb, isAr, member, onGo, onOpen }: { t: Tr; tb: Tr; isAr: 
 
 function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: boolean; b: BookingRecord; onOpen: (id: string) => void }) {
   const days = daysUntil(b.date);
+  const tone = STATUS_TONES[b.status];
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}
       className="group relative overflow-hidden rounded-[28px] border border-white/[0.1]">
       <div aria-hidden className="absolute inset-0 scale-[1.04] bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-[1.1] group-hover:grayscale-0"
         style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.55) brightness(0.5) contrast(1.05)' }} />
       <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/75 to-[#050608]/30" />
-      <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-platinum/50 to-transparent" />
+      {/* شريط لوني علوي بلون الحالة — توقيع بصري للروح */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ background: tone.bar, opacity: 0.9 }} />
+      <div aria-hidden className="pointer-events-none absolute -inset-x-10 -top-20 h-40 blur-3xl" style={{ background: `radial-gradient(closest-side, ${tone.glow}, transparent)`, opacity: 0.5 }} />
 
       <div className="relative p-7 md:p-9">
         <div className="flex flex-wrap items-start justify-between gap-5">
@@ -314,7 +365,7 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
   );
 }
 
-/* ─── Bookings (ENHANCED GRID CARDS WITH VISIBLE BACKGROUND IMAGES) ─── */
+/* ─── Bookings ─── */
 function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolean; member: Mem; onOpen: (id: string) => void }) {
   const [tab, setTab] = useState<'live' | 'past'>('live');
   const live = member.bookings.filter((b) => b.status === 'upcoming' || b.status === 'active').sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -342,8 +393,8 @@ function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolea
         <Link href="/booking" data-cursor="hover" className="hidden sm:block"><Pill>{t('bookings.newBooking')}</Pill></Link>
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div key={tab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: EASE }}
+      <AnimatePresence initial={false}>
+        <motion.div key={tab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}
           className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {list.length === 0
             ? <div className="col-span-full"><EmptyCard icon={tab === 'live' ? Calendar : CalendarCheck} title={tab === 'live' ? t('bookings.emptyLive') : t('bookings.emptyPast')} cta={t('bookings.newBooking')} href="/booking" /></div>
@@ -354,11 +405,11 @@ function Bookings({ t, tb, isAr, member, onOpen }: { t: Tr; tb: Tr; isAr: boolea
   );
 }
 
-/* Professional grid card with full, clear background image (no fog/blur) */
 function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: boolean; b: BookingRecord; onOpen: (id: string) => void }) {
   const isActive = b.status === 'active';
   const isPast = b.status === 'completed' || b.status === 'cancelled';
   const stage = b.stage ?? 0;
+  const tone = STATUS_TONES[b.status];
   const stageSteps = [t('bookings.stages.received'), t('bookings.stages.inService'), t('bookings.stages.quality'), t('bookings.stages.ready')];
   const currentStageLabel = stageSteps[stage] || stageSteps[0];
 
@@ -370,28 +421,26 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
       whileHover={{ y: -4 }}
       className="group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/20 transition-all duration-500 hover:border-white/25 hover:shadow-2xl"
     >
-      {/* Full background image - now fully visible, only a very light dark overlay */}
+      {/* صورة السيارة — خلفية كاملة للكرت (بدون غمامة سوداء) */}
       <div className="absolute inset-0">
         <div
+          aria-hidden
           className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105"
-          style={{
-            backgroundImage: `url('${carImg(b.plate || b.id)}')`,
-            filter: 'brightness(0.9) contrast(1.05)', // removed grayscale, minimal brightness adjustment
-          }}
+          style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'brightness(0.95) contrast(1.05)' }}
         />
-        {/* Very subtle gradient at bottom only - no fog */}
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-obsidian/60 to-transparent" />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian/30 via-obsidian/60 to-obsidian/20" />
       </div>
 
-      {/* Content container - NO backdrop blur, text sits directly on image with subtle text-shadow for readability */}
-      <div className="relative flex flex-1 flex-col p-5 md:p-6">
-        {/* Top row: status chips + total */}
+      {/* لمسة الحالة: شريط جانبي رفيع بلون الحالة */}
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 z-20 w-[3px]" style={{ background: tone.bar, opacity: 0.85 }} />
+
+      <div className="relative z-10 flex flex-1 flex-col p-5 md:p-6 [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             <StatusChip t={t} status={b.status} />
             {b.status !== 'cancelled' && <PaymentChip t={t} branch={b.payment === 'branch'} />}
           </div>
-          <div className="rounded-xl bg-obsidian/40 px-3 py-1.5 text-end">
+          <div className="text-end">
             <div className="text-[0.5rem] uppercase tracking-[0.2em] text-steel">{t('bookings.total')}</div>
             <div dir="ltr" className="font-display text-xl tabular-nums text-ivory md:text-2xl">
               {fmtMoney(b.total)} <span className="text-xs text-platinum/70">{tb('currency')}</span>
@@ -399,22 +448,17 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
           </div>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Bottom section: vehicle info & actions - solid but transparent background, no blur */}
-        <div className="mt-auto space-y-3 rounded-xl bg-obsidian/50 p-4">
+        <div className="mt-auto space-y-3">
           <div>
-            <h3 className="font-display text-2xl uppercase leading-tight text-ivory md:text-3xl">
-              {b.vehicleLabel}
-            </h3>
+            <h3 className="font-display text-2xl uppercase leading-tight text-ivory md:text-3xl">{b.vehicleLabel}</h3>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] text-platinum/90">
               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" strokeWidth={1.6} />{tb(`branches.${b.branchKey}`)}</span>
               <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" strokeWidth={1.6} />{fmtDate(b.date, isAr)} · {b.time}</span>
             </div>
           </div>
 
-          {/* Service chips */}
           <div className="flex flex-wrap gap-1.5">
             {b.serviceSnapshots?.slice(0, 2).map((snap: any, idx: number) => (
               <span key={idx} className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">
@@ -428,28 +472,25 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
             )}
           </div>
 
-          {/* Progress for active bookings */}
           {isActive && (
             <div>
               <div className="mb-1 flex items-center justify-between text-[0.55rem] uppercase tracking-[0.14em]">
-                <span className="text-platinum/90">{t('bookings.inProgress')}</span>
+                <span style={{ color: tone.text }}>{t('bookings.inProgress')}</span>
                 <span className="text-steel">{stage + 1}/{stageSteps.length}</span>
               </div>
-              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/30">
+              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/15">
                 <motion.div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-platinum to-ivory"
+                  className="absolute left-0 top-0 h-full"
+                  style={{ background: tone.bar }}
                   initial={{ width: 0 }}
                   animate={{ width: `${((stage + 1) / stageSteps.length) * 100}%` }}
                   transition={{ duration: 0.5, ease: EASE }}
                 />
               </div>
-              <div className="mt-1 text-right text-[0.5rem] uppercase tracking-[0.1em] text-platinum/80">
-                {currentStageLabel}
-              </div>
+              <div className="mt-1 text-right text-[0.5rem] uppercase tracking-[0.1em] text-platinum/80">{currentStageLabel}</div>
             </div>
           )}
 
-          {/* Action buttons */}
           <div className="flex items-center justify-between gap-2 pt-1">
             {isPast ? (
               <Link href="/booking" data-cursor="hover" className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-black/30 px-3 py-1.5 text-[0.6rem] uppercase tracking-[0.16em] text-platinum/90 transition-colors hover:bg-black/50">
@@ -458,11 +499,8 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
             ) : (
               <div />
             )}
-            <button
-              data-cursor="hover"
-              onClick={() => onOpen(b.id)}
-              className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.18em] text-platinum/90 transition-all duration-300 hover:text-ivory"
-            >
+            <button data-cursor="hover" onClick={() => onOpen(b.id)}
+              className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.18em] text-platinum/90 transition-all duration-300 hover:text-ivory">
               {t('bookings.viewDetails')}
               <ArrowUpRight className="reversible-icon h-3.5 w-3.5" strokeWidth={2} />
             </button>
@@ -473,12 +511,13 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
   );
 }
 
-/* Original BookingCard (used in overview, unchanged) */
 function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr: boolean; b: BookingRecord; onOpen: (id: string) => void; compact?: boolean }) {
   const isActive = b.status === 'active';
+  const tone = STATUS_TONES[b.status];
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={['group relative overflow-hidden rounded-[24px] border bg-white/[0.02] transition-colors duration-300', isActive ? 'border-platinum/25' : 'border-white/[0.08] hover:border-white/15'].join(' ')}>
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-[3px]" style={{ background: tone.bar, opacity: 0.8 }} />
       <div className="flex flex-col sm:flex-row">
         <div className="relative h-32 w-full flex-none overflow-hidden sm:h-auto sm:w-44">
           <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-105 group-hover:grayscale-0"
@@ -530,25 +569,33 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
 
 function ServiceRail({ t, stage }: { t: Tr; stage: number }) {
   const steps = [t('bookings.stages.received'), t('bookings.stages.inService'), t('bookings.stages.quality'), t('bookings.stages.ready')];
+  const tone = STATUS_TONES.active;
   return (
     <div className="mt-5 rounded-2xl border border-white/[0.07] bg-obsidian/50 p-4 backdrop-blur-sm">
-      <div className="mb-3 flex items-center gap-2 text-[0.55rem] uppercase tracking-[0.2em] text-platinum/70">
-        <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-platinum opacity-70" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-platinum" /></span>
+      <div className="mb-3 flex items-center gap-2 text-[0.55rem] uppercase tracking-[0.2em]" style={{ color: tone.text }}>
+        <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: tone.dot }} /><span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: tone.dot }} /></span>
         {t('bookings.inProgress')}
       </div>
       <div className="relative flex items-center justify-between">
         <span aria-hidden className="absolute inset-x-0 top-[11px] h-px bg-white/10" />
-        <motion.span aria-hidden className="absolute top-[11px] h-px bg-gradient-to-r from-platinum/50 via-ivory to-platinum/50"
-          initial={false} animate={{ width: `${(stage / (steps.length - 1)) * 100}%` }} transition={{ duration: 0.7, ease: EASE }} style={{ insetInlineStart: 0 }} />
+        <motion.span aria-hidden className="absolute top-[11px] h-px"
+          style={{ insetInlineStart: 0, background: tone.bar }}
+          initial={false} animate={{ width: `${(stage / (steps.length - 1)) * 100}%` }} transition={{ duration: 0.7, ease: EASE }} />
         {steps.map((s, i) => {
           const done = i < stage; const active = i === stage;
+          const dotStyle: React.CSSProperties | undefined = active
+            ? { borderColor: 'transparent', background: tone.bar, color: '#1a1208' }
+            : done ? { borderColor: tone.border, background: tone.bg, color: tone.text } : undefined;
+          const labelStyle: React.CSSProperties | undefined = active
+            ? { color: '#f5f5f0' } : done ? { color: tone.text } : undefined;
           return (
             <div key={s} className="relative z-10 flex flex-col items-center gap-2">
-              <span className={['grid h-6 w-6 place-items-center rounded-full border text-[0.5rem] transition-all duration-500',
-                active ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : done ? 'border-platinum/50 bg-platinum/10 text-ivory' : 'border-white/12 bg-white/[0.03] text-steel'].join(' ')}>
+              <span style={dotStyle}
+                className={`grid h-6 w-6 place-items-center rounded-full border text-[0.5rem] transition-all duration-500 ${active || done ? '' : 'border-white/12 bg-white/[0.03] text-steel'}`}>
                 {done ? <Check className="h-3 w-3" strokeWidth={2.6} /> : <CircleDot className="h-3 w-3" strokeWidth={2} />}
               </span>
-              <span className={`max-w-[6rem] text-center text-[0.5rem] uppercase tracking-[0.12em] ${active ? 'text-ivory' : done ? 'text-platinum/70' : 'text-steel'}`}>{s}</span>
+              <span style={labelStyle}
+                className={`max-w-[6rem] text-center text-[0.5rem] uppercase tracking-[0.12em] ${active || done ? '' : 'text-steel'}`}>{s}</span>
             </div>
           );
         })}
@@ -557,13 +604,14 @@ function ServiceRail({ t, stage }: { t: Tr; stage: number }) {
   );
 }
 
-/* ─── Booking detail drawer (unchanged) ────────────────────────────── */
+/* ─── Booking detail drawer ─── */
 function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; isAr: boolean; booking: BookingRecord; onClose: () => void }) {
   const { updateBooking, cancelBooking } = useAuth();
   const [mode, setMode] = useState<'view' | 'reschedule' | 'cancel'>('view');
 
   const editable = booking.status === 'upcoming';
   const size = (booking.size ?? 'large') as VehicleSize;
+  const tone = STATUS_TONES[booking.status];
 
   return (
     <Modal onClose={onClose} title={t('bookings.detail.title')} wide>
@@ -573,6 +621,7 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
             <div className="relative -mx-6 -mt-2 mb-6 h-40 overflow-hidden md:-mx-8 md:h-48">
               <div aria-hidden className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${carImg(booking.plate || booking.id)}')`, filter: 'grayscale(0.5) brightness(0.55)' }} />
               <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#0c0d0e] via-[#0c0d0e]/40 to-transparent" />
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ background: tone.bar, opacity: 0.9 }} />
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-5 md:p-6">
                 <div>
                   <div className="flex flex-wrap items-center gap-2"><StatusChip t={t} status={booking.status} /><PaymentChip t={t} branch={booking.payment === 'branch'} /></div>
@@ -581,6 +630,8 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
                 {booking.plate && <LicensePlate text={booking.plate} />}
               </div>
             </div>
+
+            {booking.status === 'active' && <div className="mb-6"><ServiceRail t={t} stage={booking.stage ?? 0} /></div>}
 
             <div className="space-y-2.5">
               <DetailRow k={t('bookings.detail.reference')} mono>{booking.id}</DetailRow>
@@ -777,8 +828,8 @@ function TimeGrid({ tb, value, onPick }: { tb: Tr; value: string; onPick: (t: st
   );
 }
 
-/* ─── Garage (unchanged) ───────────────────────────────────────────── */
-function Garage({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
+/* ─── Garage ─── */
+function Garage({ t, tb, member, colors }: { t: Tr; tb: Tr; member: Mem; colors: DbColor[] }) {
   const { removeVehicle } = useAuth();
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [adding, setAdding] = useState(false);
@@ -795,7 +846,7 @@ function Garage({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        {member.vehicles.map((v) => <VehicleCard key={v.id} tb={tb} t={t} v={v} onEdit={() => setEditing(v)} onRemove={() => setConfirm(v)} />)}
+        {member.vehicles.map((v) => <VehicleCard key={v.id} t={t} v={v} colors={colors} onEdit={() => setEditing(v)} onRemove={() => setConfirm(v)} />)}
         <button data-cursor="hover" onClick={() => setAdding(true)}
           className="group grid min-h-[230px] place-items-center rounded-[26px] border border-dashed border-white/15 transition-all duration-300 hover:border-platinum/40 hover:bg-white/[0.02]">
           <span className="flex flex-col items-center gap-3 text-platinum/55 transition-colors group-hover:text-platinum">
@@ -806,16 +857,16 @@ function Garage({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
       </div>
 
       <AnimatePresence>
-        {(adding || editing) && <VehicleModal t={t} tb={tb} vehicle={editing} onClose={() => { setAdding(false); setEditing(null); }} />}
+        {(adding || editing) && <VehicleModal t={t} vehicle={editing} colors={colors} onClose={() => { setAdding(false); setEditing(null); }} />}
         {confirm && <ConfirmDialog t={t} vehicle={confirm} onCancel={() => setConfirm(null)} onConfirm={() => { removeVehicle(confirm.id); setConfirm(null); }} />}
       </AnimatePresence>
     </div>
   );
 }
 
-function VehicleCard({ t, tb, v, onEdit, onRemove, compact }: { t: Tr; tb: Tr; v: Vehicle; onEdit?: () => void; onRemove?: () => void; compact?: boolean }) {
+function VehicleCard({ t, v, colors, onEdit, onRemove, compact }: { t: Tr; v: Vehicle; colors: DbColor[]; onEdit?: () => void; onRemove?: () => void; compact?: boolean }) {
   const brand = BRANDS.find((b: any) => b.id === v.brandId);
-  const color = COLORS.find((c: any) => c.key === v.colorKey);
+  const color = colors.find((c) => c.key === v.colorKey);
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={`group relative overflow-hidden rounded-[26px] border border-white/[0.08] transition-colors duration-300 hover:border-white/20 ${compact ? 'h-[200px]' : 'h-[260px]'}`}>
@@ -826,7 +877,7 @@ function VehicleCard({ t, tb, v, onEdit, onRemove, compact }: { t: Tr; tb: Tr; v
       <div className="relative flex items-start justify-between p-5">
         {color && (
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-obsidian/50 px-3 py-1.5 text-[0.56rem] uppercase tracking-[0.14em] text-platinum/90 backdrop-blur-sm">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: (color as any).hex, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.3)' }} />{tb(`colors.${v.colorKey}`)}
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: color.hex, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.3)' }} />{color.name}
           </span>
         )}
         {(onEdit || onRemove) && (
@@ -858,8 +909,8 @@ function splitPlate(plate: string) {
 function joinPlate(digits: string, letters: string) {
   return [digits.trim(), letters.trim()].filter(Boolean).join(' ');
 }
- 
-function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Vehicle | null; onClose: () => void }) {
+
+function VehicleModal({ t, vehicle, colors, onClose }: { t: Tr; vehicle: Vehicle | null; colors: DbColor[]; onClose: () => void }) {
   const { addVehicle, updateVehicle } = useAuth();
   const initSplit = splitPlate(vehicle?.plate ?? '');
   const [v, setV] = useState({
@@ -873,9 +924,8 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
   const [touched, setTouched] = useState(false);
   const set = (p: Partial<typeof v>) => setV((s) => ({ ...s, ...p }));
   const brand = BRANDS.find((b: any) => b.id === v.brandId);
-  // مكتمل = ماركة + موديل + لون + على الأقل رقم واحد
   const valid = v.brandId && v.model && v.colorKey && v.plateDigits.trim().length >= 1;
- 
+
   const save = () => {
     if (!valid) { setTouched(true); return; }
     const payload = {
@@ -888,7 +938,7 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
     else addVehicle(payload as any);
     onClose();
   };
- 
+
   return (
     <Modal onClose={onClose} title={vehicle ? t('garage.editTitle') : t('garage.addTitle')}>
       <div className="space-y-5">
@@ -898,20 +948,19 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
         </div>
         <Field label={t('garage.color')}>
           <div className="flex flex-wrap gap-2.5">
-            {COLORS.map((c: any) => {
+            {colors.map((c) => {
               const on = v.colorKey === c.key;
               return (
-                <button key={c.key} type="button" data-cursor="hover" title={tb(`colors.${c.key}`)} onClick={() => set({ colorKey: c.key })}
+                <button key={c.key} type="button" data-cursor="hover" title={c.name} onClick={() => set({ colorKey: c.key })}
                   className={['relative grid h-10 w-10 place-items-center rounded-full transition-all duration-300', on ? 'ring-2 ring-ivory ring-offset-2 ring-offset-[#0c0d0e]' : 'ring-1 ring-white/15 hover:ring-white/40'].join(' ')}>
                   <span className="h-8 w-8 rounded-full" style={{ background: c.hex, boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.25), inset 0 -2px 4px rgba(0,0,0,0.4)' }} />
-                  {on && <Check className="absolute h-4 w-4" strokeWidth={2.8} style={{ color: ['white', 'silver', 'beige', 'yellow', 'gold'].includes(c.key) ? '#000' : '#fff' }} />}
+                  {on && <Check className="absolute h-4 w-4" strokeWidth={2.8} style={{ color: c.light ? '#000' : '#fff' }} />}
                 </button>
               );
             })}
           </div>
         </Field>
- 
-        {/* اللوحة — جزئين: أرقام + حروف */}
+
         <Field label={t('garage.plate')}>
           <div dir="ltr" className="grid grid-cols-[1.1fr_1.4fr] gap-3">
             <input value={v.plateDigits} inputMode="numeric" dir="ltr"
@@ -924,12 +973,12 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
               className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-center font-display text-lg tracking-[0.22em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/50 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
           </div>
         </Field>
- 
+
         <Field label={t('garage.year')}>
           <input value={v.year} dir="ltr" inputMode="numeric" onChange={(e) => set({ year: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder={t('garage.yearPlaceholder')}
             className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
         </Field>
- 
+
         {touched && !valid && <p className="text-[0.66rem] text-[#c98a8a]">{t('garage.fillAll')}</p>}
         <div className="flex items-center justify-end gap-3 pt-1">
           <button data-cursor="hover" onClick={onClose}><GhostMini>{t('garage.cancel')}</GhostMini></button>
@@ -940,14 +989,27 @@ function VehicleModal({ t, tb, vehicle, onClose }: { t: Tr; tb: Tr; vehicle: Veh
   );
 }
 
-/* ─── Profile (unchanged) ──────────────────────────────────────────── */
-function Profile({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
+/* ─── Profile ─── */
+function Profile({ t, tb, isAr, member }: { t: Tr; tb: Tr; isAr: boolean; member: Mem }) {
   const { updateProfile } = useAuth();
   const [v, setV] = useState({ name: member.name, email: member.email, phone: member.phone, city: member.city });
   const [saved, setSaved] = useState(false);
+  const [touched, setTouched] = useState(false);
   const set = (p: Partial<typeof v>) => { setV((s) => ({ ...s, ...p })); setSaved(false); };
   const dirty = v.name !== member.name || v.email !== member.email || v.phone !== member.phone || v.city !== member.city;
-  const save = () => { updateProfile(v); setSaved(true); };
+  const phoneOk = !v.phone.trim() || isValidPhone(v.phone);
+  const phoneError = touched && !phoneOk ? (isAr ? 'رقم غير صحيح' : 'Invalid phone number') : null;
+  const save = () => { if (!phoneOk) { setTouched(true); return; } updateProfile(v); setSaved(true); };
+
+  // صلاحية الأكونت — لو admin/staff نظهر بوابة الداشبورد
+  const role = member.role;
+  const isPrivileged = role === 'admin' || role === 'staff';
+
+  // مدن من القاعدة (مع fallback آمن للستاتيك المترجم)
+  const dbCities = useDbCities(isAr);
+  const cityOptions = dbCities
+    ? dbCities.map((c) => ({ value: c.code, label: c.label }))
+    : CITY_KEYS.map((c) => ({ value: c, label: tb.has(`cities.${c}`) ? tb(`cities.${c}`) : c }));
 
   return (
     <div className="max-w-2xl">
@@ -955,6 +1017,8 @@ function Profile({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
         <h2 className="font-display text-2xl font-light uppercase tracking-tight text-ivory md:text-3xl">{t('profile.title')}</h2>
         <p className="mt-2 text-sm text-platinum/60">{t('profile.subtitle')}</p>
       </div>
+
+      {isPrivileged && <AdminGateway t={t} role={role} isAr={isAr} />}
 
       <div className="overflow-hidden rounded-[26px] border border-white/[0.08] bg-white/[0.02]">
         <div className="relative h-32 md:h-40">
@@ -970,15 +1034,17 @@ function Profile({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Field label={t('profile.fullName')}><Input value={v.name} onChange={(x) => set({ name: x })} /></Field>
-            <Field label={t('profile.phone')}><Input value={v.phone} dir="ltr" onChange={(x) => set({ phone: x })} /></Field>
+            <Field label={t('profile.phone')}>
+              <PhoneField isAr={isAr} value={v.phone} onChange={(p) => set({ phone: p })} error={phoneError} />
+            </Field>
             <Field label={t('profile.email')}><Input value={v.email} dir="ltr" onChange={(x) => set({ email: x })} /></Field>
-            <Field label={t('profile.city')}><Select value={v.city} placeholder={tb('step3.cityPlaceholder')} options={CITY_KEYS.map((c) => ({ value: c, label: tb(`cities.${c}`) }))} onChange={(x) => set({ city: x })} /></Field>
+            <Field label={t('profile.city')}><Select value={v.city} placeholder={tb('step3.cityPlaceholder')} options={cityOptions} onChange={(x) => set({ city: x })} /></Field>
           </div>
           <div className="mt-8 flex items-center justify-end gap-4">
             <AnimatePresence>
               {saved && !dirty && <motion.span initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="inline-flex items-center gap-1.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum"><Check className="h-3.5 w-3.5" strokeWidth={2.4} />{t('profile.saved')}</motion.span>}
             </AnimatePresence>
-            <button data-cursor="hover" onClick={save} disabled={!dirty} className={dirty ? '' : 'pointer-events-none opacity-40'}><Pill>{t('profile.save')}</Pill></button>
+            <button data-cursor="hover" onClick={save} disabled={!dirty || !phoneOk} className={dirty && phoneOk ? '' : 'pointer-events-none opacity-40'}><Pill>{t('profile.save')}</Pill></button>
           </div>
         </div>
       </div>
@@ -986,8 +1052,41 @@ function Profile({ t, tb, member }: { t: Tr; tb: Tr; member: Mem }) {
   );
 }
 
+/* بوابة الداشبورد — تظهر فقط للأدمن/الستاف */
+function AdminGateway({ t, role, isAr }: { t: Tr; role: string; isAr: boolean }) {
+  const roleLabel = t.has(`profile.roles.${role}`)
+    ? t(`profile.roles.${role}`)
+    : (role === 'admin' ? (isAr ? 'مدير' : 'Admin') : (isAr ? 'موظّف' : 'Staff'));
+  const title = t.has('profile.adminGateTitle') ? t('profile.adminGateTitle') : (isAr ? 'لوحة التحكّم' : 'Control panel');
+  const sub = t.has('profile.adminGateSub') ? t('profile.adminGateSub') : (isAr ? 'أدوات الإدارة والتشغيل الخاصة بفريق ABH.' : 'Management & operations tools for the ABH team.');
+  const cta = t.has('profile.adminGateCta') ? t('profile.adminGateCta') : (isAr ? 'فتح الداشبورد' : 'Open dashboard');
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
+      className="group relative mb-6 overflow-hidden rounded-[26px] border border-platinum/25 bg-gradient-to-br from-white/[0.06] to-white/[0.01] p-px">
+      <span aria-hidden className="pointer-events-none absolute -inset-px rounded-[26px] opacity-60"
+        style={{ background: 'conic-gradient(from 180deg at 50% 50%, transparent, rgba(203,205,205,0.25), transparent)' }} />
+      <div className="relative flex flex-wrap items-center justify-between gap-5 rounded-[25px] bg-[#0b0c0d]/80 px-6 py-5 backdrop-blur-xl md:px-7">
+        <div className="flex items-center gap-4">
+          <span className="grid h-12 w-12 flex-none place-items-center rounded-2xl border border-platinum/30 bg-platinum/[0.08]">
+            <KeyRound className="h-5 w-5 text-platinum" strokeWidth={1.7} />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-display text-lg uppercase tracking-tight text-ivory">{title}</h3>
+              <span className="rounded-full border border-platinum/30 bg-platinum/[0.07] px-2.5 py-0.5 text-[0.5rem] uppercase tracking-[0.18em] text-platinum">{roleLabel}</span>
+            </div>
+            <p className="mt-1 max-w-[42ch] text-[0.78rem] leading-relaxed text-platinum/60">{sub}</p>
+          </div>
+        </div>
+        <Link href="/admin" data-cursor="hover" className="flex-none"><Pill icon={Gauge}>{cta}</Pill></Link>
+      </div>
+    </motion.div>
+  );
+}
+
 /* ─── Shared primitives ────────────────────────────────────────────── */
-const CITY_KEYS = ['cairo', 'alexandria', 'giza', 'nasr_city', 'new_cairo', 'maadi', 'zamalek', 'october'] as const;
+const CITY_KEYS = ['jeddah', 'makkah'] as const;
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-3"><span className="text-[0.58rem] uppercase tracking-[0.28em] text-platinum/80">{children}</span><span className="h-px flex-1 bg-gradient-to-r from-white/12 to-transparent" /></div>;
@@ -1008,18 +1107,13 @@ function Monogram({ name, size = 32, ring }: { name: string; size?: number; ring
 }
 
 function StatusChip({ t, status }: { t: Tr; status: BookingStatus }) {
-  const map: Record<BookingStatus, { cls: string; dot: string }> = {
-    upcoming: { cls: 'border-platinum/30 bg-obsidian/50 text-platinum backdrop-blur-sm', dot: 'bg-platinum' },
-    active: { cls: 'border-ivory/30 bg-obsidian/50 text-ivory backdrop-blur-sm', dot: 'bg-ivory' },
-    completed: { cls: 'border-white/12 bg-white/[0.03] text-platinum/70', dot: 'bg-steel' },
-    cancelled: { cls: 'border-[#7c1a1a]/40 bg-[#2a1414]/40 text-[#e7b4b4]', dot: 'bg-[#c98a8a]' },
-  };
-  const s = map[status];
+  const s = STATUS_TONES[status];
   return (
-    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.56rem] uppercase tracking-[0.16em] ${s.cls}`}>
+    <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.56rem] uppercase tracking-[0.16em] backdrop-blur-sm"
+      style={{ borderColor: s.border, background: s.bg, color: s.text }}>
       {status === 'active'
-        ? <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ivory opacity-70" /><span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${s.dot}`} /></span>
-        : <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}
+        ? <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: s.dot }} /><span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: s.dot, boxShadow: `0 0 8px ${s.glow}` }} /></span>
+        : <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.dot, boxShadow: `0 0 8px ${s.glow}` }} />}
       {t(`bookings.status.${status}`)}
     </span>
   );

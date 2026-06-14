@@ -152,6 +152,7 @@ export function inferSize(brandId: string, model: string): VehicleSize {
 
 export interface ColorMeta { key: string; hex: string; light: boolean; }
 export const COLORS: ColorMeta[] = [
+  // ── الأساسية (موجودة) ──
   { key: 'white', hex: '#f5f5f5', light: true },
   { key: 'black', hex: '#0a0a0a', light: false },
   { key: 'silver', hex: '#c9ccce', light: true },
@@ -164,6 +165,30 @@ export const COLORS: ColorMeta[] = [
   { key: 'beige', hex: '#d8c8a8', light: true },
   { key: 'gold', hex: '#b8973f', light: true },
   { key: 'burgundy', hex: '#5c1626', light: false },
+ 
+  // ── إضافات: درجات بيضا/رمادي راقية ──
+  { key: 'pearl_white', hex: '#eef0ee', light: true },   // أبيض لؤلؤي
+  { key: 'champagne', hex: '#d9c9a3', light: true },      // شمبانيا
+  { key: 'titanium', hex: '#9fa3a6', light: true },       // تيتانيوم
+  { key: 'nardo_gray', hex: '#7c7f82', light: false },    // ناردو جراي
+ 
+  // ── درجات زرقا ──
+  { key: 'sky_blue', hex: '#5b8fc4', light: false },      // أزرق سماوي
+  { key: 'navy', hex: '#11203f', light: false },          // كحلي
+  { key: 'teal', hex: '#1b6f72', light: false },          // أزرق مخضر
+ 
+  // ── درجات حمرا/برتقالي ──
+  { key: 'maroon', hex: '#3f1418', light: false },        // أحمر داكن (عنّابي غامق)
+  { key: 'orange', hex: '#c1571a', light: false },        // برتقالي
+  { key: 'bronze', hex: '#7d5a32', light: false },        // برونزي
+ 
+  // ── خضرا/مميّزة ──
+  { key: 'british_green', hex: '#1c3b2e', light: false }, // أخضر بريطاني
+  { key: 'olive', hex: '#5a5a2f', light: false },         // زيتي
+ 
+  // ── بنفسجي/خاص ──
+  { key: 'purple', hex: '#4a2a6b', light: false },        // بنفسجي
+  { key: 'matte_black', hex: '#1a1a1c', light: false },   // أسود مطفي
 ];
 
 export type TowingMode = 'oneway' | 'return' | 'both';

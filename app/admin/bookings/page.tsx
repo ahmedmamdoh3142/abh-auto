@@ -1,6 +1,7 @@
 /**
  * app/admin/bookings/page.tsx — قائمة الحجوزات (SERVER).
- * تجلب الحجوزات + سلاگ الخدمات لكل حجز، وأسماء الخدمات/الفروع للعرض.
+ * تجلب الحجوزات + بيانات العميل (مستخدم مسجّل أو زائر) + الدفع + الخدمات بالأسعار
+ * + الفروع/الألوان للعرض، وتمرّرها لـ BookingsClient.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -16,20 +17,41 @@ export default async function BookingsPage() {
   const locale = (await getLocale()) as Locale;
 
   const rows = await query<any>(
-    `SELECT b.id, b.reference, b.status, b.stage, b.vehicle_label, b.plate,
-            b.size_code, b.color_code, b.branch_code, b.scheduled_date, b.scheduled_time,
-            b.total, b.payment_status,
-            (SELECT name FROM users u WHERE u.id = b.user_id) AS customer_name,
-            COALESCE((SELECT json_agg(bi.name_snapshot ORDER BY bi.id)
-                      FROM booking_items bi WHERE bi.booking_id = b.id), '[]') AS items
+    `SELECT b.id, b.reference, b.status, b.stage,
+            b.vehicle_label, b.plate, b.size_code, b.color_code, b.branch_code,
+            b.scheduled_date, b.scheduled_time,
+            b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
+            b.payment_method_code, b.payment_status, b.cancel_reason, b.notes,
+            b.created_at,
+            -- بيانات العميل: المستخدم المسجّل له الأولوية، وإلا نستخدم بيانات الزائر المحفوظة
+            COALESCE(u.name,  b.customer_name)  AS customer_name,
+            COALESCE(u.phone, b.customer_phone) AS customer_phone,
+            COALESCE(u.email::text, b.customer_email) AS customer_email,
+            COALESCE(u.city_code, b.customer_city) AS customer_city,
+            (b.user_id IS NULL) AS is_guest,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'name', bi.name_snapshot,
+                       'slug', bi.service_slug,
+                       'price', bi.line_total
+                     ) ORDER BY bi.id)
+              FROM booking_items bi WHERE bi.booking_id = b.id
+            ), '[]') AS items
      FROM bookings b
+     LEFT JOIN users u ON u.id = b.user_id
      ORDER BY b.created_at DESC
-     LIMIT 200`
+     LIMIT 300`
   );
 
-  const branches = await query<any>(`SELECT code, name FROM branches`);
+  // الفروع
+  const branches = await query<any>(`SELECT code, name FROM branches`).catch(() => []);
   const branchName: Record<string, string> = {};
   for (const br of branches) branchName[br.code] = pick(br.name, locale);
+
+  // المدن (للعرض في تفاصيل العميل)
+  const cities = await query<any>(`SELECT code, name FROM cities`).catch(() => []);
+  const cityName: Record<string, string> = {};
+  for (const c of cities) cityName[c.code] = pick(c.name, locale);
 
   const bookings = rows.map((b) => ({
     id: b.id,
@@ -39,13 +61,28 @@ export default async function BookingsPage() {
     vehicle: b.vehicle_label || "—",
     plate: b.plate || "",
     size: b.size_code || "",
+    color: b.color_code || "",
     branch: branchName[b.branch_code] || b.branch_code || "—",
+    branchCode: b.branch_code || "",
     customer: b.customer_name || "—",
+    phone: b.customer_phone || "",
+    email: b.customer_email || "",
+    city: cityName[b.customer_city] || b.customer_city || "",
+    isGuest: !!b.is_guest,
     date: b.scheduled_date ? new Date(b.scheduled_date).toISOString().slice(0, 10) : "",
     time: b.scheduled_time || "",
+    subtotal: Number(b.subtotal) || 0,
+    towing: Number(b.towing_cost) || 0,
+    towingAddress: b.towing_address || "",
     total: Number(b.total) || 0,
+    paymentMethod: b.payment_method_code || "",
     payment: b.payment_status,
-    services: (Array.isArray(b.items) ? b.items : []).map((it: any) => pick(it, locale)).filter(Boolean),
+    cancelReason: b.cancel_reason || "",
+    notes: b.notes || "",
+    services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
+      name: pick(it.name, locale) || it.slug || "",
+      price: Number(it.price) || 0,
+    })).filter((s: any) => s.name),
   }));
 
   return <BookingsClient initial={bookings} locale={locale} />;

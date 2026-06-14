@@ -3,6 +3,7 @@
 /**
  * StepDetails — act 03. Contact form + date/time popovers.
  * المواعيد دلوقتي كل ساعة (مش نص ساعة)، من 10ص لـ 9م.
+ * المدن تأتي من القاعدة عبر /api/cities (مع fallback آمن للستاتيك المترجم).
  */
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { useTranslations } from 'next-intl';
@@ -13,6 +14,7 @@ import { CITIES, BRANCHES, branchLabel, cityLabel } from '@/lib/booking-data';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 import { Heading, Field, Select } from './step-vehicle';
+import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,6 +24,29 @@ const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const OPEN_MIN = 10 * 60;   // 10:00 AM
 const CLOSE_MIN = 21 * 60;  // 09:00 PM
 const SLOT_STEP = 60;       // كل ساعة
+
+/* مدن من القاعدة — مصدر واحد للحقيقة. عند الفشل نرجع للستاتيك المترجم. */
+function useCityOptions(isAr: boolean): { value: string; label: string }[] {
+  const [db, setDb] = useState<{ value: string; label: string }[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/cities');
+        const j = await res.json();
+        if (alive && j?.ok && Array.isArray(j.cities) && j.cities.length) {
+          setDb(j.cities.map((c: any) => ({
+            value: c.code,
+            label: (isAr ? c.name?.ar : c.name?.en) || c.name?.ar || c.name?.en || c.code,
+          })));
+        }
+      } catch { /* fallback */ }
+    })();
+    return () => { alive = false; };
+  }, [isAr]);
+
+  return db ?? CITIES.map((c) => ({ value: c, label: cityLabel(c, isAr) }));
+}
 
 export function StepDetails({
   t, isAr, data, set, onBack, onNext,
@@ -33,10 +58,13 @@ export function StepDetails({
   onBack: () => void; onNext: () => void;
 }) {
   const [touched, setTouched] = useState(false);
+  const cityOptions = useCityOptions(isAr);
 
   const errors: Record<string, string | null> = {
     name: data.name.trim() ? null : t('step3.validation.nameRequired'),
-    phone: data.phone.trim() ? null : t('step3.validation.phoneRequired'),
+    phone: !data.phone.trim()
+      ? t('step3.validation.phoneRequired')
+      : isValidPhone(data.phone) ? null : t('step3.validation.phoneInvalid'),
     email: !data.email.trim()
       ? t('step3.validation.emailRequired')
       : EMAIL_RE.test(data.email) ? null : t('step3.validation.emailInvalid'),
@@ -63,8 +91,8 @@ export function StepDetails({
         </Field>
 
         <Field label={t('step3.phone')}>
-          <IconInput icon={Phone} value={data.phone} onChange={(v) => set({ phone: v })}
-            placeholder={t('step3.phonePlaceholder')} dir="ltr" error={touched ? errors.phone : null} />
+          <PhoneField isAr={isAr} value={data.phone} onChange={(p) => set({ phone: p })}
+            placeholder={t('step3.phonePlaceholder')} error={touched ? errors.phone : null} />
         </Field>
 
         <Field label={t('step3.email')}>
@@ -74,7 +102,7 @@ export function StepDetails({
 
         <Field label={t('step3.city')}>
           <Select value={data.city} placeholder={t('step3.cityPlaceholder')}
-            options={CITIES.map((c) => ({ value: c, label: cityLabel(c, isAr) }))}
+            options={cityOptions}
             onChange={(v) => set({ city: v })} />
           {touched && errors.city && <Err>{errors.city}</Err>}
         </Field>

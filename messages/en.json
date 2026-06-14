@@ -804,6 +804,16 @@
       "protection": "Protection",
       "addons": "Add-ons"
     },
+    "colors": {
+      "white": "White", "black": "Black", "silver": "Silver", "gray": "Gray",
+      "gunmetal": "Gunmetal", "blue": "Blue", "red": "Red", "green": "Green",
+      "brown": "Brown", "beige": "Beige", "gold": "Gold", "burgundy": "Burgundy",
+      "pearl_white": "Pearl White", "champagne": "Champagne", "titanium": "Titanium", "nardo_gray": "Nardo Gray",
+      "sky_blue": "Sky Blue", "navy": "Navy", "teal": "Teal",
+      "maroon": "Maroon", "orange": "Orange", "bronze": "Bronze",
+      "british_green": "British Green", "olive": "Olive",
+      "purple": "Purple", "matte_black": "Matte Black"
+    },
     "svc": {
       "pkg_diamond": {
         "name": "Diamond Suite",
@@ -875,11 +885,6 @@
       }
     },
     "branches": { "tahlia": "Jeddah — Al Tahlia" },
-    "colors": {
-      "white": "White", "black": "Black", "silver": "Silver", "gray": "Gray",
-      "gunmetal": "Gunmetal", "blue": "Blue", "red": "Red", "green": "Green",
-      "brown": "Brown", "beige": "Beige", "gold": "Gold", "burgundy": "Burgundy"
-    },
     "from": "From",
     "onRequest": "On request",
     "currency": "SAR",
@@ -1027,29 +1032,7 @@
       "title": "Reserve Your Session · ABH Auto",
       "description": "Book a private vehicle-protection session at the ABH Auto atelier — ceramic, PPF, tint and bespoke care."
     },
-    "colors": {
-      "white": "Pearl White",
-      "black": "Obsidian Black",
-      "silver": "Titanium Silver",
-      "gray": "Graphite Gray",
-      "red": "Crimson Red",
-      "blue": "Midnight Blue",
-      "green": "British Racing Green",
-      "yellow": "Solar Yellow",
-      "orange": "Burnt Orange",
-      "brown": "Cognac Brown",
-      "beige": "Champagne Beige",
-      "gold": "Champagne Gold"
-    },
-    "cities": {
-      "cairo": "Jaddah",
-      "alexandria": "Makka"
-    },
-    "branches": {
-      "nasr_city": "Nasr City Branch",
-      "new_cairo": "New Cairo Branch",
-      "alexandria": "Alexandria Branch"
-    }
+    "cities": { "jeddah": "Jeddah", "makkah": "Makkah" }
   },
 
   "account": {

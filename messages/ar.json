@@ -805,6 +805,16 @@
       "protection": "الحماية",
       "addons": "خدمات إضافية"
     },
+    "colors": {
+      "white": "أبيض", "black": "أسود", "silver": "فضي", "gray": "رمادي",
+      "gunmetal": "رصاصي غامق", "blue": "أزرق", "red": "أحمر", "green": "أخضر",
+      "brown": "بني", "beige": "بيج", "gold": "ذهبي", "burgundy": "نبيتي",
+      "pearl_white": "أبيض لؤلؤي", "champagne": "شمبانيا", "titanium": "تيتانيوم", "nardo_gray": "رمادي ناردو",
+      "sky_blue": "أزرق سماوي", "navy": "كحلي", "teal": "أزرق مخضر",
+      "maroon": "عنّابي", "orange": "برتقالي", "bronze": "برونزي",
+      "british_green": "أخضر بريطاني", "olive": "زيتي",
+      "purple": "بنفسجي", "matte_black": "أسود مطفي"
+    },
     "svc": {
       "pkg_diamond": {
         "name": "باقة الألماس",
@@ -876,11 +886,6 @@
       }
     },
     "branches": { "tahlia": "جدة — فرع التحلية" },
-    "colors": {
-      "white": "أبيض", "black": "أسود", "silver": "فضي", "gray": "رمادي",
-      "gunmetal": "رصاصي غامق", "blue": "أزرق", "red": "أحمر", "green": "أخضر",
-      "brown": "بني", "beige": "بيج", "gold": "ذهبي", "burgundy": "نبيتي"
-    },
     "from": "يبدأ من",
     "onRequest": "حسب الطلب",
     "currency": "ر.س",
@@ -1028,29 +1033,7 @@
       "title": "احجز جلستك · ABH Auto",
       "description": "احجز جلسة حماية خاصة لسيارتك في أتيليه ABH Auto — سيراميك، PPF، عازل حراري وعناية مخصّصة."
     },
-    "colors": {
-      "white": "أبيض لؤلؤي",
-      "black": "أسود فاحم",
-      "silver": "فضّي تيتانيوم",
-      "gray": "رمادي جرافيت",
-      "red": "أحمر قرمزي",
-      "blue": "أزرق ليلي",
-      "green": "أخضر سباقات بريطاني",
-      "yellow": "أصفر شمسي",
-      "orange": "برتقالي محروق",
-      "brown": "بنّي كونياك",
-      "beige": "بيج شامبين",
-      "gold": "ذهبي شامبين"
-    },
-    "cities": {
-      "cairo": "جدة",
-      "alexandria": "مكة"
-    },
-    "branches": {
-      "nasr_city": "فرع مدينة نصر",
-      "new_cairo": "فرع القاهرة الجديدة",
-      "alexandria": "فرع الإسكندرية"
-    }
+    "cities": { "jeddah": "جدة", "makkah": "مكة المكرمة" }
   },
 
   "account": {

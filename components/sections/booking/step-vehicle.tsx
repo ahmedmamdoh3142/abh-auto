@@ -3,6 +3,7 @@
 /**
  * StepVehicle — act 01 of the booking flow.
  * لوحة السيارة الآن جزئين: أرقام + حروف (تُخزَّن مدمجة في data.plate).
+ * الألوان تأتي من القاعدة (جدول colors) عبر prop `colors` بدل الاعتماد على الترجمة.
  */
 import { useState } from 'react';
 import Image from 'next/image';
@@ -11,6 +12,7 @@ import type { useTranslations } from 'next-intl';
 import { Check, ChevronDown, Plus, Car } from 'lucide-react';
 
 import { COLORS, type Brand } from '@/lib/booking-data';
+import type { DbColor } from '@/lib/booking-data-db';
 import type { Vehicle } from '@/components/shared/auth-provider';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill } from './booking-flow';
@@ -33,8 +35,11 @@ const onlyDigits = (s: string) => s.replace(/[^0-9\u0660-\u0669]/g, '').slice(0,
 const onlyLetters = (s: string) =>
   s.replace(DIGITS_RE, '').replace(/\s+/g, '').split('').slice(0, 4).join(' ');
 
+// fallback آمن لو ما وصلتش ألوان من القاعدة لأي سبب
+const FALLBACK_COLORS: DbColor[] = COLORS.map((c) => ({ key: c.key, hex: c.hex, light: c.light, name: c.key }));
+
 export function StepVehicle({
-  t, isAr, data, onChange, bookingImage, onNext, garage = [], brands,
+  t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -44,9 +49,11 @@ export function StepVehicle({
   onNext: () => void;
   garage?: Vehicle[];
   brands: Brand[];
+  colors?: DbColor[];
 }) {
+  const palette = colors && colors.length > 0 ? colors : FALLBACK_COLORS;
   const brand = brands.find((b) => b.id === data.brandId);
-  const color = COLORS.find((c) => c.key === data.colorKey);
+  const color = palette.find((c) => c.key === data.colorKey);
   // مكتمل = ماركة + موديل + لون + على الأقل رقم واحد في اللوحة
   const complete = !!(data.brandId && data.model && data.colorKey && DIGITS_RE.test(data.plate || ''));
 
@@ -66,7 +73,7 @@ export function StepVehicle({
             <div className="mt-9 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               {garage.map((v, i) => {
                 const b = brands.find((x) => x.id === v.brandId);
-                const c = COLORS.find((x) => x.key === v.colorKey);
+                const c = palette.find((x) => x.key === v.colorKey);
                 const on = data.brandId === v.brandId && data.model === v.model && data.plate === v.plate;
                 return (
                   <motion.button
@@ -81,7 +88,7 @@ export function StepVehicle({
                     <div className="flex items-start justify-between">
                       <span className="relative grid h-11 w-11 place-items-center rounded-full border border-white/12 bg-obsidian/70">
                         <span className="font-display text-base uppercase text-platinum">{(b?.name ?? '?').charAt(0)}</span>
-                        {c && <span className="absolute -bottom-0.5 -end-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0a0b0c]" style={{ background: (c as any).hex }} />}
+                        {c && <span className="absolute -bottom-0.5 -end-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0a0b0c]" style={{ background: c.hex }} />}
                       </span>
                       <span className={[
                         'grid h-6 w-6 place-items-center rounded-full border transition-all duration-300',
@@ -140,16 +147,16 @@ export function StepVehicle({
 
               <Field label={t('step1.color')}>
                 <div className="flex flex-wrap gap-2.5">
-                  {COLORS.map((c) => {
+                  {palette.map((c) => {
                     const on = data.colorKey === c.key;
                     return (
-                      <button key={c.key} data-cursor="hover" onClick={() => onChange({ colorKey: c.key })} title={t(`colors.${c.key}`)}
+                      <button key={c.key} data-cursor="hover" onClick={() => onChange({ colorKey: c.key })} title={c.name}
                         className={['group relative grid h-11 w-11 place-items-center rounded-full transition-all duration-300', on ? 'ring-2 ring-ivory ring-offset-2 ring-offset-[#0a0b0c]' : 'ring-1 ring-white/15 hover:ring-white/40'].join(' ')}>
                         <span className="h-9 w-9 rounded-full" style={{ background: c.hex, boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.25), inset 0 -2px 4px rgba(0,0,0,0.4)' }} />
                         <AnimatePresence>
                           {on && (
                             <motion.span initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} className="absolute inset-0 grid place-items-center">
-                              <Check className="h-4 w-4 drop-shadow" strokeWidth={2.8} style={{ color: ['white', 'silver', 'beige', 'gold'].includes(c.key) ? '#000' : '#fff' }} />
+                              <Check className="h-4 w-4 drop-shadow" strokeWidth={2.8} style={{ color: c.light ? '#000' : '#fff' }} />
                             </motion.span>
                           )}
                         </AnimatePresence>
@@ -157,7 +164,7 @@ export function StepVehicle({
                     );
                   })}
                 </div>
-                {color && <span className="mt-3 block text-[0.62rem] uppercase tracking-[0.2em] text-platinum/70">{t(`colors.${color.key}`)}</span>}
+                {color && <span className="mt-3 block text-[0.62rem] uppercase tracking-[0.2em] text-platinum/70">{color.name}</span>}
               </Field>
 
               {/* اللوحة — جزئين: أرقام + حروف */}

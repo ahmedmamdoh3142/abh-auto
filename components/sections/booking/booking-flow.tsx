@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * BookingFlow — the /booking experience. (DB-driven services + promo code)
+ * BookingFlow — the /booking experience. (DB-driven services + promo code + colors)
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -15,6 +15,7 @@ import {
   type VehicleSize, type CategoryId, type TowingMode, type PaymentMethod, type Category, type Brand,
 } from '@/lib/booking-data';
 import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
+import type { DbColor } from '@/lib/booking-data-db';
 import { useAuth } from '@/components/shared/auth-provider';
 
 import { StepVehicle } from './step-vehicle';
@@ -69,11 +70,13 @@ export function BookingFlow({
   services: SERVICES,
   brands,
   modelSizes,
+  colors,
 }: {
   categories: Category[];
   services: DbServiceMeta[];
   brands: Brand[];
   modelSizes: Record<string, VehicleSize>;
+  colors?: DbColor[];
 }) {
   const t = useTranslations('booking');
   const locale = useLocale();
@@ -170,6 +173,10 @@ export function BookingFlow({
           towingAddress: data.towing ? data.towingAddress : null,
           services: data.services,
           promoCode: data.promoCode ?? null,
+          name: data.name,
+          phone: data.phone,
+          email: data.email,
+          city: data.city,
         }),
       });
       const json = await res.json();
@@ -227,7 +234,7 @@ export function BookingFlow({
                 >
                   {step === 0 && (
                     <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} brands={effectiveBrands}
-                      bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)} />
+                      colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)} />
                   )}
                   {step === 1 && (
                     <StepServices t={t} isAr={isAr} data={data} set={set} total={total}

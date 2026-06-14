@@ -25,6 +25,9 @@ export interface Vehicle {
 
 export type BookingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
+/** صلاحية الحساب — تأتي من /api/auth/me (جدول users.role). */
+export type UserRole = 'member' | 'staff' | 'admin';
+
 export interface BookingRecord {
   id: string;
   dbId?: string; // internal UUID for API operations
@@ -52,6 +55,7 @@ export interface Member {
   phone: string;
   city: string;
   since: string;
+  role: UserRole;          // ← جديد: تُستعمل لإظهار بوابة الداشبورد للأدمن/الستاف
   vehicles: Vehicle[];
   bookings: BookingRecord[];
 }
@@ -83,6 +87,8 @@ function buildMember(
   vehicles: Vehicle[] = [],
   bookings: BookingRecord[] = [],
 ): Member {
+  const role: UserRole =
+    u?.role === 'admin' || u?.role === 'staff' ? u.role : 'member';
   return {
     id: u.id,
     name: u.name ?? '',
@@ -90,6 +96,7 @@ function buildMember(
     phone: u.phone ?? '',
     city: u.city ?? u.city_code ?? '',
     since: u.since ?? u.member_since ?? new Date().toISOString(),
+    role,
     vehicles,
     bookings,
   };

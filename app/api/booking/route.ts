@@ -26,6 +26,12 @@ export async function POST(request: Request) {
     const services: string[] = Array.isArray(body.services) ? body.services : [];
     const promoCodeInput = body.promoCode ? String(body.promoCode).trim().toUpperCase() : null;
 
+    // ── بيانات العميل من الفورم (تُحفظ دائمًا، وأساسية للزوّار بدون حساب) ──
+    const customerName = body.name ? String(body.name).trim() : null;
+    const customerPhone = body.phone ? String(body.phone).trim() : null;
+    const customerEmail = body.email ? String(body.email).trim() : null;
+    const customerCity = body.city ? String(body.city).trim() : null;
+
     if (services.length === 0) {
       return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
     }
@@ -85,14 +91,17 @@ export async function POST(request: Request) {
          (user_id, status, vehicle_label, plate, brand_id, model, size_code, color_code,
           branch_code, scheduled_date, scheduled_time, subtotal,
           towing_code, towing_cost, towing_address, total, payment_method_code, payment_status,
-          promo_code, promo_discount)
-       VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          promo_code, promo_discount,
+          customer_name, customer_phone, customer_email, customer_city)
+       VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+               $20,$21,$22,$23)
        RETURNING id, reference`,
       [
         user?.id ?? null, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
         branchCode, date || null, time, subtotal,
         towingMode, towingCost, towingAddress, total, paymentMethod, paymentStatus,
         promoCode, promoDiscount,
+        customerName, customerPhone, customerEmail, customerCity,
       ]
     );
     const booking = bookingRows[0];

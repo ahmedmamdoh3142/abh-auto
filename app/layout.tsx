@@ -31,8 +31,10 @@ import { AuthProvider } from "@/components/shared/auth-provider";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/shared/whatsapp-fab";
+import HideOnAdmin from "@/components/shared/hide-on-admin";
 import { localeDirection } from "@/lib/i18n";
 import { siteConfig } from "@/lib/site-config";
+
 
 import "./globals.css";
 
@@ -161,12 +163,12 @@ export default async function RootLayout({
 
             <SmoothScrollProvider>
               <AmbientOrbs />
-              <Navbar />
+              <HideOnAdmin><Navbar /></HideOnAdmin>
               <main className="relative">{children}</main>
-              <Footer />
+              <HideOnAdmin><Footer /></HideOnAdmin>
             </SmoothScrollProvider>
 
-            <WhatsAppFab />
+            <HideOnAdmin><WhatsAppFab /></HideOnAdmin>
           </AuthProvider>
         </NextIntlClientProvider>
       </body>

@@ -7,6 +7,17 @@ import type { DbServiceMeta } from "@/lib/booking-pricing";
 export type { DbServiceMeta } from "@/lib/booking-pricing";
 export { dbPriceFor, dbOldPriceFor, dbDiscountPct } from "@/lib/booking-pricing";
 
+/** لون قادم من جدول colors في القاعدة، بعد ترجمة الاسم حسب اللغة. */
+export interface DbColor {
+  /** code في جدول colors — يُخزَّن في vehicles.color_code / bookings.color_code */
+  key: string;
+  hex: string;
+  /** فاتح => علامة الاختيار تظهر داكنة فوقه */
+  light: boolean;
+  /** الاسم المترجم حسب اللغة الحالية */
+  name: string;
+}
+
 const CAT_ICON: Record<string, Category["icon"]> = {
   coatings: "shield",
   protection: "lock",
@@ -21,11 +32,28 @@ function pick(json: any, locale: Locale): string {
   return json[locale] ?? json.ar ?? json.en ?? "";
 }
 
+/** الألوان فقط — يُستعمل من صفحات لا تحتاج باقي بيانات الحجز (مثل /account). */
+export async function getColors(locale: Locale): Promise<DbColor[]> {
+  const rows = await query<any>(
+    `SELECT code, name, hex, is_light
+     FROM colors
+     WHERE is_active = true
+     ORDER BY sort, code`
+  );
+  return rows.map((c) => ({
+    key: c.code,
+    hex: c.hex,
+    light: !!c.is_light,
+    name: pick(c.name, locale),
+  }));
+}
+
 export async function getBookingData(locale: Locale): Promise<{
   categories: Category[];
   services: DbServiceMeta[];
   brands: Brand[];
   modelSizes: Record<string, VehicleSize>;
+  colors: DbColor[];
 }> {
   // ── التصنيفات ──
   const catRows = await query<any>(
@@ -64,6 +92,9 @@ export async function getBookingData(locale: Locale): Promise<{
       modelSizes[`${r.id}::${x.name}`] = size;
     }
   }
+
+  // ── الألوان (من جدول colors) ──
+  const colors = await getColors(locale);
 
   // ── الخدمات + الأسعار لكل حجم ──
   const rows = await query<any>(
@@ -114,5 +145,5 @@ export async function getBookingData(locale: Locale): Promise<{
     };
   });
 
-  return { categories, services, brands, modelSizes };
+  return { categories, services, brands, modelSizes, colors };
 }
