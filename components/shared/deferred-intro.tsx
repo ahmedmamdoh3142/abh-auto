@@ -1,12 +1,15 @@
 'use client';
 
 /**
- * DeferredIntro — يحمّل شاشة التحميل بعد أول رسم فقط (بعد mount + idle).
- * بهذا لا يُرسَم أي overlay فوق المحتوى أثناء الـ SSR أو الرسم الأول،
- * فيُقاس الـ LCP على المحتوى الحقيقي (wordmark) فورًا. على الأجهزة/الجلسات
- * التي رأت الـ intro من قبل لا يظهر إطلاقًا (منطق sessionStorage داخل المكوّن).
+ * DeferredIntro — شاشة التحميل بدون أي تأثير على صفحة الهوم.
+ *
+ *  • صفحة الهوم ("/"): لا تظهر شاشة التحميل إطلاقًا — لا تُحمَّل ولا تُرسَم،
+ *    فلا تحجب الـ LCP وتستقر النتيجة في الأخضر.
+ *  • باقي الصفحات: تظهر شاشة التحميل بعد أول رسم فقط (dynamic + ssr:false)،
+ *    فتبقى اللمسة الفخمة موجودة في التنقّل دون التأثير على قياس الأداء.
  */
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 const LoadingScreen = dynamic(
@@ -14,18 +17,26 @@ const LoadingScreen = dynamic(
   { ssr: false }
 );
 
+// طبّع المسار: يشيل بادئة اللغة (/en, /ar) ويحدد إن كانت هي الصفحة الرئيسية.
+function isHome(pathname: string | null): boolean {
+  if (!pathname) return false;
+  const stripped = pathname.replace(/^\/(en|ar)(?=\/|$)/, '') || '/';
+  return stripped === '/';
+}
+
 export function DeferredIntro() {
+  const pathname = usePathname();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // ننتظر إطارين + خمول المتصفح حتى لا نتنافس مع رسم المحتوى الأساسي.
+    if (isHome(pathname)) return; // الهوم: لا تظهر إطلاقًا
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => setReady(true));
     });
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
-  }, []);
+  }, [pathname]);
 
-  if (!ready) return null;
+  if (isHome(pathname) || !ready) return null;
   return <LoadingScreen />;
 }
