@@ -2,14 +2,12 @@
  * Root layout — ABH Auto
  *
  * Responsibilities
- *  - Load typography (Cormorant Garamond display, Hanken Grotesk sans,
- *    Playfair Display editorial italics, IBM Plex Sans Arabic) into CSS
- *    variables consumed by tailwind tokens.
- *  - Resolve current locale from cookie + provide messages via
- *    NextIntlClientProvider.
- *  - Provide membership session via AuthProvider (navbar / booking / login).
- *  - Wire global chrome: DeferredIntro, LuxuryCursor, ScrollProgress,
- *    SmoothScrollProvider, Navbar, Footer, WhatsAppFab.
+ *  - Load typography into CSS variables consumed by tailwind tokens.
+ *  - Resolve current locale + provide messages via NextIntlClientProvider.
+ *  - Provide membership session via AuthProvider.
+ *  - Wire global chrome. العناصر البصرية غير الأساسية (cursor / orbs / scroll
+ *    progress / intro) تُحمَّل بعد أول رسم عبر DeferredChrome و DeferredIntro
+ *    لتقليل الـ Script Evaluation الأولي وتحسين الـ LCP.
  *  - Define site metadata, OpenGraph and Twitter card defaults.
  */
 import type { Metadata, Viewport } from "next";
@@ -23,10 +21,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
 import { DeferredIntro } from "@/components/shared/deferred-intro";
-import { LuxuryCursor } from "@/components/shared/luxury-cursor";
-import { ScrollProgress } from "@/components/shared/scroll-progress";
+import { DeferredChrome } from "@/components/shared/deferred-chrome";
 import { SmoothScrollProvider } from "@/components/shared/smooth-scroll-provider";
-import { AmbientOrbs } from "@/components/shared/ambient-orbs";
 import { AuthProvider } from "@/components/shared/auth-provider";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
@@ -40,33 +36,30 @@ import "./globals.css";
 
 // --- Fonts -----------------------------------------------------------------
 
-// Cormorant Garamond — couture high-contrast serif. More presence and a far
-// larger range of weights than Italiana, while keeping the elegant character.
-// Used for display headlines and the brand mark.
 const fontDisplay = Cormorant_Garamond({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
+  preload: true,
 });
 
-// Playfair — secondary editorial serif for taglines / italics.
 const fontEditorial = Playfair_Display({
   subsets: ["latin"],
   weight: ["400", "500"],
   style: ["normal", "italic"],
   variable: "--font-editorial",
   display: "swap",
+  preload: false,
 });
 
-// Hanken Grotesk — refined, slightly editorial grotesque for body and UI.
-// Reads more premium than Inter, with similar metrics (safe drop-in).
 const fontSans = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-sans",
   display: "swap",
+  preload: true,
 });
 
 const fontArabic = IBM_Plex_Sans_Arabic({
@@ -74,6 +67,7 @@ const fontArabic = IBM_Plex_Sans_Arabic({
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-arabic",
   display: "swap",
+  preload: false,
 });
 
 // --- Metadata --------------------------------------------------------------
@@ -104,14 +98,7 @@ export const metadata: Metadata = {
     title: `${siteConfig.name} · ${siteConfig.tagline}`,
     description: siteConfig.description,
     siteName: siteConfig.name,
-    images: [
-      {
-        url: "/og.jpg",
-        width: 1200,
-        height: 630,
-        alt: siteConfig.name,
-      },
-    ],
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: siteConfig.name }],
   },
   twitter: {
     card: "summary_large_image",
@@ -154,16 +141,12 @@ export default async function RootLayout({
     >
       <body className="cursor-luxury overflow-x-hidden bg-obsidian font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {/* Membership session — shared by navbar, booking and login */}
           <AuthProvider>
-            {/* Global chrome */}
-            {/* الـ intro يُحمَّل بعد أول رسم فقط، فلا يحجب الـ LCP */}
+            {/* عناصر بصرية غير أساسية — تُحمَّل بعد أول رسم */}
             <DeferredIntro />
-            <LuxuryCursor />
-            <ScrollProgress />
+            <DeferredChrome />
 
             <SmoothScrollProvider>
-              <AmbientOrbs />
               <HideOnAdmin><Navbar /></HideOnAdmin>
               <main className="relative">{children}</main>
               <HideOnAdmin><Footer /></HideOnAdmin>
