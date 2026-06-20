@@ -1,22 +1,20 @@
 'use client';
 
 /**
- * Hero — ABH Auto · cinematic video stage
+ * Hero — ABH Auto · cinematic stage
  * Path: components/sections/hero.tsx  (export `Hero`)
  *
- * إصلاح LCP النهائي:
- *  • عنصر واحد فقط يملأ الشاشة: الـ <video>. يحمل صورة poster مضمّنة (attribute)
- *    تظهر فورًا كإطار أول، فيُسجَّل الـ LCP عند ظهور الـ poster (~1ث) لا عند اكتمال الفيديو.
- *  • أزلنا صورة الـ poster المنفصلة فوق الفيديو وأزلنا الـ fade-in (opacity transition)؛
- *    لأن ظهور عنصر full-screen جديد متأخرًا كان يُحتسب كـ LCP متأخر.
- *  • الـ poster يُعمل له preload يدويًا عبر <link rel="preload"> ليظهر بأسرع ما يمكن.
- *  • يُختار مصدر فيديو واحد فقط (موبايل/لاب). نص الهيرو يتحرك بـ CSS لا framer-motion.
- *
- * بدون فيديو → الـ poster يظل ظاهرًا كخلفية ثابتة.
+ * استراتيجية الأداء (نهج المواقع العالمية):
+ *  • الموبايل: صورة poster ثابتة فقط — لا فيديو إطلاقًا. الصورة هي عنصر LCP وتظهر
+ *    في ~1ث، فيرتفع سكور الموبايل بقوة. (الفيديو الثقيل لا يُحمَّل أصلًا على الموبايل.)
+ *  • اللاب/التابلت (>=768px): الفيديو يعمل كالمعتاد فوق صورة الـ poster.
+ *  • نكتشف الجهاز بعد التركيب (mounted) ثم نقرر هل نُركّب الفيديو أم لا.
+ *  • الـ poster يُعمل له preload بأولوية عالية (يعمل في App Router).
+ *  • نص الهيرو يتحرّك بـ CSS لا framer-motion.
  */
 import { useRef, useState, useEffect } from 'react';
-import Link from 'next/link';
 import ReactDOM from 'react-dom';
+import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslations } from 'next-intl';
 import { ArrowUpRight, ArrowDown } from 'lucide-react';
@@ -41,44 +39,52 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const poster = media?.posterUrl ?? '/images/hero-bg.webp';
-  // preload للـ poster بأولوية عالية — يعمل في App Router (يُحقَن <link rel=preload> في <head>)
+  // preload للـ poster بأولوية عالية (هو عنصر الـ LCP خصوصًا على الموبايل)
   ReactDOM.preload(poster, { as: 'image', fetchPriority: 'high' });
+
   const desktop = media?.desktop ?? { webm: null, mp4: null };
   const mobile = media?.mobile ?? { webm: null, mp4: null };
+  const hasDesktopVid = !!(desktop.webm || desktop.mp4);
+  const hasMobileVid = !!(mobile.webm || mobile.mp4);
 
-  const hasMobile = !!(mobile.webm || mobile.mp4);
-  const hasDesktop = !!(desktop.webm || desktop.mp4);
-  const hasVideo = hasMobile || hasDesktop;
-
-  const [pick, setPick] = useState<HeroVideoSources | null>(null);
+  // null = لسه مش متحدد (SSR / أول رندر). true = ديسكتوب. false = موبايل.
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!hasVideo) return;
-    const isMobile = window.matchMedia('(max-width: 767px)').matches;
-    const chosen = isMobile && hasMobile ? mobile : hasDesktop ? desktop : mobile;
-    setPick(chosen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasVideo]);
+    const mq = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
-  /* تشغيل الفيديو لما يجهز (بدون أي fade — العنصر ظاهر من البداية بالـ poster). */
+  // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion).
+  // نختار مصدر الديسكتوب؛ ولو مش موجود نستخدم مصدر الموبايل على اللاب فقط.
+  const deskSrc: HeroVideoSources = hasDesktopVid ? desktop : mobile;
+  const showVideo = isDesktop === true && !reduce && !!(deskSrc.webm || deskSrc.mp4);
+
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !pick) return;
-    const tryPlay = () => { v.play().catch(() => { /* الـ poster كافٍ */ }); };
+    if (!v || !showVideo) return;
+    const tryPlay = () => { v.play().catch(() => {}); };
     if (v.readyState >= 2) tryPlay();
     v.addEventListener('canplay', tryPlay, { once: true });
     return () => v.removeEventListener('canplay', tryPlay);
-  }, [pick]);
+  }, [showVideo]);
 
   const wordmark = Array.from(t('brandLine'));
-  const showVideo = hasVideo && !reduce;
 
   return (
     <section data-section="hero" className="relative h-[100svh] w-full overflow-hidden bg-obsidian">
-      {/* ── الفيديو هو العنصر الوحيد الذي يملأ الشاشة، ويبدأ بالـ poster المضمّن ──
-            ظاهر دائمًا (opacity-100) ولا يوجد fade، فلا يُحتسب paint كبير متأخر.
-            لو مفيش فيديو، نعرض الـ poster كصورة خلفية بدلًا منه. */}
-      {showVideo && pick ? (
+      {/* ── الـ poster: خلفية ثابتة دائمًا. على الموبايل هي العنصر الوحيد (وعنصر LCP). ── */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
+      />
+
+      {/* ── الفيديو: على اللاب فقط، فوق الـ poster ── */}
+      {showVideo && (
         <video
           ref={videoRef}
           className="absolute inset-0 h-full w-full object-cover"
@@ -86,20 +92,12 @@ export function Hero({ media }: { media?: HeroMedia }) {
           autoPlay muted loop playsInline preload="auto"
           poster={poster}
         >
-          {pick.webm && <source src={pick.webm} type="video/webm" />}
-          {pick.mp4 && <source src={pick.mp4} type="video/mp4" />}
+          {deskSrc.webm && <source src={deskSrc.webm} type="video/webm" />}
+          {deskSrc.mp4 && <source src={deskSrc.mp4} type="video/mp4" />}
         </video>
-      ) : (
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
-        />
       )}
 
-      {/* ══════════════════════════════════════════════════════════════
-          الغمامة السينمائية
-          ══════════════════════════════════════════════════════════════ */}
+      {/* ══════════════ الغمامة السينمائية ══════════════ */}
       <div aria-hidden className="absolute inset-0 bg-obsidian/25" />
       <div aria-hidden className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-obsidian/75 via-obsidian/20 to-transparent" />
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
