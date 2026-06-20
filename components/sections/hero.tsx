@@ -49,6 +49,8 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
   // null = لسه مش متحدد (SSR / أول رندر). true = ديسكتوب. false = موبايل.
   const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
+  // الفيديو لا يُركَّب إلا بعد استقرار الصفحة (idle) حتى لا يضيف فك تشفيره إلى TBT.
+  const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
@@ -58,10 +60,30 @@ export function Hero({ media }: { media?: HeroMedia }) {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion).
+  // أجّل تركيب الفيديو حتى يخمل المتصفح بعد الرسم الأول (poster يظهر فورًا).
+  useEffect(() => {
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    let id = 0;
+    let t = 0;
+    if (typeof w.requestIdleCallback === 'function') {
+      id = w.requestIdleCallback(() => setVideoReady(true), { timeout: 1500 });
+    } else {
+      t = window.setTimeout(() => setVideoReady(true), 600);
+    }
+    return () => {
+      const wc = window as unknown as { cancelIdleCallback?: (id: number) => void };
+      if (id && wc.cancelIdleCallback) wc.cancelIdleCallback(id);
+      if (t) clearTimeout(t);
+    };
+  }, []);
+
+  // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion) وبعد الاستقرار.
   // نختار مصدر الديسكتوب؛ ولو مش موجود نستخدم مصدر الموبايل على اللاب فقط.
   const deskSrc: HeroVideoSources = hasDesktopVid ? desktop : mobile;
-  const showVideo = isDesktop === true && !reduce && !!(deskSrc.webm || deskSrc.mp4);
+  const showVideo = isDesktop === true && videoReady && !reduce && !!(deskSrc.webm || deskSrc.mp4);
 
   useEffect(() => {
     const v = videoRef.current;
