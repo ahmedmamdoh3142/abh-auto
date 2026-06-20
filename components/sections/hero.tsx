@@ -137,20 +137,20 @@ export function Hero({ media }: { media?: HeroMedia }) {
             style={{ fontSize: 'clamp(4rem, 12vw, 10rem)', letterSpacing: '0.12em' }}
           >
             {wordmark.map((ch, i) => (
-              <motion.span
+              <span
                 key={i}
-                initial={{ opacity: 0, y: 60 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 1, delay: INTRO + STAGGER + i * 0.05, ease: EASE }}
                 className={
                   ch === ' '
                     ? 'inline-block w-[0.3em]'
-                    : 'inline-block bg-gradient-to-b from-ivory via-platinum to-ivory bg-clip-text text-transparent'
+                    : 'anim-letter inline-block bg-gradient-to-b from-ivory via-platinum to-ivory bg-clip-text text-transparent'
                 }
-                style={{ textShadow: ch === ' ' ? 'none' : '0 4px 30px rgba(0,0,0,0.5)' }}
+                style={{
+                  textShadow: ch === ' ' ? 'none' : '0 4px 30px rgba(0,0,0,0.5)',
+                  animationDelay: `${0.05 + i * 0.05}s`,
+                }}
               >
                 {ch === ' ' ? '\u00A0' : ch}
-              </motion.span>
+              </span>
             ))}
           </bdi>
         </h1>

@@ -378,6 +378,22 @@
     }
   }
 
+  /* حروف الـ wordmark (عنصر LCP) — CSS بدل framer-motion ليظهر فورًا */
+  @keyframes letterRise {
+    from { opacity: 0; transform: translateY(60px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .anim-letter {
+    animation: letterRise 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anim-letter {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   .mask-fade-b { mask-image: linear-gradient(180deg, black 60%, transparent 100%); }
   .mask-fade-t { mask-image: linear-gradient(180deg, transparent 0%, black 40%); }
   .mask-fade-x { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
