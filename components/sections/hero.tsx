@@ -4,19 +4,19 @@
  * Hero — ABH Auto · cinematic video stage
  * Path: components/sections/hero.tsx  (export `Hero`)
  *
- * تعديلات الأداء (إصلاح LCP):
- *  • الـ poster صار <Image priority> من next/image → يُحمَّل بأولوية عالية (preload)
- *    ويظهر بسرعة فيصبح هو عنصر LCP عند ~FCP بدل أن ينتظر CSS أو الفيديو.
- *  • الفيديو لا يبدأ التحميل إلا بعد ظهور الـ poster (posterReady) → لا يزاحم الـ bandwidth
- *    على شبكات الموبايل البطيئة، ولا يُحتسب كعنصر LCP متأخر.
- *  • يُختار مصدر فيديو واحد فقط (موبايل أو لاب) بدل تحميل النسختين معًا.
- *  • نص الهيرو يتحرّك بـ CSS animation بدل framer-motion ليظهر فورًا.
+ * إصلاح LCP النهائي:
+ *  • عنصر واحد فقط يملأ الشاشة: الـ <video>. يحمل صورة poster مضمّنة (attribute)
+ *    تظهر فورًا كإطار أول، فيُسجَّل الـ LCP عند ظهور الـ poster (~1ث) لا عند اكتمال الفيديو.
+ *  • أزلنا صورة الـ poster المنفصلة فوق الفيديو وأزلنا الـ fade-in (opacity transition)؛
+ *    لأن ظهور عنصر full-screen جديد متأخرًا كان يُحتسب كـ LCP متأخر.
+ *  • الـ poster يُعمل له preload يدويًا عبر <link rel="preload"> ليظهر بأسرع ما يمكن.
+ *  • يُختار مصدر فيديو واحد فقط (موبايل/لاب). نص الهيرو يتحرك بـ CSS لا framer-motion.
  *
- * لو مفيش فيديو، الهيرو يشتغل كصورة ثابتة (poster) من غير ما يكسر.
+ * بدون فيديو → الـ poster يظل ظاهرًا كخلفية ثابتة.
  */
 import { useRef, useState, useEffect } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
+import ReactDOM from 'react-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslations } from 'next-intl';
 import { ArrowUpRight, ArrowDown } from 'lucide-react';
@@ -39,9 +39,10 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const t = useTranslations('hero');
   const reduce = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [loaded, setLoaded] = useState(false);
 
   const poster = media?.posterUrl ?? '/images/hero-bg.webp';
+  // preload للـ poster بأولوية عالية — يعمل في App Router (يُحقَن <link rel=preload> في <head>)
+  ReactDOM.preload(poster, { as: 'image', fetchPriority: 'high' });
   const desktop = media?.desktop ?? { webm: null, mp4: null };
   const mobile = media?.mobile ?? { webm: null, mp4: null };
 
@@ -49,10 +50,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const hasDesktop = !!(desktop.webm || desktop.mp4);
   const hasVideo = hasMobile || hasDesktop;
 
-  // نختار مصدرًا واحدًا حسب حجم الشاشة (بدل ترك المتصفح يجرّب الكل).
   const [pick, setPick] = useState<HeroVideoSources | null>(null);
-  // الفيديو لا يُركَّب إلا بعد ظهور الـ poster، حتى يفوز الـ poster بالـ LCP أولًا.
-  const [posterReady, setPosterReady] = useState(false);
 
   useEffect(() => {
     if (!hasVideo) return;
@@ -62,71 +60,54 @@ export function Hero({ media }: { media?: HeroMedia }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasVideo]);
 
-  // أمان: لو الـ poster ما أطلقش onLoad (كاش/فشل)، شغّل الفيديو بعد 2.5ث على أي حال.
-  useEffect(() => {
-    const id = setTimeout(() => setPosterReady(true), 2500);
-    return () => clearTimeout(id);
-  }, []);
-
-  const showVideo = hasVideo && !reduce && !!pick && posterReady;
-
-  /* بعض المتصفحات بتأجّل تشغيل الفيديو حتى يصبح جاهزًا — نتأكد من المحاولة. */
+  /* تشغيل الفيديو لما يجهز (بدون أي fade — العنصر ظاهر من البداية بالـ poster). */
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !showVideo) return;
-    const tryPlay = () => { v.play().catch(() => { /* الـ poster كافٍ كـ fallback */ }); };
+    if (!v || !pick) return;
+    const tryPlay = () => { v.play().catch(() => { /* الـ poster كافٍ */ }); };
     if (v.readyState >= 2) tryPlay();
     v.addEventListener('canplay', tryPlay, { once: true });
     return () => v.removeEventListener('canplay', tryPlay);
-  }, [showVideo]);
+  }, [pick]);
 
   const wordmark = Array.from(t('brandLine'));
+  const showVideo = hasVideo && !reduce;
 
   return (
     <section data-section="hero" className="relative h-[100svh] w-full overflow-hidden bg-obsidian">
-      {/* ── poster — صورة preloaded عالية الأولوية → عنصر الـ LCP، يظهر بسرعة ── */}
-      <Image
-        src={poster}
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        quality={70}
-        className="object-cover"
-        style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
-        onLoad={() => setPosterReady(true)}
-      />
-
-      {/* ── الفيديو — يُركَّب بعد ظهور الـ poster فقط (مصدر واحد) ── */}
-      {showVideo && (
+      {/* ── الفيديو هو العنصر الوحيد الذي يملأ الشاشة، ويبدأ بالـ poster المضمّن ──
+            ظاهر دائمًا (opacity-100) ولا يوجد fade، فلا يُحتسب paint كبير متأخر.
+            لو مفيش فيديو، نعرض الـ poster كصورة خلفية بدلًا منه. */}
+      {showVideo && pick ? (
         <video
           ref={videoRef}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          className="absolute inset-0 h-full w-full object-cover"
           style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
           autoPlay muted loop playsInline preload="auto"
           poster={poster}
-          onCanPlay={() => setLoaded(true)}
         >
-          {pick!.webm && <source src={pick!.webm} type="video/webm" />}
-          {pick!.mp4 && <source src={pick!.mp4} type="video/mp4" />}
+          {pick.webm && <source src={pick.webm} type="video/webm" />}
+          {pick.mp4 && <source src={pick.mp4} type="video/mp4" />}
         </video>
+      ) : (
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
+        />
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          الغمامة السينمائية — طبقات هادئة تدّي عمق وفخامة
+          الغمامة السينمائية
           ══════════════════════════════════════════════════════════════ */}
-      {/* 1) grade بارد خفيف فوق كل الكادر */}
       <div aria-hidden className="absolute inset-0 bg-obsidian/25" />
-      {/* 2) تعتيم علوي للـ wordmark + سفلي للانتقال للسكشن اللي بعده */}
       <div aria-hidden className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-obsidian/75 via-obsidian/20 to-transparent" />
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
-      {/* 3) vignette ناعم على الأطراف — السر في الإحساس السينمائي */}
       <div aria-hidden className="absolute inset-0" style={{ background: 'radial-gradient(120% 90% at 50% 42%, transparent 38%, rgba(0,0,0,0.5) 100%)' }} />
-      {/* 4) glow أفقي خفيف يلمّ المركز */}
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-60"
         style={{ background: 'radial-gradient(60% 50% at 50% 55%, rgba(203,205,205,0.05), transparent 70%)' }} />
 
-      {/* 5) noise veil — يكسر أي banding في التدرّجات ويدّي خامة فيلمية */}
+      {/* noise veil */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[1] opacity-[0.07] mix-blend-overlay"
@@ -136,12 +117,10 @@ export function Hero({ media }: { media?: HeroMedia }) {
         }}
       />
 
-      {/* إطار passe-partout خفيف (chrome راقٍ) — بدون أي crosshairs */}
       <PassePartout />
 
       {/* ── المحتوى ── */}
       <div className="absolute inset-0 z-30 flex flex-col items-center justify-center px-6 text-center">
-        {/* eyebrow — CSS animation (مش framer-motion) عشان يظهر فورًا */}
         <div className="anim-rise mb-10 flex items-center gap-5" style={{ animationDelay: '0.05s' }}>
           <span className="block h-px w-14 bg-gradient-to-r from-transparent to-platinum/55" />
           <span
@@ -178,7 +157,6 @@ export function Hero({ media }: { media?: HeroMedia }) {
           </bdi>
         </h1>
 
-        {/* tagline — CSS animation */}
         <p
           className="anim-rise mt-8 font-editorial font-normal italic leading-tight text-platinum/85"
           style={{ fontSize: 'clamp(1.4rem, 2.6vw, 2rem)', textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.18s' }}
@@ -186,7 +164,6 @@ export function Hero({ media }: { media?: HeroMedia }) {
           {t('tagline')}
         </p>
 
-        {/* subline — CSS animation */}
         <p
           className="anim-rise mt-6 max-w-[40ch] text-[1.05rem] leading-relaxed text-platinum/70"
           style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.28s' }}
@@ -226,13 +203,12 @@ export function Hero({ media }: { media?: HeroMedia }) {
         </div>
       </motion.div>
 
-      {/* bottom seam */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-px bg-gradient-to-r from-transparent via-platinum/35 to-transparent" />
     </section>
   );
 }
 
-/* ── إطار خفيف (بدون crosshairs) ── */
+/* ── إطار خفيف ── */
 function PassePartout() {
   const draw = { duration: 1.6, delay: 0.4, ease: EASE };
   return (
