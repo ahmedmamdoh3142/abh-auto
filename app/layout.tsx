@@ -8,7 +8,7 @@
  *  - Resolve current locale from cookie + provide messages via
  *    NextIntlClientProvider.
  *  - Provide membership session via AuthProvider (navbar / booking / login).
- *  - Wire global chrome: LoadingScreen, LuxuryCursor, ScrollProgress,
+ *  - Wire global chrome: DeferredIntro, LuxuryCursor, ScrollProgress,
  *    SmoothScrollProvider, Navbar, Footer, WhatsAppFab.
  *  - Define site metadata, OpenGraph and Twitter card defaults.
  */
@@ -22,7 +22,7 @@ import {
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
-import { LoadingScreen } from "@/components/shared/loading-screen";
+import { DeferredIntro } from "@/components/shared/deferred-intro";
 import { LuxuryCursor } from "@/components/shared/luxury-cursor";
 import { ScrollProgress } from "@/components/shared/scroll-progress";
 import { SmoothScrollProvider } from "@/components/shared/smooth-scroll-provider";
@@ -157,7 +157,8 @@ export default async function RootLayout({
           {/* Membership session — shared by navbar, booking and login */}
           <AuthProvider>
             {/* Global chrome */}
-            <LoadingScreen />
+            {/* الـ intro يُحمَّل بعد أول رسم فقط، فلا يحجب الـ LCP */}
+            <DeferredIntro />
             <LuxuryCursor />
             <ScrollProgress />
 
