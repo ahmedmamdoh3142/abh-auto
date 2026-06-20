@@ -1,11 +1,14 @@
 /**
- * /booking — Reserve a session at ABH Auto. (DB-driven services + brands + colors)
+ * /booking — Reserve a session at ABH Auto. (DB-driven + partner pricing)
+ *
+ * لو المستخدم الحالي شركة (partner): تُجلب الخدمات بأسعاره الخاصة تلقائيًا.
  */
 import type { Metadata } from 'next';
 import { getTranslations, getLocale } from 'next-intl/server';
 
 import { BookingFlow } from '@/components/sections/booking/booking-flow';
 import { getBookingData } from '@/lib/booking-data-db';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('booking.meta');
@@ -14,7 +17,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function BookingPage() {
   const locale = await getLocale();
-  const { categories, services, brands, modelSizes, colors } = await getBookingData(locale as 'en' | 'ar');
+  const user = await getCurrentUser();
+  const { categories, services, brands, modelSizes, colors } = await getBookingData(
+    locale as 'en' | 'ar',
+    user?.id ?? null,
+  );
   return (
     <BookingFlow
       categories={categories as any}

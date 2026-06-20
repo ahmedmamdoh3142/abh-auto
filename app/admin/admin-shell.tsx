@@ -3,6 +3,8 @@
  * app/admin/admin-shell.tsx — هيكل لوحة التحكم (sidebar + topbar + الحاوية).
  * - السايدبار يظهر يمينًا في العربي ويسارًا في الإنجليزي تلقائيًا (عبر dir على الحاوية + ترتيب طبيعي للعناصر).
  * - مسافات الكروت مضبوطة (gap أفقي ورأسي صريح في الكلاسات).
+ *
+ * تعديل نظام الشركاء: أضيفت مجموعة «الشركاء والحسابات» (الشركاء + الحسابات) لمصفوفة NAV.
  */
 import React, { useState } from "react";
 import Link from "next/link";
@@ -31,15 +33,24 @@ export default function AdminShell({
     { group: t("الواجهة", "Overview"), items: [
       { href: "/admin", label: t("نظرة عامة", "Overview"), icon: Ic.grid },
       { href: "/admin/bookings", label: t("الحجوزات", "Bookings"), icon: Ic.calendar, badge: pending },
+      { href: "/admin/bookings/new", label: t("حجز جديد", "New booking"), icon: Ic.plus },
+    ]},
+    { group: t("الشركاء والحسابات", "Partners & accounts"), items: [
+      { href: "/admin/partners", label: t("الشركاء", "Partners"), icon: Ic.trending },
+      { href: "/admin/accounts", label: t("الحسابات", "Accounts"), icon: Ic.users },
     ]},
     { group: t("محتوى الموقع", "Site content"), items: [
       { href: "/admin/content", label: t("نصوص الصفحات", "Page content"), icon: Ic.type },
       { href: "/admin/services", label: t("الخدمات والأسعار", "Services & pricing"), icon: Ic.sliders },
+      { href: "/admin/promos", label: t("أكواد الخصم", "Promo codes"), icon: Ic.clock },
     ]},
   ];
 
-  const isActive = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
-
+  const isActive = (href: string) => {
+    if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/bookings") return pathname === "/admin/bookings";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
   const SidebarInner = (
     <aside style={{ width: collapsed ? 78 : 268, flexShrink: 0, transition: "width .4s var(--abh-ease)", display: "flex", flexDirection: "column", borderInlineStart: "1px solid rgba(255,255,255,.06)", borderInlineEnd: "1px solid rgba(255,255,255,.06)", height: "100vh", position: "sticky", top: 0 }}>
       <div style={{ padding: collapsed ? "22px 0" : "22px 24px", display: "flex", justifyContent: collapsed ? "center" : "flex-start" }}>

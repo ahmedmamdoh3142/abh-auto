@@ -4,21 +4,22 @@
  * AccountView — the /account member dashboard for ABH Auto.
  * Path: components/sections/account/account-view.tsx  (export `AccountView`)
  *
- * الألوان تأتي من القاعدة (جدول colors) عبر prop `colors`، والمدن من /api/cities.
- * نظام الحالة (status) صار له "روح": نقطة لونية محسوبة لكل حالة
- *   upcoming → ذهبي/كهرماني   active → برتقالي نابض   completed → أخضر زمردي   cancelled → أحمر هادئ
- * مع الحفاظ على لغة الثيم (obsidian / platinum / ivory).
+ * تعديل نظام الشركاء: أضيف تبويب «شركتي» يظهر فقط للحسابات partner،
+ * ويعرض PartnerPortal (تقرير الشركة المالي الكامل). باقي اللوحة كما هي تمامًا.
+ *
+ * الألوان تُجلب من جدول colors في القاعدة وتُمرَّر للعرض (بدل ملفات الترجمة).
  */
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { MyPromoCodes } from '@/components/sections/account/my-promo-codes';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   LayoutGrid, CalendarCheck, Car, UserRound, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowLeft, Clock, MapPin,
   ShieldCheck, CircleDot, Calendar, LogOut, CreditCard, Wallet, CalendarClock, Sparkles,
-  Gauge, Hourglass, History, KeyRound, Hash,
+  Gauge, Hourglass, History, KeyRound, Hash, Building2,
 } from 'lucide-react';
 
 import {
@@ -27,6 +28,7 @@ import {
 import type { DbColor } from '@/lib/booking-data-db';
 import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 import { useAuth, type Vehicle, type BookingRecord, type BookingStatus } from '@/components/shared/auth-provider';
+import { PartnerPortal } from '@/components/sections/account/partner-portal';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -37,18 +39,8 @@ const CAR_IMAGES = [
 const COVER_IMAGE = '/images/cta-bg.webp';
 function hash(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
 function carImg(seed: string) { return CAR_IMAGES[hash(seed || 'x') % CAR_IMAGES.length]; }
-
-/* ─── Status palette ──────────────────────────────────────────────────
- * كل حالة لها لون "حقيقي" مكتوم (مش صارخ) عشان يدّي روح من غير ما يكسر فخامة الثيم.
- * النقطة (dot) هي اللمسة اللونية، وكل ما حواليها بلاتيني/عاجي. */
-type StatusTone = {
-  dot: string;        // لون النقطة (الـ accent الحقيقي)
-  glow: string;       // هالة النقطة
-  text: string;       // لون النص داخل الشِيب
-  border: string;     // حد الشِيب
-  bg: string;         // خلفية الشِيب
-  bar: string;        // تدرّج شريط التقدّم (للـ active)
-};
+/* ─── Status palette ─── */
+type StatusTone = { dot: string; glow: string; text: string; border: string; bg: string; bar: string; };
 const STATUS_TONES: Record<BookingStatus, StatusTone> = {
   upcoming:  { dot: '#d9b25f', glow: 'rgba(217,178,95,0.55)',  text: '#e8d6a8', border: 'rgba(217,178,95,0.32)', bg: 'rgba(217,178,95,0.08)',  bar: 'linear-gradient(90deg,#d9b25f,#f0dca6)' },
   active:    { dot: '#e8893f', glow: 'rgba(232,137,63,0.6)',   text: '#f3c69c', border: 'rgba(232,137,63,0.34)', bg: 'rgba(232,137,63,0.09)',  bar: 'linear-gradient(90deg,#e8893f,#f6b27a)' },
@@ -56,11 +48,10 @@ const STATUS_TONES: Record<BookingStatus, StatusTone> = {
   cancelled: { dot: '#c98a8a', glow: 'rgba(201,138,138,0.4)',  text: '#e7b4b4', border: 'rgba(124,26,26,0.4)',   bg: 'rgba(42,20,20,0.4)',     bar: 'linear-gradient(90deg,#7c1a1a,#c98a8a)' },
 };
 
-type SectionId = 'overview' | 'bookings' | 'garage' | 'profile';
+type SectionId = 'overview' | 'partner' | 'bookings' | 'garage' | 'profile';
 type Tr = ReturnType<typeof useTranslations>;
 type Mem = NonNullable<ReturnType<typeof useAuth>['member']>;
 
-/* مدن من القاعدة (هوك مشترك) */
 function useDbCities(isAr: boolean) {
   const [cities, setCities] = useState<{ code: string; label: string }[] | null>(null);
   useEffect(() => {
@@ -90,12 +81,16 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
   const router = useRouter();
   const { member, hydrated } = useAuth();
 
+  const isPartner = String(member?.role ?? '') === 'partner';
   const [section, setSection] = useState<SectionId>('overview');
   const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     if (hydrated && !member) router.replace('/login?redirect=/account');
   }, [hydrated, member, router]);
+
+  // الشركة تبدأ على تبويب «شركتي»
+  useEffect(() => { if (isPartner) setSection('partner'); }, [isPartner]);
 
   if (!hydrated || !member) {
     return (
@@ -110,7 +105,7 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
   return (
     <main className="relative">
       <AccountHero t={t} member={member} />
-      <SectionNav t={t} section={section} setSection={setSection} />
+      <SectionNav t={t} locale={locale} section={section} setSection={setSection} isPartner={isPartner} />
 
       <section className="relative pb-28 pt-12 md:pt-14">
         <div className="container">
@@ -121,6 +116,7 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
               transition={{ duration: 0.35, ease: EASE }}
             >
               {section === 'overview' && <Overview t={t} tb={tb} isAr={isAr} member={member} colors={colors} onGo={setSection} onOpen={setDetailId} />}
+              {section === 'partner' && <PartnerPortal />}
               {section === 'bookings' && <Bookings t={t} tb={tb} isAr={isAr} member={member} onOpen={setDetailId} />}
               {section === 'garage' && <Garage t={t} tb={tb} member={member} colors={colors} />}
               {section === 'profile' && <Profile t={t} tb={tb} isAr={isAr} member={member} />}
@@ -137,7 +133,7 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
   );
 }
 
-/* ─── Hero ─────────────────────────────────────────────────────────── */
+/* ─── Hero ─── */
 function useCountUp(target: number, run: boolean) {
   const [n, setN] = useState(0);
   const reduce = useReducedMotion();
@@ -231,14 +227,17 @@ function StatTile({ label, value, count, icon: Icon, index }: { label: string; v
   );
 }
 
-/* ─── Top nav ──────────────────────────────────────────────────────── */
-function SectionNav({ t, section, setSection }: { t: Tr; section: SectionId; setSection: (s: SectionId) => void }) {
+/* ─── Top nav ─── */
+function SectionNav({ t, locale, section, setSection, isPartner }: { t: Tr; locale: string; section: SectionId; setSection: (s: SectionId) => void; isPartner?: boolean }) {
   const { signOut } = useAuth();
   const router = useRouter();
   const items: { id: SectionId; icon: React.ElementType }[] = [
-    { id: 'overview', icon: LayoutGrid }, { id: 'bookings', icon: CalendarCheck },
+    { id: 'overview', icon: LayoutGrid },
+    ...(isPartner ? [{ id: 'partner' as SectionId, icon: Building2 }] : []),
+    { id: 'bookings', icon: CalendarCheck },
     { id: 'garage', icon: Car }, { id: 'profile', icon: UserRound },
   ];
+  const navLabel = (id: SectionId) => id === 'partner' ? (locale === 'ar' ? 'شركتي' : 'My company') : t(`nav.${id}`);
   return (
     <div className="sticky top-[84px] z-30 border-y border-white/[0.06] bg-obsidian/70 backdrop-blur-xl">
       <div className="container">
@@ -251,7 +250,7 @@ function SectionNav({ t, section, setSection }: { t: Tr; section: SectionId; set
                   className="relative flex flex-none items-center gap-2.5 rounded-full px-4 py-2.5 transition-colors duration-300">
                   {on && <motion.span layoutId="acct-pill" aria-hidden className="absolute inset-0 -z-10 rounded-full border border-white/[0.1] bg-white/[0.06]" transition={{ type: 'spring', stiffness: 380, damping: 32 }} />}
                   <Icon className={`reversible-icon h-[16px] w-[16px] ${on ? 'text-ivory' : 'text-platinum/55'}`} strokeWidth={1.7} />
-                  <span className={`whitespace-nowrap text-[0.68rem] uppercase tracking-[0.16em] ${on ? 'text-ivory' : 'text-platinum/60'}`}>{t(`nav.${id}`)}</span>
+                  <span className={`whitespace-nowrap text-[0.68rem] uppercase tracking-[0.16em] ${on ? 'text-ivory' : 'text-platinum/60'}`}>{navLabel(id)}</span>
                 </button>
               );
             })}
@@ -266,7 +265,7 @@ function SectionNav({ t, section, setSection }: { t: Tr; section: SectionId; set
   );
 }
 
-/* ─── Overview ─────────────────────────────────────────────────────── */
+/* ─── Overview ─── */
 function Overview({ t, tb, isAr, member, colors, onGo, onOpen }: { t: Tr; tb: Tr; isAr: boolean; member: Mem; colors: DbColor[]; onGo: (s: SectionId) => void; onOpen: (id: string) => void }) {
   const next = useMemo(() => {
     const live = member.bookings.filter((b) => b.status === 'upcoming' || b.status === 'active');
@@ -276,6 +275,7 @@ function Overview({ t, tb, isAr, member, colors, onGo, onOpen }: { t: Tr; tb: Tr
 
   return (
     <div className="space-y-12">
+      <MyPromoCodes />
       <div className="space-y-5">
         <SubHead>{t('overview.nextTitle')}</SubHead>
         {next ? <NextAppointment t={t} tb={tb} isAr={isAr} b={next} onOpen={onOpen} />
@@ -323,7 +323,6 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
       <div aria-hidden className="absolute inset-0 scale-[1.04] bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-[1.1] group-hover:grayscale-0"
         style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.55) brightness(0.5) contrast(1.05)' }} />
       <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/75 to-[#050608]/30" />
-      {/* شريط لوني علوي بلون الحالة — توقيع بصري للروح */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ background: tone.bar, opacity: 0.9 }} />
       <div aria-hidden className="pointer-events-none absolute -inset-x-10 -top-20 h-40 blur-3xl" style={{ background: `radial-gradient(closest-side, ${tone.glow}, transparent)`, opacity: 0.5 }} />
 
@@ -414,26 +413,13 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
   const currentStageLabel = stageSteps[stage] || stageSteps[0];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: EASE }}
-      whileHover={{ y: -4 }}
-      className="group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/20 transition-all duration-500 hover:border-white/25 hover:shadow-2xl"
-    >
-      {/* صورة السيارة — خلفية كاملة للكرت (بدون غمامة سوداء) */}
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }} whileHover={{ y: -4 }}
+      className="group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/20 transition-all duration-500 hover:border-white/25 hover:shadow-2xl">
       <div className="absolute inset-0">
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105"
-          style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'brightness(0.95) contrast(1.05)' }}
-        />
+        <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105" style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'brightness(0.95) contrast(1.05)' }} />
         <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian/30 via-obsidian/60 to-obsidian/20" />
       </div>
-
-      {/* لمسة الحالة: شريط جانبي رفيع بلون الحالة */}
       <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 z-20 w-[3px]" style={{ background: tone.bar, opacity: 0.85 }} />
-
       <div className="relative z-10 flex flex-1 flex-col p-5 md:p-6 [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex flex-wrap gap-2">
@@ -442,14 +428,10 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
           </div>
           <div className="text-end">
             <div className="text-[0.5rem] uppercase tracking-[0.2em] text-steel">{t('bookings.total')}</div>
-            <div dir="ltr" className="font-display text-xl tabular-nums text-ivory md:text-2xl">
-              {fmtMoney(b.total)} <span className="text-xs text-platinum/70">{tb('currency')}</span>
-            </div>
+            <div dir="ltr" className="font-display text-xl tabular-nums text-ivory md:text-2xl">{fmtMoney(b.total)} <span className="text-xs text-platinum/70">{tb('currency')}</span></div>
           </div>
         </div>
-
         <div className="flex-1" />
-
         <div className="mt-auto space-y-3">
           <div>
             <h3 className="font-display text-2xl uppercase leading-tight text-ivory md:text-3xl">{b.vehicleLabel}</h3>
@@ -458,20 +440,14 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
               <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" strokeWidth={1.6} />{fmtDate(b.date, isAr)} · {b.time}</span>
             </div>
           </div>
-
           <div className="flex flex-wrap gap-1.5">
             {b.serviceSnapshots?.slice(0, 2).map((snap: any, idx: number) => (
-              <span key={idx} className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">
-                {snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}
-              </span>
+              <span key={idx} className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">{snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}</span>
             ))}
             {b.serviceSnapshots && b.serviceSnapshots.length > 2 && (
-              <span className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">
-                +{b.serviceSnapshots.length - 2}
-              </span>
+              <span className="rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[0.6rem] tracking-wide text-platinum/90">+{b.serviceSnapshots.length - 2}</span>
             )}
           </div>
-
           {isActive && (
             <div>
               <div className="mb-1 flex items-center justify-between text-[0.55rem] uppercase tracking-[0.14em]">
@@ -479,30 +455,17 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
                 <span className="text-steel">{stage + 1}/{stageSteps.length}</span>
               </div>
               <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/15">
-                <motion.div
-                  className="absolute left-0 top-0 h-full"
-                  style={{ background: tone.bar }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${((stage + 1) / stageSteps.length) * 100}%` }}
-                  transition={{ duration: 0.5, ease: EASE }}
-                />
+                <motion.div className="absolute left-0 top-0 h-full" style={{ background: tone.bar }} initial={{ width: 0 }} animate={{ width: `${((stage + 1) / stageSteps.length) * 100}%` }} transition={{ duration: 0.5, ease: EASE }} />
               </div>
               <div className="mt-1 text-right text-[0.5rem] uppercase tracking-[0.1em] text-platinum/80">{currentStageLabel}</div>
             </div>
           )}
-
           <div className="flex items-center justify-between gap-2 pt-1">
             {isPast ? (
-              <Link href="/booking" data-cursor="hover" className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-black/30 px-3 py-1.5 text-[0.6rem] uppercase tracking-[0.16em] text-platinum/90 transition-colors hover:bg-black/50">
-                {t('bookings.rebook')}
-              </Link>
-            ) : (
-              <div />
-            )}
-            <button data-cursor="hover" onClick={() => onOpen(b.id)}
-              className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.18em] text-platinum/90 transition-all duration-300 hover:text-ivory">
-              {t('bookings.viewDetails')}
-              <ArrowUpRight className="reversible-icon h-3.5 w-3.5" strokeWidth={2} />
+              <Link href="/booking" data-cursor="hover" className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-black/30 px-3 py-1.5 text-[0.6rem] uppercase tracking-[0.16em] text-platinum/90 transition-colors hover:bg-black/50">{t('bookings.rebook')}</Link>
+            ) : (<div />)}
+            <button data-cursor="hover" onClick={() => onOpen(b.id)} className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.18em] text-platinum/90 transition-all duration-300 hover:text-ivory">
+              {t('bookings.viewDetails')}<ArrowUpRight className="reversible-icon h-3.5 w-3.5" strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -520,11 +483,9 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
       <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-[3px]" style={{ background: tone.bar, opacity: 0.8 }} />
       <div className="flex flex-col sm:flex-row">
         <div className="relative h-32 w-full flex-none overflow-hidden sm:h-auto sm:w-44">
-          <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-105 group-hover:grayscale-0"
-            style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.6) brightness(0.55)' }} />
+          <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-105 group-hover:grayscale-0" style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.6) brightness(0.55)' }} />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian/70 to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-obsidian/80" />
         </div>
-
         <div className="flex-1 p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
@@ -535,9 +496,7 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
               </div>
               <h3 className="mt-3 font-display text-2xl uppercase leading-none text-ivory">{b.vehicleLabel}</h3>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                {b.serviceSnapshots?.map((snap: any, idx: number) => (
-                  <ServiceChip key={idx}>{snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}</ServiceChip>
-                ))}
+                {b.serviceSnapshots?.map((snap: any, idx: number) => (<ServiceChip key={idx}>{snap?.[isAr ? 'ar' : 'en'] || b.serviceSlugs[idx]}</ServiceChip>))}
               </div>
               <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.74rem] text-platinum/60">
                 <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-platinum/50" strokeWidth={1.7} />{tb(`branches.${b.branchKey}`)}</span>
@@ -550,9 +509,7 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
               <div className="text-[0.55rem] uppercase tracking-[0.16em] text-platinum/60">{tb('currency')}</div>
             </div>
           </div>
-
           {isActive && <ServiceRail t={t} stage={b.stage ?? 0} />}
-
           {!compact && (
             <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.07] pt-4">
               {(b.status === 'completed' || b.status === 'cancelled') && <Link href="/booking" data-cursor="hover"><GhostMini>{t('bookings.rebook')}</GhostMini></Link>}
@@ -578,24 +535,17 @@ function ServiceRail({ t, stage }: { t: Tr; stage: number }) {
       </div>
       <div className="relative flex items-center justify-between">
         <span aria-hidden className="absolute inset-x-0 top-[11px] h-px bg-white/10" />
-        <motion.span aria-hidden className="absolute top-[11px] h-px"
-          style={{ insetInlineStart: 0, background: tone.bar }}
-          initial={false} animate={{ width: `${(stage / (steps.length - 1)) * 100}%` }} transition={{ duration: 0.7, ease: EASE }} />
+        <motion.span aria-hidden className="absolute top-[11px] h-px" style={{ insetInlineStart: 0, background: tone.bar }} initial={false} animate={{ width: `${(stage / (steps.length - 1)) * 100}%` }} transition={{ duration: 0.7, ease: EASE }} />
         {steps.map((s, i) => {
           const done = i < stage; const active = i === stage;
-          const dotStyle: React.CSSProperties | undefined = active
-            ? { borderColor: 'transparent', background: tone.bar, color: '#1a1208' }
-            : done ? { borderColor: tone.border, background: tone.bg, color: tone.text } : undefined;
-          const labelStyle: React.CSSProperties | undefined = active
-            ? { color: '#f5f5f0' } : done ? { color: tone.text } : undefined;
+          const dotStyle: React.CSSProperties | undefined = active ? { borderColor: 'transparent', background: tone.bar, color: '#1a1208' } : done ? { borderColor: tone.border, background: tone.bg, color: tone.text } : undefined;
+          const labelStyle: React.CSSProperties | undefined = active ? { color: '#f5f5f0' } : done ? { color: tone.text } : undefined;
           return (
             <div key={s} className="relative z-10 flex flex-col items-center gap-2">
-              <span style={dotStyle}
-                className={`grid h-6 w-6 place-items-center rounded-full border text-[0.5rem] transition-all duration-500 ${active || done ? '' : 'border-white/12 bg-white/[0.03] text-steel'}`}>
+              <span style={dotStyle} className={`grid h-6 w-6 place-items-center rounded-full border text-[0.5rem] transition-all duration-500 ${active || done ? '' : 'border-white/12 bg-white/[0.03] text-steel'}`}>
                 {done ? <Check className="h-3 w-3" strokeWidth={2.6} /> : <CircleDot className="h-3 w-3" strokeWidth={2} />}
               </span>
-              <span style={labelStyle}
-                className={`max-w-[6rem] text-center text-[0.5rem] uppercase tracking-[0.12em] ${active || done ? '' : 'text-steel'}`}>{s}</span>
+              <span style={labelStyle} className={`max-w-[6rem] text-center text-[0.5rem] uppercase tracking-[0.12em] ${active || done ? '' : 'text-steel'}`}>{s}</span>
             </div>
           );
         })}
@@ -608,7 +558,7 @@ function ServiceRail({ t, stage }: { t: Tr; stage: number }) {
 function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; isAr: boolean; booking: BookingRecord; onClose: () => void }) {
   const { updateBooking, cancelBooking } = useAuth();
   const [mode, setMode] = useState<'view' | 'reschedule' | 'cancel'>('view');
-
+  const [cancelReason, setCancelReason] = useState('');
   const editable = booking.status === 'upcoming';
   const size = (booking.size ?? 'large') as VehicleSize;
   const tone = STATUS_TONES[booking.status];
@@ -678,10 +628,7 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
           <motion.div key="resched" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.3, ease: EASE }}>
             <ReschedulePanel t={t} tb={tb} isAr={isAr} booking={booking}
               onBack={() => setMode('view')}
-              onSave={async (date, time) => {
-                await updateBooking(booking.id, { date, time });
-                setMode('view');
-              }} />
+              onSave={async (date, time) => { await updateBooking(booking.id, { date, time }); setMode('view'); }} />
           </motion.div>
         )}
 
@@ -690,10 +637,21 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
             <span className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-[#7c1a1a]/40 bg-[#2a1414]/40 text-[#e7b4b4]"><Trash2 className="h-7 w-7" strokeWidth={1.5} /></span>
             <h3 className="mt-5 font-display text-2xl font-light uppercase tracking-tight text-ivory">{t('bookings.cancelTitle')}</h3>
             <p className="mx-auto mt-3 max-w-[38ch] text-sm leading-relaxed text-platinum/65">{t('bookings.cancelConfirm', { vehicle: booking.vehicleLabel, date: fmtDate(booking.date, isAr) })}</p>
+            <div className="mx-auto mt-5 max-w-[42ch] text-start">
+              <label className="mb-2 block text-[0.6rem] uppercase tracking-[0.2em] text-platinum/70">
+                {isAr ? 'سبب الإلغاء *' : 'Cancellation reason *'}
+              </label>
+              <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3}
+                placeholder={isAr ? 'مثال: تغيّرت ظروفي / غيّرت رأيي…' : 'e.g. plans changed…'}
+                className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-3 text-sm text-ivory outline-none transition-colors focus:border-platinum/50" />
+              {!cancelReason.trim() && <p className="mt-2 text-[0.66rem] text-[#c98a8a]">{isAr ? 'لازم تكتب السبب قبل التأكيد.' : 'Please enter a reason.'}</p>}
+            </div>
             <div className="mt-7 flex items-center justify-center gap-3">
               <button data-cursor="hover" onClick={() => setMode('view')}><GhostMini>{t('bookings.keep')}</GhostMini></button>
-              <button data-cursor="hover" onClick={async () => { await cancelBooking(booking.id); onClose(); }}
-                className="inline-flex items-center gap-2 rounded-full border border-[#7c1a1a]/50 bg-[#2a1414]/50 px-6 py-3 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#e7b4b4] transition-colors hover:bg-[#2a1414]/80">
+              <button data-cursor="hover"
+                disabled={!cancelReason.trim()}
+                onClick={async () => { await cancelBooking(booking.id, cancelReason.trim()); onClose(); }}
+                className={`inline-flex items-center gap-2 rounded-full border border-[#7c1a1a]/50 bg-[#2a1414]/50 px-6 py-3 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#e7b4b4] transition-colors hover:bg-[#2a1414]/80 ${cancelReason.trim() ? '' : 'pointer-events-none opacity-40'}`}>
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />{t('bookings.confirmCancel')}
               </button>
             </div>
@@ -720,11 +678,7 @@ function ReschedulePanel({ t, tb, isAr, booking, onBack, onSave }: { t: Tr; tb: 
   const handleSave = async () => {
     if (!date || !time) return;
     setSaving(true);
-    try {
-      await onSave(date, time);
-    } finally {
-      setSaving(false);
-    }
+    try { await onSave(date, time); } finally { setSaving(false); }
   };
   return (
     <div>
@@ -930,8 +884,7 @@ function VehicleModal({ t, vehicle, colors, onClose }: { t: Tr; vehicle: Vehicle
     if (!valid) { setTouched(true); return; }
     const payload = {
       brandId: v.brandId, model: v.model, colorKey: v.colorKey, year: v.year,
-      plateDigits: v.plateDigits.trim(),
-      plateLetters: v.plateLetters.trim(),
+      plateDigits: v.plateDigits.trim(), plateLetters: v.plateLetters.trim(),
       plate: joinPlate(v.plateDigits, v.plateLetters),
     };
     if (vehicle) updateVehicle(vehicle.id, payload as any);
@@ -1001,11 +954,9 @@ function Profile({ t, tb, isAr, member }: { t: Tr; tb: Tr; isAr: boolean; member
   const phoneError = touched && !phoneOk ? (isAr ? 'رقم غير صحيح' : 'Invalid phone number') : null;
   const save = () => { if (!phoneOk) { setTouched(true); return; } updateProfile(v); setSaved(true); };
 
-  // صلاحية الأكونت — لو admin/staff نظهر بوابة الداشبورد
   const role = member.role;
   const isPrivileged = role === 'admin' || role === 'staff';
 
-  // مدن من القاعدة (مع fallback آمن للستاتيك المترجم)
   const dbCities = useDbCities(isAr);
   const cityOptions = dbCities
     ? dbCities.map((c) => ({ value: c.code, label: c.label }))
@@ -1052,11 +1003,8 @@ function Profile({ t, tb, isAr, member }: { t: Tr; tb: Tr; isAr: boolean; member
   );
 }
 
-/* بوابة الداشبورد — تظهر فقط للأدمن/الستاف */
 function AdminGateway({ t, role, isAr }: { t: Tr; role: string; isAr: boolean }) {
-  const roleLabel = t.has(`profile.roles.${role}`)
-    ? t(`profile.roles.${role}`)
-    : (role === 'admin' ? (isAr ? 'مدير' : 'Admin') : (isAr ? 'موظّف' : 'Staff'));
+  const roleLabel = t.has(`profile.roles.${role}`) ? t(`profile.roles.${role}`) : (role === 'admin' ? (isAr ? 'مدير' : 'Admin') : (isAr ? 'موظّف' : 'Staff'));
   const title = t.has('profile.adminGateTitle') ? t('profile.adminGateTitle') : (isAr ? 'لوحة التحكّم' : 'Control panel');
   const sub = t.has('profile.adminGateSub') ? t('profile.adminGateSub') : (isAr ? 'أدوات الإدارة والتشغيل الخاصة بفريق ABH.' : 'Management & operations tools for the ABH team.');
   const cta = t.has('profile.adminGateCta') ? t('profile.adminGateCta') : (isAr ? 'فتح الداشبورد' : 'Open dashboard');
@@ -1064,13 +1012,10 @@ function AdminGateway({ t, role, isAr }: { t: Tr; role: string; isAr: boolean })
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className="group relative mb-6 overflow-hidden rounded-[26px] border border-platinum/25 bg-gradient-to-br from-white/[0.06] to-white/[0.01] p-px">
-      <span aria-hidden className="pointer-events-none absolute -inset-px rounded-[26px] opacity-60"
-        style={{ background: 'conic-gradient(from 180deg at 50% 50%, transparent, rgba(203,205,205,0.25), transparent)' }} />
+      <span aria-hidden className="pointer-events-none absolute -inset-px rounded-[26px] opacity-60" style={{ background: 'conic-gradient(from 180deg at 50% 50%, transparent, rgba(203,205,205,0.25), transparent)' }} />
       <div className="relative flex flex-wrap items-center justify-between gap-5 rounded-[25px] bg-[#0b0c0d]/80 px-6 py-5 backdrop-blur-xl md:px-7">
         <div className="flex items-center gap-4">
-          <span className="grid h-12 w-12 flex-none place-items-center rounded-2xl border border-platinum/30 bg-platinum/[0.08]">
-            <KeyRound className="h-5 w-5 text-platinum" strokeWidth={1.7} />
-          </span>
+          <span className="grid h-12 w-12 flex-none place-items-center rounded-2xl border border-platinum/30 bg-platinum/[0.08]"><KeyRound className="h-5 w-5 text-platinum" strokeWidth={1.7} /></span>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-display text-lg uppercase tracking-tight text-ivory">{title}</h3>
@@ -1085,7 +1030,7 @@ function AdminGateway({ t, role, isAr }: { t: Tr; role: string; isAr: boolean })
   );
 }
 
-/* ─── Shared primitives ────────────────────────────────────────────── */
+/* ─── Shared primitives ─── */
 const CITY_KEYS = ['jeddah', 'makkah'] as const;
 
 function SubHead({ children }: { children: React.ReactNode }) {
@@ -1183,9 +1128,7 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
           <h3 className="font-display text-xl font-light uppercase tracking-tight text-ivory md:text-2xl">{title}</h3>
           <button data-cursor="hover" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full border border-white/12 text-platinum/70 transition-colors hover:border-white/30 hover:text-ivory"><X className="h-4 w-4" /></button>
         </div>
-        <div className="p-6 md:p-8">
-          {children}
-        </div>
+        <div className="p-6 md:p-8">{children}</div>
       </motion.div>
     </motion.div>
   );

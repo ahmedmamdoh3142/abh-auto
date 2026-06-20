@@ -4,12 +4,14 @@
  * StepVehicle — act 01 of the booking flow.
  * لوحة السيارة الآن جزئين: أرقام + حروف (تُخزَّن مدمجة في data.plate).
  * الألوان تأتي من القاعدة (جدول colors) عبر prop `colors` بدل الاعتماد على الترجمة.
+ *
+ * الماركة والموديل صاروا combobox بسيرش (SearchSelect): تكتب حرف فيتفلتر القائمة.
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Check, ChevronDown, Plus, Car } from 'lucide-react';
+import { Check, ChevronDown, Plus, Car, Search } from 'lucide-react';
 
 import { COLORS, type Brand } from '@/lib/booking-data';
 import type { DbColor } from '@/lib/booking-data-db';
@@ -134,13 +136,15 @@ export function StepVehicle({
 
             <div className="mt-7 space-y-7">
               <Field label={t('step1.brand')}>
-                <Select value={data.brandId} placeholder={t('step1.brandPlaceholder')}
+                <SearchSelect value={data.brandId} placeholder={t('step1.brandPlaceholder')}
+                  searchPlaceholder={isAr ? 'ابحث عن ماركة…' : 'Search brand…'}
                   options={brands.map((b) => ({ value: b.id, label: b.name }))}
                   onChange={(v) => onChange({ brandId: v, model: '' })} />
               </Field>
 
               <Field label={t('step1.model')}>
-                <Select value={data.model} placeholder={t('step1.modelPlaceholder')} disabled={!brand}
+                <SearchSelect value={data.model} placeholder={t('step1.modelPlaceholder')} disabled={!brand}
+                  searchPlaceholder={isAr ? 'ابحث عن موديل…' : 'Search model…'}
                   options={(brand?.models ?? []).map((m) => ({ value: m, label: m }))}
                   onChange={(v) => onChange({ model: v })} />
               </Field>
@@ -272,6 +276,127 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
       </span>
       {children}
     </label>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SearchSelect — combobox بسيرش: تكتب حرف فيتفلتر، مع دعم لوحة المفاتيح.
+   (مستقل عن Select القديم عشان لا نكسر بقية الاستيرادات)
+   ════════════════════════════════════════════════════════════════════ */
+export function SearchSelect({
+  value, placeholder, searchPlaceholder, options, onChange, disabled,
+}: {
+  value: string;
+  placeholder: string;
+  searchPlaceholder?: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [active, setActive] = useState(0); // العنصر المميّز للكيبورد
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find((o) => o.value === value);
+
+  // فلترة بسيطة وذكية: تجاهل حالة الأحرف والمسافات الزائدة
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(term));
+  }, [q, options]);
+
+  // قفل عند الضغط خارج المكوّن
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  // عند الفتح: صفّر البحث وركّز على خانة الكتابة
+  useEffect(() => {
+    if (open) {
+      setQ('');
+      setActive(0);
+      const id = setTimeout(() => inputRef.current?.focus(), 30);
+      return () => clearTimeout(id);
+    }
+  }, [open]);
+
+  // إبقاء العنصر المميّز ظاهرًا أثناء التنقل بالكيبورد
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector<HTMLElement>(`[data-idx="${active}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [active, open]);
+
+  const choose = (v: string) => { onChange(v); setOpen(false); };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = filtered[active]; if (o) choose(o.value); }
+    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" data-cursor="hover" disabled={disabled} onClick={() => setOpen((o) => !o)}
+        className={['flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-start text-sm transition-colors duration-300',
+          disabled ? 'cursor-not-allowed border-white/8 bg-white/[0.02] text-steel/50' : open ? 'border-platinum/50 bg-white/[0.05] text-ivory' : 'border-white/12 bg-white/[0.03] text-ivory hover:border-white/25'].join(' ')}>
+        <span className={selected ? 'text-ivory' : 'text-steel/70'}>{selected?.label ?? placeholder}</span>
+        <ChevronDown className={`h-4 w-4 text-platinum transition-transform duration-300 ${open ? 'rotate-180' : ''}`} strokeWidth={1.8} />
+      </button>
+
+      <AnimatePresence>
+        {open && !disabled && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+            className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/95 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+            {/* خانة البحث */}
+            <div className="border-b border-white/[0.06] p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-platinum/50" strokeWidth={1.8} />
+                <input
+                  ref={inputRef}
+                  value={q}
+                  onChange={(e) => { setQ(e.target.value); setActive(0); }}
+                  onKeyDown={onKeyDown}
+                  placeholder={searchPlaceholder ?? placeholder}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-2.5 ps-9 pe-3 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/40 focus:bg-white/[0.05]"
+                />
+              </div>
+            </div>
+
+            {/* القائمة المفلترة */}
+            <div ref={listRef} className="max-h-60 overflow-y-auto p-1.5">
+              {filtered.length === 0 ? (
+                <div className="px-4 py-6 text-center text-[0.72rem] text-steel">
+                  {/* لا نتائج */}
+                  {searchPlaceholder?.includes('ابحث') ? 'لا توجد نتائج' : 'No results'}
+                </div>
+              ) : (
+                filtered.map((o, i) => {
+                  const on = o.value === value;
+                  const hot = i === active;
+                  return (
+                    <button key={o.value} type="button" data-cursor="hover" data-idx={i}
+                      onMouseEnter={() => setActive(i)}
+                      onMouseDown={(e) => { e.preventDefault(); choose(o.value); }}
+                      className={['flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-start text-sm transition-colors duration-150',
+                        on ? 'bg-white/[0.08] text-ivory' : hot ? 'bg-white/[0.05] text-ivory' : 'text-platinum/80'].join(' ')}>
+                      {o.label}{on && <Check className="h-3.5 w-3.5 text-platinum" strokeWidth={2.4} />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * StepDetails — act 03. Contact form + date/time popovers.
- * المواعيد دلوقتي كل ساعة (مش نص ساعة)، من 10ص لـ 9م.
- * المدن تأتي من القاعدة عبر /api/cities (مع fallback آمن للستاتيك المترجم).
+ * StepDetails — act 03. Contact form + date/time popovers + موافقة الواتساب.
+ * المواعيد كل ساعة من 10ص لـ 9م. المدن من القاعدة عبر /api/cities (fallback ستاتيك).
+ * أُضيف: تشيك بوكس موافقة العميل على التواصل عبر واتساب (تأكيد/تذكير/عروض).
  */
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Mail, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { User, Phone, Mail, Calendar, Clock, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
 import { CITIES, BRANCHES, branchLabel, cityLabel } from '@/lib/booking-data';
 import type { BookingState } from './booking-flow';
@@ -66,8 +66,8 @@ export function StepDetails({
       ? t('step3.validation.phoneRequired')
       : isValidPhone(data.phone) ? null : t('step3.validation.phoneInvalid'),
     email: !data.email.trim()
-      ? t('step3.validation.emailRequired')
-      : EMAIL_RE.test(data.email) ? null : t('step3.validation.emailInvalid'),
+    ? null                                   // ← فاضي = مقبول (اختياري)
+    : EMAIL_RE.test(data.email) ? null : t('step3.validation.emailInvalid'),
     city: data.city ? null : t('step3.validation.cityRequired'),
     branch: data.branch ? null : t('step3.validation.branchRequired'),
     date: data.date ? null : t('step3.validation.dateRequired'),
@@ -129,11 +129,42 @@ export function StepDetails({
         </div>
       </div>
 
+      {/* ── موافقة الواتساب ── */}
+      <WhatsAppConsent isAr={isAr} checked={data.whatsappOptIn ?? false}
+        onChange={(v) => set({ whatsappOptIn: v })} />
+
       <div className="mt-12 flex flex-wrap items-center justify-between gap-4">
         <button onClick={onBack} data-cursor="hover"><GhostPill>{t('step3.back')}</GhostPill></button>
         <button onClick={handleNext} data-cursor="hover"><PrimaryPill>{t('step3.continue')}</PrimaryPill></button>
       </div>
     </div>
+  );
+}
+
+/* تشيك بوكس موافقة التواصل عبر واتساب — نصوص مباشرة (لا تعتمد على ملفات الترجمة). */
+function WhatsAppConsent({ isAr, checked, onChange }: { isAr: boolean; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label
+      data-cursor="hover"
+      className={['mt-8 flex cursor-pointer items-start gap-3.5 rounded-2xl border px-5 py-4 transition-colors duration-300',
+        checked ? 'border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.06]' : 'border-white/12 bg-white/[0.02] hover:border-white/25'].join(' ')}>
+      <span className={['mt-0.5 grid h-6 w-6 flex-none place-items-center rounded-lg border transition-all duration-300',
+        checked ? 'border-transparent bg-gradient-to-br from-[#9fd4b0] to-[#7ec594] text-obsidian' : 'border-white/25'].join(' ')}>
+        {checked && <Check className="h-3.5 w-3.5" strokeWidth={2.6} />}
+      </span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        className="sr-only" aria-label={isAr ? 'موافقة الواتساب' : 'WhatsApp consent'} />
+      <span>
+        <span className="block text-sm text-ivory">
+          {isAr ? 'أوافق على التواصل معي عبر واتساب' : 'I agree to be contacted on WhatsApp'}
+        </span>
+        <span className="mt-1 block text-[0.72rem] leading-relaxed text-platinum/55">
+          {isAr
+            ? 'لإرسال تأكيد الحجز، تذكير الموعد، والعروض الخاصة. يمكنك إلغاء الاشتراك في أي وقت.'
+            : 'For booking confirmation, appointment reminders, and special offers. You can opt out anytime.'}
+        </span>
+      </span>
+    </label>
   );
 }
 

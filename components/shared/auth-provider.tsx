@@ -25,8 +25,9 @@ export interface Vehicle {
 
 export type BookingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
-/** صلاحية الحساب — تأتي من /api/auth/me (جدول users.role). */
-export type UserRole = 'member' | 'staff' | 'admin';
+/** صلاحية الحساب — تأتي من /api/auth/me (جدول users.role).
+ *  'partner' = حساب شركة شريكة (أسعار خاصة + لوحة شركتي). */
+export type UserRole = 'member' | 'staff' | 'admin' | 'partner';
 
 export interface BookingRecord {
   id: string;
@@ -55,7 +56,7 @@ export interface Member {
   phone: string;
   city: string;
   since: string;
-  role: UserRole;          // ← جديد: تُستعمل لإظهار بوابة الداشبورد للأدمن/الستاف
+  role: UserRole;          // ← تُستعمل لإظهار بوابة الداشبورد للأدمن/الستاف ولوحة الشركة للشركاء
   vehicles: Vehicle[];
   bookings: BookingRecord[];
 }
@@ -63,7 +64,7 @@ export interface Member {
 interface AuthContextValue {
   member: Member | null;
   hydrated: boolean;
-  signIn: (email: string, password: string) => Promise<Member>;
+  signIn: (name: string, password: string) => Promise<Member>;
   register: (input: { name: string; email: string; phone: string; city: string; password: string }) => Promise<Member>;
   signOut: () => void;
   updateProfile: (patch: Partial<Pick<Member, 'name' | 'email' | 'phone' | 'city'>>) => void;
@@ -72,7 +73,7 @@ interface AuthContextValue {
   removeVehicle: (id: string) => void;
   addBooking: (b: Omit<BookingRecord, 'id' | 'createdAt' | 'status'> & { status?: BookingStatus }) => BookingRecord;
   updateBooking: (id: string, patch: Partial<BookingRecord>) => Promise<void>;
-  cancelBooking: (id: string) => Promise<void>;
+  cancelBooking: (id: string, reason: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -82,13 +83,16 @@ const newId = () =>
     ? crypto.randomUUID()
     : `id_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
+// أدوار معروفة — أي قيمة خارجها تُعامَل كـ member.
+const KNOWN_ROLES: UserRole[] = ['member', 'staff', 'admin', 'partner'];
+
 function buildMember(
   u: any,
   vehicles: Vehicle[] = [],
   bookings: BookingRecord[] = [],
 ): Member {
-  const role: UserRole =
-    u?.role === 'admin' || u?.role === 'staff' ? u.role : 'member';
+  // نحافظ على الدور كما يأتي من القاعدة (بما فيه 'partner')، ونرجع لـ member فقط لو غير معروف.
+  const role: UserRole = KNOWN_ROLES.includes(u?.role) ? u.role : 'member';
   return {
     id: u.id,
     name: u.name ?? '',
@@ -143,22 +147,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMember((prev) => (prev ? { ...prev, vehicles: acct.vehicles, bookings: acct.bookings } : prev));
   }, [loadAccount]);
 
-  const signIn = useCallback<AuthContextValue['signIn']>(async (email, password) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json.ok) throw new Error(json?.error ?? 'invalid-credentials');
+  const signIn = useCallback<AuthContextValue['signIn']>(async (name, password) => {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, password }),   // ← name مش email
+  });
+  const json = await res.json();
+  if (!res.ok || !json.ok) throw new Error(json?.error ?? 'invalid-credentials');
 
-    const meRes = await fetch('/api/auth/me');
-    const meJson = await meRes.json();
-    const acct = await loadAccount();
-    const m = buildMember(meJson.user ?? json.user, acct.vehicles, acct.bookings);
-    setMember(m);
-    return m;
-  }, [loadAccount]);
+  const meRes = await fetch('/api/auth/me');
+  const meJson = await meRes.json();
+  const acct = await loadAccount();
+  const m = buildMember(meJson.user ?? json.user, acct.vehicles, acct.bookings);
+  setMember(m);
+  return m;
+}, [loadAccount]);
 
   const register = useCallback<AuthContextValue['register']>(async (input) => {
     const res = await fetch('/api/auth/register', {
@@ -263,20 +267,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshAccount]);
 
-  const cancelBooking = useCallback<AuthContextValue['cancelBooking']>(async (id) => {
-    // optimistic update
-    setMember((prev) =>
-      prev ? { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, status: 'cancelled' } : b)) } : prev);
-    try {
-      const res = await fetch(`/api/account/bookings?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (!res.ok) {
-        await refreshAccount();
-      }
-    } catch (e) {
-      console.error('cancelBooking failed:', e);
-      await refreshAccount();
-    }
-  }, [refreshAccount]);
+  const cancelBooking = useCallback<AuthContextValue['cancelBooking']>(async (id, reason) => {
+  setMember((prev) =>
+    prev ? { ...prev, bookings: prev.bookings.map((b) => (b.id === id ? { ...b, status: 'cancelled' } : b)) } : prev);
+  try {
+    const res = await fetch(
+      `/api/account/bookings?id=${encodeURIComponent(id)}&reason=${encodeURIComponent(reason)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) await refreshAccount();
+  } catch (e) {
+    console.error('cancelBooking failed:', e);
+    await refreshAccount();
+  }
+}, [refreshAccount]);
 
   const value = useMemo<AuthContextValue>(() => ({
     member, hydrated, signIn, register, signOut, updateProfile,

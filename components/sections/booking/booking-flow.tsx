@@ -2,6 +2,9 @@
 
 /**
  * BookingFlow — the /booking experience. (DB-driven services + promo code + colors)
+ *
+ * تحديث أكواد الخصم: الخصم يُحسب في الخادم حسب نوع الكود (إجمالي/مبلغ/خدمات)،
+ * ويُخزّن في الحالة كـ promoDiscount جاهز. لا نطبّق أي نسبة عمياء في الواجهة.
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -51,7 +54,12 @@ export interface BookingState {
   showBreakdown: boolean;
   calMonth: { y: number; m: number } | null;
   promoCode: string | null;   // كود الخصم المطبّق (بعد التحقق)
-  promoPercent: number;       // نسبة الكود (0 لو مفيش)
+  promoPercent: number;       // نسبة الكود (للأنواع النسبية فقط — للعرض)
+  promoKind: string | null;   // نوع الكود: percentage|fixed|service_percent|service_each
+  promoDiscount: number;      // قيمة الخصم الفعلية المحسوبة في الخادم
+  promoServiceIds: number[];  // الخدمات اللي اتطبّق عليها الخصم (للأنواع المرتبطة بخدمات)
+  promoPerService: Record<number, number>; // خصم كل خدمة (للعرض المفصّل)
+  whatsappOptIn: boolean;                   // موافقة التواصل عبر واتساب
 }
 
 const INITIAL: BookingState = {
@@ -60,7 +68,9 @@ const INITIAL: BookingState = {
   towingLat: null, towingLng: null, towingAddress: '',
   name: '', phone: '', email: '', city: '', branch: '', date: '', time: '',
   payment: null, showBreakdown: false, calMonth: null,
-  promoCode: null, promoPercent: 0,
+  promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
+  promoServiceIds: [], promoPerService: {},
+  whatsappOptIn: false,
 };
 
 const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
@@ -124,6 +134,46 @@ export function BookingFlow({
     });
   }, [sizeOf]);
 
+  // ── إعادة التحقق من الكود كلما تغيّرت الخدمات/الحجم (يمنع بقاء خصم غير صالح) ──
+  // نبني توقيع الطلب الحالي؛ لو الكود مطبّق ثم تغيّر الطلب، نعيد الحساب من الخادم.
+  const revalidatePromo = useCallback(async (state: BookingState) => {
+    if (!state.promoCode) return;
+    const lines = state.services
+      .map((slug) => {
+        const meta = SERVICES.find((s) => s.slug === slug);
+        if (!meta || meta.onRequest) return null;
+        return { serviceId: meta.id, unit: dbPriceFor(meta, state.size) };
+      })
+      .filter(Boolean) as { serviceId: number; unit: number }[];
+
+    const tow = state.towing && state.towingMode ? TOWING_COST[state.towingMode] : 0;
+    const subtotal = lines.reduce((s, l) => s + l.unit, 0) + tow;
+
+    try {
+      const res = await fetch('/api/promo/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: state.promoCode, lines, subtotal }),
+      });
+      const j = await res.json();
+      if (j?.ok) {
+        set({
+          promoDiscount: Number(j.discount) || 0,
+          promoServiceIds: j.matchedServiceIds ?? [],
+          promoPerService: j.perService ?? {},
+        });
+      } else {
+        // الكود بطل يكون صالح (مثلاً الحد الأدنى مابقاش متحقّق) → نشيله
+        set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
+      }
+    } catch { /* تجاهل أخطاء الشبكة هنا */ }
+  }, [SERVICES, set]);
+
+  // أعِد التحقق عند تغيّر الخدمات/الحجم/النقل طالما فيه كود مطبّق
+  useEffect(() => {
+    if (data.promoCode) revalidatePromo(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.services, data.size, data.towing, data.towingMode]);
+
   const total = useMemo(() => {
     let onReq = false;
     let saved = 0;
@@ -138,10 +188,11 @@ export function BookingFlow({
     }, 0);
     const tow = data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0;
     const beforePromo = services + tow;
-    const promoCut = data.promoPercent > 0 ? Math.round((beforePromo * data.promoPercent) / 100) : 0;
+    // الخصم = القيمة المحسوبة في الخادم (محدودة بالإجمالي)، مش نسبة عمياء.
+    const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
     const grand = Math.max(0, beforePromo - promoCut);
     return { services, tow, beforePromo, promoCut, grand, onReq, saved };
-  }, [data.services, data.size, data.towing, data.towingMode, data.promoPercent, SERVICES]);
+  }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, SERVICES]);
 
   const go = useCallback((to: number) => {
     setStep(to);
@@ -177,6 +228,10 @@ export function BookingFlow({
           phone: data.phone,
           email: data.email,
           city: data.city,
+          whatsappOptIn: data.whatsappOptIn,
+          whatsappOptInText: data.whatsappOptIn
+            ? (isAr ? 'وافق على التواصل عبر واتساب عند الحجز من الموقع' : 'Consented to WhatsApp contact at website booking')
+            : null,
         }),
       });
       const json = await res.json();
@@ -202,7 +257,7 @@ export function BookingFlow({
 
     setDone(true);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [member, addBooking, data, total.grand, total.tow]);
+  }, [member, addBooking, data, total.grand, total.tow, effectiveBrands]);
 
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });

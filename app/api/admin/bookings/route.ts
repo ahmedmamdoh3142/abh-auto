@@ -2,14 +2,18 @@
  * app/api/admin/bookings/route.ts
  * PATCH أكشنز:
  *   - cancel        : إلغاء بسبب اجباري → status='cancelled' + cancel_reason + history
+ *                     لو كان الحجز مدفوعًا → payment_status='refunded' (رد الفلوس)
+ *                     ويُلغى أي استخدام برومو مرتبط (يرجع للكود) + العمولة تطير تلقائيًا من الـviews.
  *   - stage         : تحديث مرحلة العمل (0..3) → تسحب الحالة تلقائيًا (active/completed)
  *   - reschedule    : تغيير scheduled_date / scheduled_time
- *   - confirm_pay   : تأكيد الدفع → payment_status='paid'
+ *   - confirm_pay   : تأكيد الدفع → payment_status='paid' + تأكيد استخدام البرومو
+ *                     (دلوقتي بس تُحتسب عمولة الشريك وإحصائيات البرومو لهذا الحجز).
  * الكل يسجّل في booking_status_history.
  */
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
+import { confirmRedemptionForBooking, voidRedemptionForBooking } from "@/lib/promo";
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -31,24 +35,42 @@ export async function PATCH(request: Request) {
       const reason = String(b.reason ?? "").trim();
       if (!reason) return bad("reason_required");
 
+      // نقرأ الحالة الحالية أولًا لمعرفة هل كان مدفوعًا (عشان نرجّع الفلوس)
+      const cur = await query<any>(
+        `SELECT payment_status, stage FROM bookings WHERE id = $1`,
+        [id]
+      );
+      if (!cur[0]) return bad("not_found", 404);
+      const wasPaid = cur[0].payment_status === "paid";
+
       const rows = await query<any>(
         `UPDATE bookings
-            SET status='cancelled', cancel_reason=$2, updated_at=now()
+            SET status='cancelled',
+                cancel_reason=$2,
+                -- لو كان مدفوعًا: نعتبره مُسترَدًّا. غير كده نسيبه زي ما هو.
+                payment_status = CASE WHEN payment_status = 'paid'::public.payment_status
+                                      THEN 'refunded'::public.payment_status
+                                      ELSE payment_status END,
+                updated_at=now()
           WHERE id=$1
-        RETURNING status, stage, cancel_reason`,
+        RETURNING status, stage, cancel_reason, payment_status`,
         [id, reason]
       );
       if (!rows[0]) return bad("not_found", 404);
 
+      // إلغاء أي استخدام برومو مرتبط بالحجز (يرجع العدّاد للكود ويحذف السجل)
+      await voidRedemptionForBooking(id).catch((e) => console.error("voidRedemption failed:", e));
+
       await query(
         `INSERT INTO booking_status_history (booking_id, status, stage, note)
          VALUES ($1,'cancelled',$2,$3)`,
-        [id, rows[0].stage ?? 0, `أُلغِي بواسطة ${admin.name} — السبب: ${reason}`]
+        [id, rows[0].stage ?? 0,
+         `أُلغِي بواسطة ${admin.name} — السبب: ${reason}${wasPaid ? " — تم رد المبلغ (refunded)" : ""}`]
       ).catch(() => {});
 
       return NextResponse.json({
         ok: true,
-        booking: { status: "cancelled", cancelReason: rows[0].cancel_reason },
+        booking: { status: "cancelled", cancelReason: rows[0].cancel_reason, payment: rows[0].payment_status },
       });
     }
 
@@ -81,14 +103,23 @@ export async function PATCH(request: Request) {
 
     /* ── تأكيد الدفع (العميل دفع في الفرع) ── */
     if (action === "confirm_pay") {
+      const cur = await query<any>(`SELECT payment_status FROM bookings WHERE id = $1`, [id]);
+      if (!cur[0]) return bad("not_found", 404);
+      const already = cur[0].payment_status === "paid";
+
       const rows = await query<any>(
         `UPDATE bookings
-            SET payment_status='paid'::payment_status, updated_at=now()
+            SET payment_status='paid'::public.payment_status, updated_at=now()
           WHERE id=$1
         RETURNING payment_status, status, stage`,
         [id]
       );
       if (!rows[0]) return bad("not_found", 404);
+
+      // تأكيد استخدام البرومو لهذا الحجز (لو كان معلّقًا) — دلوقتي بس يُحتسب.
+      if (!already) {
+        await confirmRedemptionForBooking(id).catch((e) => console.error("confirmRedemption failed:", e));
+      }
 
       await query(
         `INSERT INTO booking_status_history (booking_id, status, stage, note)

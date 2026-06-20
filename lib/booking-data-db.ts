@@ -2,6 +2,7 @@ import { query } from "@/lib/db";
 import type { Locale } from "@/lib/locales";
 import type { CategoryId, Category, VehicleSize, Brand } from "@/lib/booking-data";
 import type { DbServiceMeta } from "@/lib/booking-pricing";
+import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 
 // إعادة تصدير للتوافق مع الاستيرادات القديمة
 export type { DbServiceMeta } from "@/lib/booking-pricing";
@@ -9,12 +10,9 @@ export { dbPriceFor, dbOldPriceFor, dbDiscountPct } from "@/lib/booking-pricing"
 
 /** لون قادم من جدول colors في القاعدة، بعد ترجمة الاسم حسب اللغة. */
 export interface DbColor {
-  /** code في جدول colors — يُخزَّن في vehicles.color_code / bookings.color_code */
   key: string;
   hex: string;
-  /** فاتح => علامة الاختيار تظهر داكنة فوقه */
   light: boolean;
-  /** الاسم المترجم حسب اللغة الحالية */
   name: string;
 }
 
@@ -32,7 +30,7 @@ function pick(json: any, locale: Locale): string {
   return json[locale] ?? json.ar ?? json.en ?? "";
 }
 
-/** الألوان فقط — يُستعمل من صفحات لا تحتاج باقي بيانات الحجز (مثل /account). */
+/** الألوان فقط. */
 export async function getColors(locale: Locale): Promise<DbColor[]> {
   const rows = await query<any>(
     `SELECT code, name, hex, is_light
@@ -48,13 +46,26 @@ export async function getColors(locale: Locale): Promise<DbColor[]> {
   }));
 }
 
-export async function getBookingData(locale: Locale): Promise<{
+/**
+ * getBookingData — الآن يقبل userId (اختياري).
+ * لو المستخدم شركة (partner) نشطة: تُستبدل أسعار الخدمات بأسعاره الخاصة،
+ * ولا يظهر أي خصم إعلاني (old = null).
+ */
+export async function getBookingData(
+  locale: Locale,
+  userId?: string | null
+): Promise<{
   categories: Category[];
   services: DbServiceMeta[];
   brands: Brand[];
   modelSizes: Record<string, VehicleSize>;
   colors: DbColor[];
+  isPartner: boolean;
 }> {
+  // ── هل المستخدم شركة؟ ──
+  const partner = await getPartnerForUser(userId);
+  const partnerMap = partner ? await getPartnerPriceMap(partner.id) : null;
+
   // ── التصنيفات ──
   const catRows = await query<any>(
     `SELECT slug, name AS name_raw FROM service_categories
@@ -67,7 +78,7 @@ export async function getBookingData(locale: Locale): Promise<{
     icon: CAT_ICON[c.slug] ?? "star",
   }));
 
-  // ── الماركات + الموديلات + حجم كل موديل (من القاعدة، مش static) ──
+  // ── الماركات + الموديلات + حجم كل موديل ──
   const brandRows = await query<any>(
     `SELECT b.id, b.name,
             COALESCE(
@@ -93,10 +104,9 @@ export async function getBookingData(locale: Locale): Promise<{
     }
   }
 
-  // ── الألوان (من جدول colors) ──
   const colors = await getColors(locale);
 
-  // ── الخدمات + الأسعار لكل حجم ──
+  // ── الخدمات + الأسعار لكل حجم (نجلب s.id كمان للدمج مع أسعار الشريك) ──
   const rows = await query<any>(
     `SELECT s.id, s.slug, c.slug AS category, s.image,
             s.name AS name_raw, s.description AS desc_raw,
@@ -114,20 +124,32 @@ export async function getBookingData(locale: Locale): Promise<{
      ORDER BY c.sort, s.sort`
   );
 
+  const SIZES: VehicleSize[] = ["small", "medium", "large"];
+
   const services: DbServiceMeta[] = rows.map((r) => {
     const p = r.prices_raw ?? {};
-    const prices: Record<VehicleSize, number> = {
-      small: Number(p.small?.price) || 0,
-      medium: Number(p.medium?.price) || 0,
-      large: Number(p.large?.price) || 0,
-    };
-    const oldPrices: Record<VehicleSize, number | null> = {
-      small: p.small?.old != null ? Number(p.small.old) : null,
-      medium: p.medium?.old != null ? Number(p.medium.old) : null,
-      large: p.large?.old != null ? Number(p.large.old) : null,
-    };
+
+    const prices: Record<VehicleSize, number> = { small: 0, medium: 0, large: 0 };
+    const oldPrices: Record<VehicleSize, number | null> = { small: null, medium: null, large: null };
+
+    for (const size of SIZES) {
+      const baseP = Number(p[size]?.price) || 0;
+      const baseO = p[size]?.old != null ? Number(p[size].old) : null;
+
+      if (partnerMap) {
+        // شريك: استبدل بسعره إن وُجد، بدون أي خصم إعلاني.
+        const pp = partnerMap.get(priceKey(r.id, size));
+        prices[size] = pp ? pp.price : baseP;
+        oldPrices[size] = null;
+      } else {
+        prices[size] = baseP;
+        oldPrices[size] = baseO;
+      }
+    }
+
     const includes: string[] = (r.includes_raw ?? []).map((x: any) => pick(x, locale));
     return {
+      id: Number(r.id),    // ← مهم: معرّف الخدمة لربط أكواد الخصم
       slug: r.slug,
       name: pick(r.name_raw, locale),
       desc: pick(r.desc_raw, locale),
@@ -145,5 +167,5 @@ export async function getBookingData(locale: Locale): Promise<{
     };
   });
 
-  return { categories, services, brands, modelSizes, colors };
+  return { categories, services, brands, modelSizes, colors, isPartner: !!partner };
 }

@@ -2,6 +2,7 @@
 import type { ServiceMeta, VehicleSize } from "@/lib/booking-data";
 
 export interface DbServiceMeta extends ServiceMeta {
+  id: number;            // معرّف الخدمة في القاعدة — مطلوب لربط أكواد الخصم بالخدمات
   name: string;
   desc: string;
   prices: Record<VehicleSize, number>;

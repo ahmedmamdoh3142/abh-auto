@@ -303,7 +303,9 @@ function SignInForm({
   onSuccess: (name: string) => void; onForgot: () => void;
 }) {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const locale = useLocale();
+const isAr = locale === 'ar';
+  const [name, setName] = useState('');   // بدل email
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [touched, setTouched] = useState(false);
@@ -311,18 +313,17 @@ function SignInForm({
   const [authError, setAuthError] = useState<string | null>(null);
 
   const errors = {
-    email: !email.trim() ? t('validation.emailRequired')
-      : EMAIL_RE.test(email) ? null : t('validation.emailInvalid'),
+    name: name.trim() ? null : (isAr ? 'الاسم مطلوب' : 'Name is required'),
     password: password ? null : t('validation.passwordRequired'),
   };
-  const valid = !errors.email && !errors.password;
+  const valid = !errors.name && !errors.password;
 
   const submit = async () => {
     setAuthError(null);
     if (!valid) { setTouched(true); return; }
     setBusy(true);
     try {
-      const m = await signIn(email, password);
+      const m = await signIn(name, password);   // بدل signIn(email, password)
       onSuccess(m.name);
     } catch {
       setAuthError(t('invalidCredentials'));
@@ -335,9 +336,9 @@ function SignInForm({
       <Header t={t} title={t('signInTitle')} sub={t('signInSubtitle')} />
 
       <div className="mt-8 space-y-5">
-        <Field label={t('email')}>
-          <TextInput icon={Mail} value={email} onChange={setEmail} dir="ltr"
-            placeholder={t('emailPlaceholder')} error={touched ? errors.email : null} onEnter={submit} />
+        <Field label={isAr ? 'اسم المستخدم' : 'User name'}>
+          <TextInput icon={User} value={name} onChange={setName}
+            placeholder={isAr ? 'اكتب اسمك' : 'Enter your name'} error={touched ? errors.name : null} onEnter={submit} />
         </Field>
 
         <Field label={t('password')}>

@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * StepConfirm — act 04. الخدمات من القاعدة + كود خصم (تحقق من القاعدة، خصم على الإجمالي).
+ * StepConfirm — act 04. الخدمات من القاعدة + كود خصم متعدّد الأنواع.
+ * التحقق من الكود يرسل بنود الطلب (serviceId + السعر) فيحسب الخادم الخصم الصحيح
+ * حسب نوع الكود (إجمالي/مبلغ/خدمات محددة) ويرجّع الخصم لكل خدمة.
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +12,7 @@ import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X
 
 import {
   BRANDS, PAYMENT_METHODS, PAYMENT_DISABLED, branchLabel, currencyFmt,
+  TOWING_COST,
   type PaymentMethod, type VehicleSize,
 } from '@/lib/booking-data';
 import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
@@ -87,8 +90,10 @@ export function StepConfirm({
             {data.services.map((slug) => {
               const svc = SERVICES.find((s) => s.slug === slug);
               if (!svc) return null;
+              const discounted = data.promoServiceIds?.includes(svc.id);
               return <Row key={slug} k={svc.name}
-                v={svc.onRequest ? t('onRequest') : `${currencyFmt(dbPriceFor(svc, data.size))} ${t('currency')}`} mono={!svc.onRequest} />;
+                v={svc.onRequest ? t('onRequest') : `${currencyFmt(dbPriceFor(svc, data.size))} ${t('currency')}`} mono={!svc.onRequest}
+                tag={discounted ? (isAr ? 'خصم' : 'Promo') : undefined} />;
             })}
             {data.towing && data.towingMode && (
               <Row k={t('step4.towing')} v={`${currencyFmt(total.tow)} ${t('currency')}`} mono />
@@ -126,7 +131,7 @@ export function StepConfirm({
             </div>
 
             {/* ── كود الخصم ── */}
-            <PromoField isAr={isAr} data={data} set={set} />
+            <PromoField isAr={isAr} data={data} set={set} services={SERVICES} t={t} />
 
             <div className="mt-7 rounded-3xl border border-platinum/25 bg-gradient-to-b from-platinum/[0.07] to-white/[0.01] p-5 md:p-6">
               <button data-cursor="hover" onClick={() => set({ showBreakdown: !data.showBreakdown })}
@@ -143,9 +148,13 @@ export function StepConfirm({
                         const svc = SERVICES.find((s) => s.slug === slug);
                         if (!svc) return null;
                         const old = dbOldPriceFor(svc, data.size);
+                        const promoCut = data.promoPerService?.[svc.id] ?? 0;
                         return (
                           <div key={slug} className="flex justify-between gap-3 py-1.5 text-[0.82rem] text-ivory/82">
-                            <span>{svc.name}</span>
+                            <span className="inline-flex items-center gap-1.5">
+                              {svc.name}
+                              {promoCut > 0 && <span className="rounded-full bg-platinum/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wide text-platinum">{isAr ? 'خصم' : 'Promo'}</span>}
+                            </span>
                             <span dir="ltr" className="flex items-baseline gap-1.5 tabular-nums">
                               {old && <span className="font-display text-xs text-steel line-through decoration-[#c98a8a]/70">{currencyFmt(old)}</span>}
                               <span className={`font-display ${old ? 'text-[#e7b4b4]' : 'text-platinum'}`}>{svc.onRequest ? t('onRequest') : currencyFmt(dbPriceFor(svc, data.size))}</span>
@@ -173,12 +182,12 @@ export function StepConfirm({
                 </div>
               )}
 
-              {/* سطر خصم الكود */}
-              {data.promoPercent > 0 && total.promoCut > 0 && (
+              {/* سطر خصم الكود — يعتمد على القيمة المحسوبة من الخادم */}
+              {data.promoCode && total.promoCut > 0 && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="inline-flex items-center gap-1.5 text-platinum">
                     <Tag className="h-3 w-3" strokeWidth={2} />
-                    {isAr ? `خصم الكود (${data.promoCode}) −${data.promoPercent}%` : `Promo (${data.promoCode}) −${data.promoPercent}%`}
+                    {promoLabel(isAr, data)}
                   </span>
                   <span dir="ltr" className="font-display text-platinum tabular-nums">−{currencyFmt(total.promoCut)} {t('currency')}</span>
                 </div>
@@ -222,41 +231,89 @@ export function StepConfirm({
   );
 }
 
-/* ── كود الخصم: إدخال + زر تحقق احترافي ── */
-function PromoField({ isAr, data, set }: { isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void }) {
+/** نص وصفي لسطر خصم الكود حسب نوعه. */
+function promoLabel(isAr: boolean, data: BookingState): string {
+  const code = data.promoCode ?? '';
+  if (data.promoKind === 'percentage') return isAr ? `خصم الكود (${code}) −${data.promoPercent}%` : `Promo (${code}) −${data.promoPercent}%`;
+  if (data.promoKind === 'fixed') return isAr ? `خصم الكود (${code})` : `Promo (${code})`;
+  // أنواع الخدمات
+  return isAr ? `خصم الكود (${code}) على خدمات محددة` : `Promo (${code}) — selected services`;
+}
+
+/* ── كود الخصم: إدخال + تحقق يحسب الخصم الفعلي على بنود الطلب ── */
+function PromoField({ isAr, data, set, services, t }: {
+  isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void;
+  services: DbServiceMeta[]; t: ReturnType<typeof useTranslations>;
+}) {
   const [code, setCode] = useState(data.promoCode ?? '');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const applied = data.promoPercent > 0 && !!data.promoCode;
+  const applied = !!data.promoCode && data.promoDiscount > 0;
 
   const errMsg = (e: string) => {
     if (isAr) return e === 'not_found' ? 'كود غير صحيح'
       : e === 'expired' ? 'انتهت صلاحية الكود'
+      : e === 'not_started' ? 'الكود لسه ما اشتغلش'
       : e === 'used_up' || e === 'inactive' ? 'الكود مش متاح'
+      : e === 'per_user' ? 'استخدمت الكود ده قبل كده'
+      : e === 'min_order' ? `الكود يتطلّب حد أدنى للطلب`
+      : e === 'no_match' ? 'الكود لا ينطبق على الخدمات المختارة'
       : 'تعذّر التحقق، حاول تاني';
     return e === 'not_found' ? 'Invalid code'
       : e === 'expired' ? 'Code expired'
+      : e === 'not_started' ? 'Code not active yet'
       : e === 'used_up' || e === 'inactive' ? 'Code no longer available'
+      : e === 'per_user' ? 'You already used this code'
+      : e === 'min_order' ? 'Order below the code minimum'
+      : e === 'no_match' ? 'Not applicable to selected services'
       : 'Could not verify, try again';
   };
+
+  // نبني بنود الطلب: serviceId + السعر للحجم الحالي (نتخطّى on-request)
+  const buildLines = () => data.services
+    .map((slug) => {
+      const meta = services.find((s) => s.slug === slug);
+      if (!meta || meta.onRequest) return null;
+      return { serviceId: meta.id, unit: dbPriceFor(meta, data.size) };
+    })
+    .filter(Boolean) as { serviceId: number; unit: number }[];
 
   const check = async () => {
     const c = code.trim();
     if (!c) return;
     setChecking(true); setError(null);
     try {
+      const lines = buildLines();
+      const subtotal = lines.reduce((s, l) => s + l.unit, 0) + (data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0);
       const res = await fetch('/api/promo/validate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: c, lines, subtotal }),
       });
       const j = await res.json();
-      if (j?.ok) { set({ promoCode: j.code, promoPercent: Number(j.percent) }); setError(null); }
-      else { set({ promoCode: null, promoPercent: 0 }); setError(errMsg(j?.error ?? 'server_error')); }
+      if (j?.ok) {
+        set({
+          promoCode: j.code,
+          promoKind: j.kind,
+          promoPercent: Number(j.discountPercent) || 0,
+          promoDiscount: Number(j.discount) || 0,
+          promoServiceIds: j.matchedServiceIds ?? [],
+          promoPerService: j.perService ?? {},
+        });
+        setError(null);
+      } else {
+        set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
+        setError(errMsg(j?.error ?? 'server_error'));
+      }
     } catch {
-      set({ promoCode: null, promoPercent: 0 }); setError(errMsg('server_error'));
+      set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
+      setError(errMsg('server_error'));
     } finally { setChecking(false); }
   };
 
-  const clear = () => { set({ promoCode: null, promoPercent: 0 }); setCode(''); setError(null); };
+  const clear = () => {
+    set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
+    setCode(''); setError(null);
+  };
 
   return (
     <div className="mt-5">
@@ -270,7 +327,7 @@ function PromoField({ isAr, data, set }: { isAr: boolean; data: BookingState; se
           <span className="inline-flex items-center gap-2 text-sm text-ivory">
             <Check className="h-4 w-4 text-platinum" strokeWidth={2.4} />
             <span className="font-display tracking-[0.12em]">{data.promoCode}</span>
-            <span className="text-platinum/80">· {data.promoPercent}%</span>
+            <span className="text-platinum/80">· −{currencyFmt(data.promoDiscount)} {t('currency')}</span>
           </span>
           <button data-cursor="hover" onClick={clear} aria-label="remove"
             className="grid h-7 w-7 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
@@ -330,10 +387,13 @@ function DossierCard({ icon: Icon, title, children }: { icon: React.ElementType;
   );
 }
 
-function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+function Row({ k, v, mono, tag }: { k: string; v: string; mono?: boolean; tag?: string }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-platinum/55">{k}</span>
+      <span className="inline-flex items-center gap-1.5 text-platinum/55">
+        {k}
+        {tag && <span className="rounded-full bg-platinum/15 px-1.5 py-0.5 text-[0.5rem] uppercase tracking-wide text-platinum">{tag}</span>}
+      </span>
       <span dir={mono ? 'ltr' : undefined} className={`text-end text-ivory/90 ${mono ? 'font-display tracking-wide tabular-nums' : ''}`}>{v}</span>
     </div>
   );

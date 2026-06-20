@@ -1,7 +1,6 @@
 /**
- * app/admin/services/page.tsx — الخدمات والأسعار (SERVER) · v2
- * يجلب لكل خدمة: الأسعار لكل حجم (price/old من service_prices)، المشمولات (service_includes)،
- * ويحوّل الضمان/المدة لأرقام (عشان الأدمن يكتب رقم بس).
+ * app/admin/services/page.tsx — الخدمات والأسعار (SERVER) · v3
+ * إضافة: تمرير قائمة الشركاء (partners) لتفعيل وضع "أسعار شركة" عبر كومبو بوكس.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -38,6 +37,14 @@ export default async function ServicesPage() {
   const cats = await query<any>(`SELECT id, name FROM service_categories WHERE surface='catalog' ORDER BY sort, id`);
   const sizes = await query<any>(`SELECT code, name FROM vehicle_sizes WHERE is_active ORDER BY sort, code`);
 
+  // الشركاء (للكومبو بوكس)
+  const partners = await query<any>(
+    `SELECT p.id, p.company_name
+       FROM partners p
+      WHERE p.is_active = true
+      ORDER BY p.company_name`
+  );
+
   const sizeP = (prices: any, code: string) => ({
     price: Number(prices?.[code]?.price) || 0,
     old: prices?.[code]?.old != null ? Number(prices[code].old) : 0,
@@ -48,6 +55,7 @@ export default async function ServicesPage() {
       locale={locale}
       categories={cats.map((c) => ({ id: c.id, label: pick(c.name, locale) }))}
       sizes={sizes.map((s) => ({ code: s.code, label: pick(s.name, locale) }))}
+      partners={partners.map((p) => ({ id: p.id, name: p.company_name }))}
       initial={services.map((s) => ({
         id: s.id,
         slug: s.slug,

@@ -1,11 +1,20 @@
 import { query } from "@/lib/db";
 import type { Locale } from "@/lib/locales";
+import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 
 // تحويل أكواد الأحجام: القاعدة small/medium/large → الواجهة s/m/l
 const SIZE_MAP: Record<string, "s" | "m" | "l"> = { small: "s", medium: "m", large: "l" };
+const DB_SIZES = ["small", "medium", "large"] as const;
 
-export async function getServicesData(_locale?: Locale) {
-  // التصنيفات الخمسة (catalog فقط — لتفادي تكرار الـslug)
+/**
+ * getServicesData — الآن يقبل userId (اختياري).
+ * لو شركة: تُستبدل الأسعار بأسعاره، وتُلغى الأسعار القديمة (لا خصومات إعلانية).
+ */
+export async function getServicesData(_locale?: Locale, userId?: string | null) {
+  const partner = await getPartnerForUser(userId);
+  const partnerMap = partner ? await getPartnerPriceMap(partner.id) : null;
+
+  // التصنيفات الخمسة (catalog فقط)
   const categories = await query(
     `SELECT slug, numeral,
             name AS short_raw,
@@ -15,9 +24,10 @@ export async function getServicesData(_locale?: Locale) {
      ORDER BY sort`
   );
 
-  // الخدمات بأسعارها (الجديدة والقديمة) وincludes وضمانها وتصنيفها
+  // الخدمات بأسعارها — نجلب s.id كمان للدمج مع أسعار الشريك
   const rows = await query(
-    `SELECT s.slug,
+    `SELECT s.id,
+            s.slug,
             c.slug AS category,
             s.name AS name_raw,
             s.tagline AS tagline_raw,
@@ -39,21 +49,27 @@ export async function getServicesData(_locale?: Locale) {
      ORDER BY c.sort, s.sort`
   );
 
-  // تحويل الأسعار من {small,medium,large} إلى {s,m,l}
   const services = (rows as any[]).map((r) => {
     const pricesDb = r.prices_raw ?? {};
-    const prices: Record<string, number> = { s: 0, m: 0, l: 0 };
-    for (const [k, v] of Object.entries(pricesDb)) {
-      const key = SIZE_MAP[k];
-      if (key) prices[key] = Number(v);
-    }
-
-    // الأسعار القديمة (لو موجودة فقط) — نفس التحويل
     const oldDb = r.old_prices_raw ?? {};
+
+    const prices: Record<string, number> = { s: 0, m: 0, l: 0 };
     const oldPrices: Record<string, number> = {};
-    for (const [k, v] of Object.entries(oldDb)) {
-      const key = SIZE_MAP[k];
-      if (key && v != null) oldPrices[key] = Number(v);
+
+    for (const dbSize of DB_SIZES) {
+      const uiKey = SIZE_MAP[dbSize];
+      const baseP = Number(pricesDb[dbSize]) || 0;
+      const baseO = oldDb[dbSize] != null ? Number(oldDb[dbSize]) : undefined;
+
+      if (partnerMap) {
+        // شريك: سعره الخاص إن وُجد، بدون سعر قديم.
+        const pp = partnerMap.get(priceKey(r.id, dbSize));
+        prices[uiKey] = pp ? pp.price : baseP;
+        // لا نضيف أي old للشريك
+      } else {
+        prices[uiKey] = baseP;
+        if (baseO != null) oldPrices[uiKey] = baseO;
+      }
     }
 
     return {
@@ -66,7 +82,6 @@ export async function getServicesData(_locale?: Locale) {
       badge: r.badge ?? undefined,
       duration: r.duration_raw ?? { en: "", ar: "" },
       prices,
-      // نرجّعها فقط لو فيها قيمة — الواجهة تتعامل معها كاختيارية
       oldPrices: Object.keys(oldPrices).length ? oldPrices : undefined,
       includes: r.includes_raw ?? [],
       warranty: {
@@ -83,5 +98,5 @@ export async function getServicesData(_locale?: Locale) {
     tagline: c.tagline_raw ?? { en: "", ar: "" },
   }));
 
-  return { categories: cats, services };
+  return { categories: cats, services, isPartner: !!partner };
 }

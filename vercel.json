@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/whatsapp?task=flush", "schedule": "* * * * *" },
+    { "path": "/api/cron/whatsapp?task=reminders", "schedule": "0 9 * * *" }
+  ]
+}

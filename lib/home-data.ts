@@ -1,19 +1,34 @@
-﻿import { query } from "@/lib/db";
+import { query } from "@/lib/db";
 import type { Locale } from "@/lib/locales";
+import { getHeroData } from "@/lib/hero-data";
+import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 
 async function block(key: string, locale: Locale) {
   const rows = await query(`SELECT value->$2 AS content FROM content_blocks WHERE key=$1`, [key, locale]);
   return (rows[0]?.content as Record<string, any>) ?? {};
 }
 
-export async function getHomeData(locale: Locale) {
+/**
+ * getHomeData — الآن يقبل userId (اختياري).
+ * لو المستخدم شركة (partner):
+ *   • offers / offersAll = فاضية (الشركة لا ترى العروض الإعلانية).
+ *   • banner = null (لا بانر ترويجي).
+ *   • قسم الخدمات: تُستبدل الأسعار بأسعار الشركة.
+ *   • isPartner = true (تستعمله الصفحة لإخفاء أقسام كاملة).
+ */
+export async function getHomeData(locale: Locale, userId?: string | null) {
+  const partner = await getPartnerForUser(userId);
+  const partnerMap = partner ? await getPartnerPriceMap(partner.id) : null;
+
   const [
+    hero,
     stats, discountedRaw, projects, testimonials, marquee, imagesRow,
-    bannerCopy, bannerMetaRow, offersText, servicesText, services, whyText, projectsText, testimonialsText,
+    bannerCopy, bannerMetaRow, offersText, servicesText, servicesRaw, whyText, projectsText, testimonialsText,
   ] = await Promise.all([
+    getHeroData(),
+
     query(`SELECT code, value, suffix, label->>$1 AS label FROM stats ORDER BY sort`, [locale]),
 
-    // العروض = الخدمات اللي عليها خصم فعلي (نهائي < قديم). النسبة تُحسب لكل خدمة (أعلى خصم بين الأحجام).
     query(
       `SELECT s.slug,
               s.name->>$1   AS title,
@@ -41,8 +56,10 @@ export async function getHomeData(locale: Locale) {
            FROM content_blocks WHERE key='banner'`),
     block("offers", locale),
     block("services", locale),
+    // نجلب s.id كمان عشان دمج أسعار الشريك
     query(
-      `SELECT s.slug,
+      `SELECT s.id,
+              s.slug,
               s.name->>$1 AS title,
               s.tagline->>$1 AS blurb,
               s.description->>$1 AS long,
@@ -65,28 +82,49 @@ export async function getHomeData(locale: Locale) {
     block("testimonials", locale),
   ]);
 
-  // حوّل الخدمات المخفّضة لصيغة كروت العروض (نفس شكل OfferRow)
-  const discounted = (discountedRaw as any[])
-    .filter((r) => r.pct != null && Number(r.pct) > 0)
-    .map((r) => ({
-      slug: r.slug,
-      tag: null,
-      title: r.title ?? "",
-      copy: r.copy ?? "",
-      discount_label: `${Number(r.pct)}%`,   // الكرت بيقرأ الرقم منها تلقائيًا
-      image: r.image ?? "",
-    }));
+  // ── قسم الخدمات: لو شريك، لبّس أسعاره وألغِ القديم ──
+  const DB_SIZES = ["small", "medium", "large"] as const;
+  const services = (servicesRaw as any[]).map((r) => {
+    const pricesRaw = r.prices ?? {};
+    if (!partnerMap) return { ...r, prices: pricesRaw };
 
-  const banner = {
-    ...bannerCopy,
-    endsAt: (bannerMetaRow[0] as any)?.ends_at ?? null,
-    badgeValue: (bannerMetaRow[0] as any)?.badge_value ?? null,
-  };
+    const merged: Record<string, any> = {};
+    for (const size of DB_SIZES) {
+      const baseP = Number(pricesRaw[size]?.price) || 0;
+      const pp = partnerMap.get(priceKey(r.id, size));
+      merged[size] = { price: pp ? pp.price : baseP, old: null };
+    }
+    return { ...r, prices: merged };
+  });
+
+  // ── العروض المخفّضة (للعملاء العاديين فقط) ──
+  const discounted = partner
+    ? []
+    : (discountedRaw as any[])
+        .filter((r) => r.pct != null && Number(r.pct) > 0)
+        .map((r) => ({
+          slug: r.slug,
+          tag: null,
+          title: r.title ?? "",
+          copy: r.copy ?? "",
+          discount_label: `${Number(r.pct)}%`,
+          image: r.image ?? "",
+        }));
+
+  // ── البانر الترويجي: مخفي تمامًا عن الشركاء ──
+  const banner = partner
+    ? null
+    : {
+        ...bannerCopy,
+        endsAt: (bannerMetaRow[0] as any)?.ends_at ?? null,
+        badgeValue: (bannerMetaRow[0] as any)?.badge_value ?? null,
+      };
 
   return {
+    hero,
     stats,
-    offers: discounted.slice(0, 3),   // أول 3 في الشبكة
-    offersAll: discounted,            // الكل في المودال
+    offers: discounted.slice(0, 3),
+    offersAll: discounted,
     projects,
     testimonials,
     marquee: (marquee as { label: string }[]).map((m) => m.label),
@@ -98,5 +136,6 @@ export async function getHomeData(locale: Locale) {
     whyText,
     projectsText,
     testimonialsText,
+    isPartner: !!partner,
   };
 }
