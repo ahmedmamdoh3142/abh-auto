@@ -169,37 +169,29 @@ export function Hero({ media }: { media?: HeroMedia }) {
           {t('subline')}
         </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: INTRO + STAGGER * 4, ease: EASE }}
-          className="mt-11 flex flex-wrap items-center justify-center gap-4"
+        <div
+          className="anim-rise mt-11 flex flex-wrap items-center justify-center gap-4"
+          style={{ animationDelay: '0.4s' }}
         >
           <PrimaryCTA href="/booking">{t('cta_primary')}</PrimaryCTA>
           <GhostCTA href="/services">{t('cta_secondary')}</GhostCTA>
-        </motion.div>
+        </div>
       </div>
 
       {/* scroll hint */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1, delay: INTRO + STAGGER * 5 + 0.3, ease: EASE }}
-        className="pointer-events-none absolute inset-x-0 bottom-9 z-30 flex justify-center"
+      <div
+        className="anim-rise pointer-events-none absolute inset-x-0 bottom-9 z-30 flex justify-center"
+        style={{ animationDelay: '0.6s' }}
       >
         <div className="flex flex-col items-center gap-3">
           <span className="text-[0.55rem] uppercase tracking-[0.45em] text-platinum/50">{t('scroll')}</span>
-          <motion.span
-            animate={{ scaleY: [0.3, 1, 0.3], opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-            className="block h-3 w-px origin-center bg-platinum/70"
-          />
+          <span className="anim-scrollbar block h-3 w-px origin-center bg-platinum/70" />
           <span className="flex items-center gap-1 text-[0.5rem] uppercase tracking-[0.4em] text-platinum/40">
             <ArrowDown className="h-2.5 w-2.5" strokeWidth={1.5} />
             {t('discover')}
           </span>
         </div>
-      </motion.div>
+      </div>
 
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-px bg-gradient-to-r from-transparent via-platinum/35 to-transparent" />
     </section>

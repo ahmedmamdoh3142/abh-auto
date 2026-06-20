@@ -394,6 +394,18 @@
     }
   }
 
+  /* مؤشر التمرير النابض (كان framer-motion) — CSS الآن */
+  @keyframes scrollPulse {
+    0%, 100% { transform: scaleY(0.3); opacity: 0.3; }
+    50%      { transform: scaleY(1);   opacity: 1; }
+  }
+  .anim-scrollbar {
+    animation: scrollPulse 2.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anim-scrollbar { animation: none; opacity: 0.6; }
+  }
+
   .mask-fade-b { mask-image: linear-gradient(180deg, black 60%, transparent 100%); }
   .mask-fade-t { mask-image: linear-gradient(180deg, transparent 0%, black 40%); }
   .mask-fade-x { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
