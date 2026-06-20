@@ -4,17 +4,18 @@
  * Hero — ABH Auto · cinematic video stage
  * Path: components/sections/hero.tsx  (export `Hero`)
  *
- * تعديلات الأداء:
- *  • يُختار مصدر واحد فقط (موبايل أو لاب) عبر JS ثم يُرندَر <video> بمصدر واحد.
- *    خاصية media على <source> داخل <video> يتجاهلها كروم، وكانت تتسبب في تحميل
- *    النسختين (webm + mp4) معًا. الآن يتحمّل ملف واحد فقط.
- *  • نص الهيرو (eyebrow / tagline / subline) يتحرّك بـ CSS animation بدل framer-motion
- *    حتى يظهر فورًا مع أول رسم للصفحة بدون انتظار تحميل/هيدريشن الـ JS — يحسّن LCP بشكل كبير.
- *  • poster يظهر فورًا (يمنع الفلاش الأسود)، والفيديو يعمل fade-in لما يجهز.
+ * تعديلات الأداء (إصلاح LCP):
+ *  • الـ poster صار <Image priority> من next/image → يُحمَّل بأولوية عالية (preload)
+ *    ويظهر بسرعة فيصبح هو عنصر LCP عند ~FCP بدل أن ينتظر CSS أو الفيديو.
+ *  • الفيديو لا يبدأ التحميل إلا بعد ظهور الـ poster (posterReady) → لا يزاحم الـ bandwidth
+ *    على شبكات الموبايل البطيئة، ولا يُحتسب كعنصر LCP متأخر.
+ *  • يُختار مصدر فيديو واحد فقط (موبايل أو لاب) بدل تحميل النسختين معًا.
+ *  • نص الهيرو يتحرّك بـ CSS animation بدل framer-motion ليظهر فورًا.
  *
- * لو مفيش فيديو في القاعدة، الهيرو يشتغل كصورة ثابتة (poster) من غير ما يكسر.
+ * لو مفيش فيديو، الهيرو يشتغل كصورة ثابتة (poster) من غير ما يكسر.
  */
 import { useRef, useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslations } from 'next-intl';
@@ -49,41 +50,55 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const hasVideo = hasMobile || hasDesktop;
 
   // نختار مصدرًا واحدًا حسب حجم الشاشة (بدل ترك المتصفح يجرّب الكل).
-  // null أثناء أول رندر على السيرفر → يظهر الـ poster فقط لحد ما يتحدّد الجهاز.
   const [pick, setPick] = useState<HeroVideoSources | null>(null);
+  // الفيديو لا يُركَّب إلا بعد ظهور الـ poster، حتى يفوز الـ poster بالـ LCP أولًا.
+  const [posterReady, setPosterReady] = useState(false);
 
   useEffect(() => {
     if (!hasVideo) return;
     const isMobile = window.matchMedia('(max-width: 767px)').matches;
-    // لو موبايل وعندنا نسخة موبايل استخدمها، غير كده استخدم اللاب، وإلا الموبايل كـ fallback.
     const chosen = isMobile && hasMobile ? mobile : hasDesktop ? desktop : mobile;
     setPick(chosen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasVideo]);
 
+  // أمان: لو الـ poster ما أطلقش onLoad (كاش/فشل)، شغّل الفيديو بعد 2.5ث على أي حال.
+  useEffect(() => {
+    const id = setTimeout(() => setPosterReady(true), 2500);
+    return () => clearTimeout(id);
+  }, []);
+
+  const showVideo = hasVideo && !reduce && !!pick && posterReady;
+
   /* بعض المتصفحات بتأجّل تشغيل الفيديو حتى يصبح جاهزًا — نتأكد من المحاولة. */
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !pick) return;
+    if (!v || !showVideo) return;
     const tryPlay = () => { v.play().catch(() => { /* الـ poster كافٍ كـ fallback */ }); };
     if (v.readyState >= 2) tryPlay();
     v.addEventListener('canplay', tryPlay, { once: true });
     return () => v.removeEventListener('canplay', tryPlay);
-  }, [pick]);
+  }, [showVideo]);
 
   const wordmark = Array.from(t('brandLine'));
 
   return (
     <section data-section="hero" className="relative h-[100svh] w-full overflow-hidden bg-obsidian">
-      {/* ── poster خلف الفيديو — يمنع الفلاش الأسود ── */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
+      {/* ── poster — صورة preloaded عالية الأولوية → عنصر الـ LCP، يظهر بسرعة ── */}
+      <Image
+        src={poster}
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        quality={70}
+        className="object-cover"
+        style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
+        onLoad={() => setPosterReady(true)}
       />
 
-      {/* ── الفيديو — مصدر واحد فقط حسب الجهاز ── */}
-      {hasVideo && !reduce && pick && (
+      {/* ── الفيديو — يُركَّب بعد ظهور الـ poster فقط (مصدر واحد) ── */}
+      {showVideo && (
         <video
           ref={videoRef}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${loaded ? 'opacity-100' : 'opacity-0'}`}
@@ -92,8 +107,8 @@ export function Hero({ media }: { media?: HeroMedia }) {
           poster={poster}
           onCanPlay={() => setLoaded(true)}
         >
-          {pick.webm && <source src={pick.webm} type="video/webm" />}
-          {pick.mp4 && <source src={pick.mp4} type="video/mp4" />}
+          {pick!.webm && <source src={pick!.webm} type="video/webm" />}
+          {pick!.mp4 && <source src={pick!.mp4} type="video/mp4" />}
         </video>
       )}
 
@@ -171,7 +186,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
           {t('tagline')}
         </p>
 
-        {/* subline — عنصر الـ LCP. CSS animation عشان يظهر بسرعة بدون انتظار JS */}
+        {/* subline — CSS animation */}
         <p
           className="anim-rise mt-6 max-w-[40ch] text-[1.05rem] leading-relaxed text-platinum/70"
           style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.28s' }}
@@ -210,8 +225,6 @@ export function Hero({ media }: { media?: HeroMedia }) {
           </span>
         </div>
       </motion.div>
-
-      {/* لا spinner — الـ poster ظاهر فورًا تحت الفيديو، والفيديو يعمل fade-in لما يجهز */}
 
       {/* bottom seam */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-px bg-gradient-to-r from-transparent via-platinum/35 to-transparent" />
