@@ -21,12 +21,17 @@ const nextConfig = {
   },
 
   experimental: {
+    // يقلّل الـ CSS غير المستخدم ويستخرج الـ critical CSS (يقلّل render-blocking)
+    optimizeCss: true,
     optimizePackageImports: [
       'lucide-react',
       'framer-motion',
       '@radix-ui/react-dialog',
       '@radix-ui/react-accordion',
       '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-slot',
+      'embla-carousel-react',
+      'sonner',
       '@react-three/drei',
     ],
   },
