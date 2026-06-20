@@ -38,7 +38,7 @@ async function unlinkProof(rel: string | null) {
 
 export async function GET(
   _request: Request,
-  ctx: { params: Promise<{ id: string }> } | { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await getAdminOrNull();
@@ -79,7 +79,7 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  ctx: { params: Promise<{ id: string }> } | { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await getAdminOrNull();
@@ -128,7 +128,7 @@ export async function POST(
 
 export async function DELETE(
   request: Request,
-  ctx: { params: Promise<{ id: string }> } | { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await getAdminOrNull();

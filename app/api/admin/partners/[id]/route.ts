@@ -19,7 +19,7 @@ import type { Locale } from "@/lib/i18n";
 
 export async function GET(
   _request: Request,
-  ctx: { params: Promise<{ id: string }> } | { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await getAdminOrNull();
@@ -138,7 +138,7 @@ export async function GET(
         paymentStatus: b.payment_status ?? "",
         status: b.status,
         createdAt: b.created_at ? new Date(b.created_at).toISOString() : null,
-        items: (b.items || []).map((it) => ({
+        items: (b.items || []).map((it: any) => ({
           slug: it.slug,
           name: pick(it.name, locale) || it.slug,
           size: it.size,
