@@ -4,12 +4,13 @@
  * Hero — ABH Auto · cinematic video stage
  * Path: components/sections/hero.tsx  (export `Hero`)
  *
- * الهيرو بقى فيديو (autoplay + loop + muted + playsInline) جاي من القاعدة عبر prop `media`.
- *  • نسختان: لاب (landscape) وموبايل (portrait). المتصفح يختار المصدر المناسب
- *    تلقائيًا عبر <source media> — لا حاجة لـ JS للتبديل.
- *  • poster يظهر فورًا (يمنع الفلاش الأسود ويحسّن LCP).
- *  • غمامة سينمائية (grade + تدرّجات + vignette ناعم) تدّي إحساس الشركات العالمية.
- *  • اتشالت التحديدات (crosshairs) بالكامل.
+ * تعديلات الأداء:
+ *  • يُختار مصدر واحد فقط (موبايل أو لاب) عبر JS ثم يُرندَر <video> بمصدر واحد.
+ *    خاصية media على <source> داخل <video> يتجاهلها كروم، وكانت تتسبب في تحميل
+ *    النسختين (webm + mp4) معًا. الآن يتحمّل ملف واحد فقط.
+ *  • نص الهيرو (eyebrow / tagline / subline) يتحرّك بـ CSS animation بدل framer-motion
+ *    حتى يظهر فورًا مع أول رسم للصفحة بدون انتظار تحميل/هيدريشن الـ JS — يحسّن LCP بشكل كبير.
+ *  • poster يظهر فورًا (يمنع الفلاش الأسود)، والفيديو يعمل fade-in لما يجهز.
  *
  * لو مفيش فيديو في القاعدة، الهيرو يشتغل كصورة ثابتة (poster) من غير ما يكسر.
  */
@@ -43,41 +44,32 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const desktop = media?.desktop ?? { webm: null, mp4: null };
   const mobile = media?.mobile ?? { webm: null, mp4: null };
 
-  // هل عندنا أي مصدر موبايل مخصّص؟ لو لأ نستخدم اللاب على كل الأجهزة.
   const hasMobile = !!(mobile.webm || mobile.mp4);
   const hasDesktop = !!(desktop.webm || desktop.mp4);
   const hasVideo = hasMobile || hasDesktop;
 
-  // نبني قائمة المصادر بالترتيب: لكل جهاز WebM (أخف) ثم MP4 (توافق).
-  // المتصفح يختار أول مصدر يطابق media-query ويدعم نوعه.
-  type Src = { src: string; type: string; media?: string };
-  const sources: Src[] = [];
-  const mqMobile = '(max-width: 767px)';
-  const mqDesktop = '(min-width: 768px)';
-  // لو فيه نسخة موبايل، قيّد اللاب بـ min-width فقط؛ غير كده اللاب يشتغل على الكل (بدون media).
-  const deskMedia = hasMobile ? mqDesktop : undefined;
-  if (hasMobile) {
-    if (mobile.webm) sources.push({ src: mobile.webm, type: 'video/webm', media: mqMobile });
-    if (mobile.mp4) sources.push({ src: mobile.mp4, type: 'video/mp4', media: mqMobile });
-  }
-  if (hasDesktop) {
-    if (desktop.webm) sources.push({ src: desktop.webm, type: 'video/webm', media: deskMedia });
-    if (desktop.mp4) sources.push({ src: desktop.mp4, type: 'video/mp4', media: deskMedia });
-  } else if (hasMobile) {
-    // مفيش لاب — استخدم الموبايل على الكل كمصدر بلا media
-    if (mobile.webm) sources.push({ src: mobile.webm, type: 'video/webm' });
-    if (mobile.mp4) sources.push({ src: mobile.mp4, type: 'video/mp4' });
-  }
+  // نختار مصدرًا واحدًا حسب حجم الشاشة (بدل ترك المتصفح يجرّب الكل).
+  // null أثناء أول رندر على السيرفر → يظهر الـ poster فقط لحد ما يتحدّد الجهاز.
+  const [pick, setPick] = useState<HeroVideoSources | null>(null);
+
+  useEffect(() => {
+    if (!hasVideo) return;
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    // لو موبايل وعندنا نسخة موبايل استخدمها، غير كده استخدم اللاب، وإلا الموبايل كـ fallback.
+    const chosen = isMobile && hasMobile ? mobile : hasDesktop ? desktop : mobile;
+    setPick(chosen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasVideo]);
 
   /* بعض المتصفحات بتأجّل تشغيل الفيديو حتى يصبح جاهزًا — نتأكد من المحاولة. */
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !hasVideo) return;
+    if (!v || !pick) return;
     const tryPlay = () => { v.play().catch(() => { /* الـ poster كافٍ كـ fallback */ }); };
     if (v.readyState >= 2) tryPlay();
     v.addEventListener('canplay', tryPlay, { once: true });
     return () => v.removeEventListener('canplay', tryPlay);
-  }, [hasVideo]);
+  }, [pick]);
 
   const wordmark = Array.from(t('brandLine'));
 
@@ -90,19 +82,18 @@ export function Hero({ media }: { media?: HeroMedia }) {
         style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
       />
 
-      {/* ── الفيديو ── */}
-      {hasVideo && !reduce && (
+      {/* ── الفيديو — مصدر واحد فقط حسب الجهاز ── */}
+      {hasVideo && !reduce && pick && (
         <video
           ref={videoRef}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${loaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
-          autoPlay muted loop playsInline preload="metadata"
+          autoPlay muted loop playsInline preload="auto"
           poster={poster}
           onCanPlay={() => setLoaded(true)}
         >
-          {sources.map((s, i) => (
-            <source key={i} src={s.src} type={s.type} {...(s.media ? { media: s.media } : {})} />
-          ))}
+          {pick.webm && <source src={pick.webm} type="video/webm" />}
+          {pick.mp4 && <source src={pick.mp4} type="video/mp4" />}
         </video>
       )}
 
@@ -135,12 +126,8 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
       {/* ── المحتوى ── */}
       <div className="absolute inset-0 z-30 flex flex-col items-center justify-center px-6 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: INTRO, ease: EASE }}
-          className="mb-10 flex items-center gap-5"
-        >
+        {/* eyebrow — CSS animation (مش framer-motion) عشان يظهر فورًا */}
+        <div className="anim-rise mb-10 flex items-center gap-5" style={{ animationDelay: '0.05s' }}>
           <span className="block h-px w-14 bg-gradient-to-r from-transparent to-platinum/55" />
           <span
             dir="ltr"
@@ -150,7 +137,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
             {t('eyebrow')}
           </span>
           <span className="block h-px w-14 bg-gradient-to-l from-transparent to-platinum/55" />
-        </motion.div>
+        </div>
 
         <h1 dir="ltr" className="relative">
           <bdi
@@ -176,25 +163,21 @@ export function Hero({ media }: { media?: HeroMedia }) {
           </bdi>
         </h1>
 
-        <motion.p
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: INTRO + STAGGER * 2, ease: EASE }}
-          className="mt-8 font-editorial font-normal italic leading-tight text-platinum/85"
-          style={{ fontSize: 'clamp(1.4rem, 2.6vw, 2rem)', textShadow: '0 4px 30px rgba(0,0,0,0.5)' }}
+        {/* tagline — CSS animation */}
+        <p
+          className="anim-rise mt-8 font-editorial font-normal italic leading-tight text-platinum/85"
+          style={{ fontSize: 'clamp(1.4rem, 2.6vw, 2rem)', textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.18s' }}
         >
           {t('tagline')}
-        </motion.p>
+        </p>
 
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: INTRO + STAGGER * 3, ease: EASE }}
-          className="mt-6 max-w-[40ch] text-[1.05rem] leading-relaxed text-platinum/70"
-          style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)' }}
+        {/* subline — عنصر الـ LCP. CSS animation عشان يظهر بسرعة بدون انتظار JS */}
+        <p
+          className="anim-rise mt-6 max-w-[40ch] text-[1.05rem] leading-relaxed text-platinum/70"
+          style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.28s' }}
         >
           {t('subline')}
-        </motion.p>
+        </p>
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}

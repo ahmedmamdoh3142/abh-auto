@@ -3,6 +3,8 @@
 /**
  * ServicesSection — Editorial service showcase (homepage).
  * البيانات (خدمات + أسعار قبل/بعد + ضمان + منافع) تأتي من الـ props (القاعدة).
+ *
+ * تعديل الأداء: quality={60} على صور البطاقات (كانت تتحمّل أكبر من اللازم).
  */
 import { useRef, useState } from 'react';
 import Image from 'next/image';
@@ -63,7 +65,7 @@ function ServiceCard({ item, index, discover, onOpen }: { item: ServiceRow; inde
       className="spotlight group relative h-[540px] w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian text-start md:h-[620px]"
       data-cursor="hover"
     >
-      <Image src={item.image} alt={item.title} fill
+      <Image src={item.image} alt={item.title} fill quality={60}
         className="scale-[1.08] object-cover transition-transform duration-[1600ms] ease-out group-hover:scale-[1.16]"
         sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
@@ -223,7 +225,7 @@ export function ServicesSection({ services, txt }: { services: ServiceRow[]; txt
             {active && (
               <div className="grid lg:grid-cols-[1.1fr_1fr]">
                 <div className="relative h-72 min-h-[400px] lg:h-auto">
-                  <Image src={active.image} alt={active.title} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
+                  <Image src={active.image} alt={active.title} fill quality={65} className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent to-obsidian/60 lg:to-obsidian" />
                 </div>
 

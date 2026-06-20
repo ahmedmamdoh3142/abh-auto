@@ -357,6 +357,27 @@
   .balance { text-wrap: balance; }
   .pretty  { text-wrap: pretty; }
 
+  /* ──────────────────────────────────────────────────────
+     HERO TEXT ENTRANCE — CSS only (no JS dependency)
+     يُستخدم لعناصر نص الهيرو (eyebrow / tagline / subline) حتى
+     تظهر فورًا مع أول رسم للصفحة بدون انتظار framer-motion.
+     هذا يقلّل LCP بشكل كبير لأن عنصر LCP لم يعد ينتظر هيدريشن JS.
+     ────────────────────────────────────────────────────── */
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .anim-rise {
+    animation: riseIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anim-rise {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   .mask-fade-b { mask-image: linear-gradient(180deg, black 60%, transparent 100%); }
   .mask-fade-t { mask-image: linear-gradient(180deg, transparent 0%, black 40%); }
   .mask-fade-x { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }

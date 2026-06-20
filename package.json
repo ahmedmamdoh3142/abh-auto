@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "ABH Auto — Ultra-premium luxury car protection platform",
+  "browserslist": [
+    "chrome >= 90",
+    "safari >= 15.4",
+    "firefox >= 90",
+    "edge >= 90",
+    "ios >= 15.4",
+    "not dead"
+  ],
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:slow": "next dev",
