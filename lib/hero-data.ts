@@ -14,8 +14,10 @@ export interface HeroData {
   desktop: HeroVideoSources;
   /** فيديو الموبايل (portrait) — اختياري؛ لو فاضي يُستخدم اللاب. */
   mobile: HeroVideoSources;
-  /** صورة الـ poster قبل تحميل الفيديو. */
+  /** صورة الـ poster (للديسكتوب/الافتراضي) قبل تحميل الفيديو. */
   posterUrl: string | null;
+  /** صورة الـ poster المخصّصة للموبايل — لو فاضية يُستخدم posterUrl. */
+  posterUrlMobile: string | null;
 }
 
 const EMPTY: HeroVideoSources = { webm: null, mp4: null };
@@ -24,6 +26,7 @@ const FALLBACK: HeroData = {
   desktop: EMPTY,
   mobile: EMPTY,
   posterUrl: "/images/hero-bg.webp",
+  posterUrlMobile: "/images/hero-bg.webp",
 };
 
 const clean = (s: unknown): string | null => {
@@ -35,14 +38,18 @@ const clean = (s: unknown): string | null => {
  * يقرأ إعدادات الهيرو من القاعدة. متوافق مع شكلين:
  *
  *  (أ) الشكل البسيط (نسخة واحدة لكل جهاز):
- *      { video_url, video_url_mobile, poster_url }
+ *      { video_url, video_url_mobile, poster_url, poster_url_mobile }
  *
  *  (ب) الشكل الكامل (WebM + MP4 لكل جهاز):
  *      {
  *        poster_url,
+ *        poster_url_mobile,
  *        desktop: { webm, mp4 },
  *        mobile:  { webm, mp4 }
  *      }
+ *
+ * صورة الموبايل (poster_url_mobile) اختيارية: لو غير موجودة نرجع لصورة
+ * الديسكتوب (poster_url) — فلا يتعطّل أي شيء على المواقع القديمة.
  *
  * آمن ضد غياب الصف أو الأعمدة: يرجّع poster فقط فيشتغل الهيرو كصورة ثابتة.
  */
@@ -55,6 +62,8 @@ export async function getHeroData(): Promise<HeroData> {
     if (!v || typeof v !== "object") return FALLBACK;
 
     const poster = clean(v.poster_url) ?? FALLBACK.posterUrl;
+    // صورة الموبايل: من poster_url_mobile، وإلا نفس صورة الديسكتوب.
+    const posterMobile = clean(v.poster_url_mobile) ?? poster;
 
     // الشكل الكامل له الأولوية لو موجود
     const dObj = v.desktop && typeof v.desktop === "object" ? v.desktop : null;
@@ -71,7 +80,7 @@ export async function getHeroData(): Promise<HeroData> {
       mp4: clean(mObj?.mp4) ?? clean(v.video_url_mobile),
     };
 
-    return { desktop, mobile, posterUrl: poster };
+    return { desktop, mobile, posterUrl: poster, posterUrlMobile: posterMobile };
   } catch (err) {
     console.error("getHeroData failed:", err);
     return FALLBACK;

@@ -9,6 +9,8 @@
  *    في ~1ث، فيرتفع سكور الموبايل بقوة. (الفيديو الثقيل لا يُحمَّل أصلًا على الموبايل.)
  *  • اللاب/التابلت (>=768px): الفيديو يعمل كالمعتاد فوق صورة الـ poster.
  *  • نكتشف الجهاز بعد التركيب (mounted) ثم نقرر هل نُركّب الفيديو أم لا.
+ *  • صورة الموبايل (posterUrlMobile) منفصلة عن الديسكتوب — لو فاضية تُستخدم
+ *    صورة الديسكتوب. الاختيار يتم بعد اكتشاف الجهاز.
  *  • الـ poster يُعمل له preload بأولوية عالية (يعمل في App Router).
  *  • نص الهيرو يتحرّك بـ CSS لا framer-motion.
  */
@@ -31,6 +33,8 @@ export interface HeroMedia {
   desktop: HeroVideoSources;
   mobile: HeroVideoSources;
   posterUrl: string | null;
+  /** صورة poster مخصّصة للموبايل — اختيارية؛ لو فاضية تُستخدم posterUrl. */
+  posterUrlMobile?: string | null;
 }
 
 export function Hero({ media }: { media?: HeroMedia }) {
@@ -38,9 +42,15 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const reduce = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const poster = media?.posterUrl ?? '/images/hero-bg.webp';
-  // preload للـ poster بأولوية عالية (هو عنصر الـ LCP خصوصًا على الموبايل)
-  ReactDOM.preload(poster, { as: 'image', fetchPriority: 'high' });
+  const posterDesktop = media?.posterUrl ?? '/images/hero-bg.webp';
+  // صورة الموبايل: لو محدّدة نستخدمها، وإلا نرجع لصورة الديسكتوب.
+  const posterMobile = media?.posterUrlMobile ?? posterDesktop;
+
+  // نعمل preload للاتنين بأولوية عالية (عنصر LCP يختلف حسب الجهاز).
+  ReactDOM.preload(posterDesktop, { as: 'image', fetchPriority: 'high' });
+  if (posterMobile !== posterDesktop) {
+    ReactDOM.preload(posterMobile, { as: 'image', fetchPriority: 'high' });
+  }
 
   const desktop = media?.desktop ?? { webm: null, mp4: null };
   const mobile = media?.mobile ?? { webm: null, mp4: null };
@@ -57,6 +67,11 @@ export function Hero({ media }: { media?: HeroMedia }) {
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+
+  // صورة الـ poster المعروضة: على الموبايل المؤكّد (isDesktop===false) نستخدم صورة
+  // الموبايل؛ غير كده (ديسكتوب أو قبل الاكتشاف) نستخدم صورة الديسكتوب — لتفادي
+  // وميض الصورة الخطأ، نُبقي الديسكتوب كافتراضي حتى يتأكد أنه موبايل.
+  const poster = isDesktop === false ? posterMobile : posterDesktop;
 
   // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion).
   // نختار مصدر الديسكتوب؛ ولو مش موجود نستخدم مصدر الموبايل على اللاب فقط.
