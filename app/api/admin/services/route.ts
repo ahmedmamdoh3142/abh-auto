@@ -5,6 +5,7 @@
  * • المشمولات في service_includes (label jsonb ثنائي + sort).
  * • الضمان (سنوات) والمدة (أيام) تتبني جملهم الثنائية في الكود من رقم واحد.
  * • slug يتولّد تلقائيًا (اتشال من الواجهة).
+ * • صورتان: image (عرضية) + card_image (طولية للكروت).
  */
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
@@ -18,7 +19,7 @@ type Body = {
   prices?: Record<string, SizePrice>;
   includes?: Loc[];
   warrantyYears?: number; durationDays?: number;
-  image?: string; badge?: string;
+  image?: string; cardImage?: string; badge?: string;
   onRequest?: boolean; featured?: boolean; active?: boolean; sort?: number;
 };
 
@@ -73,13 +74,13 @@ export async function POST(request: Request) {
     const rows = await query<{ id: number }>(
       `INSERT INTO services
          (category_id, surface, slug, name, tagline, description, duration, warranty_duration,
-          image, badge, pricing_model, is_on_request, is_featured, is_active, sort)
+          image, card_image, badge, pricing_model, is_on_request, is_featured, is_active, sort)
        VALUES ($1,'catalog',$2,$3::jsonb,$3::jsonb,$4::jsonb,$5::jsonb,$6::jsonb,
-               $7,$8,$9::public.pricing_model,$10,$11,$12,$13)
+               $7,$8,$9,$10::public.pricing_model,$11,$12,$13,$14)
        RETURNING id`,
       [
         b.categoryId, slug, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
-        b.image || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false, b.sort || 0,
+        b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false, b.sort || 0,
       ]
     );
     const id = rows[0].id;
@@ -103,13 +104,13 @@ export async function PATCH(request: Request) {
     await query(
       `UPDATE services SET
          category_id=$2, name=$3::jsonb, tagline=$3::jsonb, description=$4::jsonb,
-         duration=$5::jsonb, warranty_duration=$6::jsonb, image=$7, badge=$8,
-         pricing_model=$9::public.pricing_model, is_on_request=$10, is_featured=$11,
-         is_active=$12, updated_at=now()
+         duration=$5::jsonb, warranty_duration=$6::jsonb, image=$7, card_image=$8, badge=$9,
+         pricing_model=$10::public.pricing_model, is_on_request=$11, is_featured=$12,
+         is_active=$13, updated_at=now()
        WHERE id=$1`,
       [
         b.id, b.categoryId, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
-        b.image || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false,
+        b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false,
       ]
     );
     // الأسعار والمشمولات تتبعت بس لو موجودة في الطلب (التبديل السريع للحالة مايبعتش الكل)

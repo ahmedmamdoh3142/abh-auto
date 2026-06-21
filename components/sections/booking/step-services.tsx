@@ -3,6 +3,11 @@
 /**
  * StepServices — act 02. الخدمات والتصنيفات تأتي من القاعدة كـ props.
  * شريحة الحجم دلوقتي ديناميكية حسب data.size (مش ثابتة "كبيرة").
+ *
+ * إعادة تصميم الكرت (نهج Netflix/Behance):
+ *  • الصورة فوق بنسبة ثابتة 4:3 — واضحة تمامًا بلا تغميق/grayscale (تُظهر تفاصيل الشغل).
+ *  • لوحة سفلية صلبة (اسم + شيبس + سعر) على خلفية الكرت — تباين مثالي ونص مقروء دائمًا.
+ *  • عند الهوفر: zoom خفيف للصورة + ظهور "يشمل" كـoverlay فوق الصورة (يُكشف عند الطلب).
  */
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
@@ -149,7 +154,7 @@ export function StepServices({
             })}
           </div>
 
-          {/* cards */}
+          {/* cards — صورة واضحة فوق + لوحة معلومات تحت + overlay عند الهوفر */}
           <AnimatePresence mode="wait">
             <motion.div
               key={data.activeCat}
@@ -170,46 +175,58 @@ export function StepServices({
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.06, duration: 0.5, ease: EASE }}
                     className={[
-                      'group relative block min-h-[340px] overflow-hidden rounded-[22px] border bg-obsidian text-start transition-all duration-500 hover:-translate-y-1',
+                      'svc-card group relative flex flex-col overflow-hidden rounded-[22px] border bg-obsidian text-start transition-all duration-500 hover:-translate-y-1',
                       on ? 'border-platinum/50 shadow-[0_30px_80px_-34px_rgba(203,205,205,0.55)]' : 'border-white/[0.08] hover:border-white/25',
                     ].join(' ')}
                   >
-                    <div
-                      className="absolute inset-0 scale-[1.04] bg-cover bg-center brightness-[0.55] grayscale-[0.6] transition-[transform,filter] [transition-duration:1400ms] ease-out group-hover:scale-[1.12] group-hover:grayscale-0 group-hover:brightness-[0.66]"
-                      style={{ backgroundImage: `url('${sv.img}')` }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/80 via-40% to-transparent" />
-                    {sv.featured && (
-                      <span className="absolute start-3.5 top-3.5 z-[3] inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-white to-platinum px-2.5 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.14em] text-obsidian shadow-[0_8px_24px_-8px_rgba(203,205,205,0.6)]">
-                        <Star className="h-2.5 w-2.5 fill-obsidian" strokeWidth={0} />{t('step2.mostChosen')}
-                      </span>
-                    )}
-                    {off > 0 && (
-                      <span className={`absolute z-[3] inline-flex items-center gap-1 rounded-full border border-[#c98a8a]/40 bg-[#2a1414]/70 px-2.5 py-1 text-[0.55rem] font-semibold tracking-[0.06em] text-[#e7b4b4] backdrop-blur-sm ${sv.featured ? 'start-3.5 top-[2.9rem]' : 'start-3.5 top-3.5'}`}>
-                        −{off}%
-                      </span>
-                    )}
-                    <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/35 text-ivory'}`}>
-                      {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : <span className="text-lg leading-none">+</span>}
-                    </span>
+                    {/* ── الصورة — فوق، واضحة تمامًا (نسبة 4:3) ── */}
+                    <div className="relative aspect-[4/3] w-full overflow-hidden">
+                      <div
+                        className="svc-img absolute inset-0 bg-cover bg-center transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
+                        style={{ backgroundImage: `url('${sv.img}')` }}
+                      />
+                      {/* تدرّج خفيف أسفل الصورة لدمجها مع اللوحة */}
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian to-transparent" />
 
-                    <div className="absolute inset-x-0 bottom-0 z-[2] p-5">
-                      <div className="mb-2.5 flex gap-2">
+                      {/* الشارات */}
+                      {sv.featured && (
+                        <span className="absolute start-3.5 top-3.5 z-[3] inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-white to-platinum px-2.5 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.14em] text-obsidian shadow-[0_8px_24px_-8px_rgba(203,205,205,0.6)]">
+                          <Star className="h-2.5 w-2.5 fill-obsidian" strokeWidth={0} />{t('step2.mostChosen')}
+                        </span>
+                      )}
+                      {off > 0 && (
+                        <span className={`absolute z-[3] inline-flex items-center gap-1 rounded-full border border-[#c98a8a]/40 bg-[#2a1414]/70 px-2.5 py-1 text-[0.55rem] font-semibold tracking-[0.06em] text-[#e7b4b4] backdrop-blur-sm ${sv.featured ? 'start-3.5 top-[2.9rem]' : 'start-3.5 top-3.5'}`}>
+                          −{off}%
+                        </span>
+                      )}
+                      {/* زر الاختيار */}
+                      <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/35 text-ivory'}`}>
+                        {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : <span className="text-lg leading-none">+</span>}
+                      </span>
+
+                      {/* overlay "يشمل" — يظهر عند الهوفر أو عند الاختيار (صفّان جنب بعض) */}
+                      <div className={`svc-reveal absolute inset-0 z-[2] flex flex-col justify-center gap-2.5 bg-[#08090b]/85 p-5 backdrop-blur-[2px] transition-opacity duration-400 ${on ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                        <span className="text-[0.5rem] uppercase tracking-[0.24em] text-platinum/70">{isAr ? 'يشمل' : 'Includes'}</span>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                          {sv.incl.map((x) => (
+                            <span key={x} className="inline-flex items-start gap-1.5 text-[0.68rem] leading-snug text-ivory/85">
+                              <Check className="mt-0.5 h-3 w-3 flex-none text-platinum" strokeWidth={2.4} />{x}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── اللوحة السفلية — صلبة، نص مقروء دائمًا ── */}
+                    <div className="relative z-[1] flex flex-1 flex-col gap-3 bg-obsidian p-5">
+                      <div className="flex gap-2">
                         <Chip icon={<Shield className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.warranty}</Chip>
                         <Chip icon={<Clock className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.dur}</Chip>
                       </div>
-                      <h4 className="font-display text-[1.4rem] uppercase leading-[1.04] text-ivory">{sv.name}</h4>
-                      <p className="mt-2 text-[0.74rem] leading-[1.5] text-platinum/65 line-clamp-2">
-                        {sv.desc}
-                      </p>
-                      <div className="mt-2.5 flex max-h-0 flex-wrap gap-x-3 gap-y-1.5 overflow-hidden opacity-0 transition-all duration-500 group-hover:max-h-[70px] group-hover:opacity-100 group-[.on]:max-h-[70px] group-[.on]:opacity-100">
-                        {sv.incl.map((x) => (
-                          <span key={x} className="inline-flex items-center gap-1.5 text-[0.62rem] text-ivory/80">
-                            <Check className="h-[11px] w-[11px] text-platinum" strokeWidth={2.4} />{x}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-3.5 flex items-end justify-between border-t border-white/10 pt-3.5">
+                      <h4 className="font-display text-[1.35rem] uppercase leading-[1.05] text-ivory">{sv.name}</h4>
+                      <p className="text-[0.74rem] leading-[1.5] text-platinum/60 line-clamp-2">{sv.desc}</p>
+
+                      <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-3.5">
                         {sv.onRequest ? (
                           <span className="font-display text-xl text-ivory">{t('onRequest')}</span>
                         ) : (
@@ -228,7 +245,6 @@ export function StepServices({
                         </span>
                       </div>
                     </div>
-                    {on && <span className="hidden group-[.on]:block" />}
                   </motion.button>
                 );
               })}

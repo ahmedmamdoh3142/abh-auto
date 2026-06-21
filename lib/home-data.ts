@@ -1,4 +1,4 @@
-import { query } from "@/lib/db";
+﻿import { query } from "@/lib/db";
 import type { Locale } from "@/lib/locales";
 import { getHeroData } from "@/lib/hero-data";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
@@ -15,6 +15,9 @@ async function block(key: string, locale: Locale) {
  *   • banner = null (لا بانر ترويجي).
  *   • قسم الخدمات: تُستبدل الأسعار بأسعار الشركة.
  *   • isPartner = true (تستعمله الصفحة لإخفاء أقسام كاملة).
+ *
+ * صور الكروت (سكشن الخدمات + العروض): من العمود الموحّد services.card_image.
+ * لو card_image فارغ → نمرّر "" (الواجهة تعرض placeholder، ولا ترجع لـ image).
  */
 export async function getHomeData(locale: Locale, userId?: string | null) {
   const partner = await getPartnerForUser(userId);
@@ -33,7 +36,7 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
       `SELECT s.slug,
               s.name->>$1   AS title,
               s.tagline->>$1 AS copy,
-              s.image,
+              s.card_image,
               (SELECT max(round(((1 - sp.price / NULLIF(sp.old_price, 0)) * 100))::int)
                FROM service_prices sp
                WHERE sp.service_id = s.id
@@ -56,14 +59,14 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
            FROM content_blocks WHERE key='banner'`),
     block("offers", locale),
     block("services", locale),
-    // نجلب s.id كمان عشان دمج أسعار الشريك
+    // نجلب s.id كمان عشان دمج أسعار الشريك، و card_image لصورة الكرت الموحّدة
     query(
       `SELECT s.id,
               s.slug,
               s.name->>$1 AS title,
               s.tagline->>$1 AS blurb,
               s.description->>$1 AS long,
-              s.image,
+              s.card_image,
               s.warranty_duration->>$1 AS warranty,
               s.is_on_request,
               COALESCE((SELECT json_agg(COALESCE(si.label->>$1, si.label->>'en') ORDER BY si.sort)
@@ -83,10 +86,12 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
   ]);
 
   // ── قسم الخدمات: لو شريك، لبّس أسعاره وألغِ القديم ──
+  // نطبّع الصورة: card_image → image (المكوّن يقرأ item.image)، فارغ = "".
   const DB_SIZES = ["small", "medium", "large"] as const;
   const services = (servicesRaw as any[]).map((r) => {
+    const image = r.card_image ?? "";
     const pricesRaw = r.prices ?? {};
-    if (!partnerMap) return { ...r, prices: pricesRaw };
+    if (!partnerMap) return { ...r, image, prices: pricesRaw };
 
     const merged: Record<string, any> = {};
     for (const size of DB_SIZES) {
@@ -94,10 +99,10 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
       const pp = partnerMap.get(priceKey(r.id, size));
       merged[size] = { price: pp ? pp.price : baseP, old: null };
     }
-    return { ...r, prices: merged };
+    return { ...r, image, prices: merged };
   });
 
-  // ── العروض المخفّضة (للعملاء العاديين فقط) ──
+  // ── العروض المخفّضة (للعملاء العاديين فقط) — الصورة من services.card_image ──
   const discounted = partner
     ? []
     : (discountedRaw as any[])
@@ -108,7 +113,7 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
           title: r.title ?? "",
           copy: r.copy ?? "",
           discount_label: `${Number(r.pct)}%`,
-          image: r.image ?? "",
+          image: r.card_image ?? "",   // ← صورة الكرت الموحّدة (فارغ = placeholder)
         }));
 
   // ── البانر الترويجي: مخفي تمامًا عن الشركاء ──

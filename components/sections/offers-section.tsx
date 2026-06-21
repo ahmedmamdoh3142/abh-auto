@@ -12,6 +12,7 @@ import { ArrowUpRight, Clock, X } from 'lucide-react';
 
 import { SectionHeader } from '@/components/ui/section-header';
 import { useSpotlight } from '@/hooks/use-mouse';
+import { CardImage } from '@/components/ui/card-image';
 
 interface OfferRow {
   slug: string;
@@ -55,7 +56,7 @@ function OfferCard({ item, index, txt }: { item: OfferRow; index: number; txt: O
       className="spotlight group relative h-[560px] cursor-pointer overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian md:h-[620px]"
       data-cursor="hover"
     >
-      <Image src={item.image} alt={item.title} fill
+      <CardImage src={item.image} alt={item.title}
         className="scale-[1.08] object-cover transition-transform duration-[1600ms] ease-out group-hover:scale-[1.16]"
         sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw" />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/70 to-transparent" />

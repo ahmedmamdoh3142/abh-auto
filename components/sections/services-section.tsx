@@ -14,6 +14,7 @@ import { useLocale } from 'next-intl';
 import { ArrowUpRight, Plus, ShieldCheck, X } from 'lucide-react';
 
 import { SectionHeader } from '@/components/ui/section-header';
+import { CardImage } from '@/components/ui/card-image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useSpotlight } from '@/hooks/use-mouse';
@@ -65,7 +66,7 @@ function ServiceCard({ item, index, discover, onOpen }: { item: ServiceRow; inde
       className="spotlight group relative h-[540px] w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian text-start md:h-[620px]"
       data-cursor="hover"
     >
-      <Image src={item.image} alt={item.title} fill quality={60}
+      <CardImage src={item.image} alt={item.title} quality={60}
         className="scale-[1.08] object-cover transition-transform duration-[1600ms] ease-out group-hover:scale-[1.16]"
         sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
@@ -225,7 +226,7 @@ export function ServicesSection({ services, txt }: { services: ServiceRow[]; txt
             {active && (
               <div className="grid lg:grid-cols-[1.1fr_1fr]">
                 <div className="relative h-72 min-h-[400px] lg:h-auto">
-                  <Image src={active.image} alt={active.title} fill quality={65} className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
+                  <CardImage src={active.image} alt={active.title} quality={65} className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent to-obsidian/60 lg:to-obsidian" />
                 </div>
 

@@ -8,6 +8,11 @@
  *    «سعر الشركة» + «عمولتك» لكل حجم، تتحفظ في partner_service_prices.
  *  • في وضع الشركة: التعديل بيكون على الأسعار/العمولات فقط (مش على الخدمة نفسها).
  *  • العمولة = مبلغ ثابت بالريال لكل خدمة/حجم.
+ *
+ * تحديث الصور: لكل خدمة صورتان:
+ *  • image      = الصورة العرضية (landscape) — تُستخدم في كرت الأدمن والمعاينة.
+ *  • cardImage  = صورة الكرت الطولية (portrait) — تُستخدم في كروت الموقع/الخدمات.
+ *  المودال يحتوي حقلَي رفع منفصلين.
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, LocaleField, Selectbox, Chip, Modal, Confirm, useToast, Ic, EGP, PageHeader, ImageCard } from "@/components/admin/ui";
@@ -22,7 +27,7 @@ type Svc = {
   prices: Record<SizeKey, SizePrice>;
   includes: Loc[];
   warrantyYears: number; durationDays: number;
-  image: string; badge: string;
+  image: string; cardImage: string; badge: string;
   onRequest: boolean; featured: boolean; active: boolean; sort: number;
 };
 
@@ -345,7 +350,7 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
   );
 }
 
-/* ═════════════════ مودال الخدمة (إضافة/تعديل) — كما هو ═════════════════ */
+/* ═════════════════ مودال الخدمة (إضافة/تعديل) ═════════════════ */
 function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose, onSave }: {
   svc: Svc | null; categories: { id: number; label: string }[]; sizes: { code: string; label: string }[];
   isAr: boolean; T: (ar: string, en: string) => string; ccy: string; sizeLabel: (c: string) => string;
@@ -354,7 +359,7 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
   const [f, setF] = useState<Svc>(svc ?? {
     categoryId: categories[0]?.id ?? null, name: emptyLoc(), description: emptyLoc(),
     prices: emptyPrices(), includes: [], warrantyYears: 0, durationDays: 0,
-    image: "", badge: "", onRequest: false, featured: false, active: true, sort: 0,
+    image: "", cardImage: "", badge: "", onRequest: false, featured: false, active: true, sort: 0,
   });
   const set = (p: Partial<Svc>) => setF((s) => ({ ...s, ...p }));
   const setPrice = (size: SizeKey, field: "price" | "old", val: number) =>
@@ -421,9 +426,21 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
           </div>
         </div>
 
+        {/* ── الصور: عرضية (image) + طولية للكرت (cardImage) ── */}
         <div>
-          <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("صورة الخدمة", "Service image")}</div>
-          <ImageUpload value={f.image} onChange={(p) => set({ image: p })} nameHint={f.name.en || f.name.ar || "service"} isAr={isAr} />
+          <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("صور الخدمة", "Service images")}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--abh-ivory)", marginBottom: 6 }}>{T("صورة عرضية (landscape)", "Wide image (landscape)")}</div>
+              <div style={{ fontSize: 10, color: "var(--abh-steel)", marginBottom: 8, lineHeight: 1.6 }}>{T("تُستخدم في لوحة التحكم والمعاينة.", "Used in the dashboard and preview.")}</div>
+              <ImageUpload value={f.image} onChange={(p) => set({ image: p })} nameHint={(f.name.en || f.name.ar || "service") + "-wide"} isAr={isAr} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--abh-ivory)", marginBottom: 6 }}>{T("صورة الكرت (طولية / portrait)", "Card image (portrait)")}</div>
+              <div style={{ fontSize: 10, color: "var(--abh-steel)", marginBottom: 8, lineHeight: 1.6 }}>{T("تظهر في كروت الموقع وصفحة الخدمات.", "Shown in website cards and services page.")}</div>
+              <ImageUpload value={f.cardImage} onChange={(p) => set({ cardImage: p })} nameHint={(f.name.en || f.name.ar || "service") + "-card"} isAr={isAr} />
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>

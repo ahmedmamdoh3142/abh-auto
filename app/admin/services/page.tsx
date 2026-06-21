@@ -1,6 +1,7 @@
 /**
  * app/admin/services/page.tsx — الخدمات والأسعار (SERVER) · v3
  * إضافة: تمرير قائمة الشركاء (partners) لتفعيل وضع "أسعار شركة" عبر كومبو بوكس.
+ * إضافة: card_image (صورة الكرت الطولية) ضمن بيانات كل خدمة.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -23,7 +24,7 @@ export default async function ServicesPage() {
   const locale = (await getLocale()) as Locale;
 
   const services = await query<any>(
-    `SELECT s.id, s.category_id, s.slug, s.name, s.description, s.image, s.badge,
+    `SELECT s.id, s.category_id, s.slug, s.name, s.description, s.image, s.card_image, s.badge,
             s.is_on_request, s.is_featured, s.is_active, s.sort,
             s.duration, s.warranty_duration,
             COALESCE((SELECT jsonb_object_agg(sp.size_code, jsonb_build_object('price', sp.price, 'old', sp.old_price))
@@ -67,6 +68,7 @@ export default async function ServicesPage() {
         warrantyYears: firstNum(s.warranty_duration),
         durationDays: firstNum(s.duration),
         image: s.image || "",
+        cardImage: s.card_image || "",
         badge: s.badge || "",
         onRequest: s.is_on_request,
         featured: s.is_featured,

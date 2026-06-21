@@ -9,6 +9,9 @@ const DB_SIZES = ["small", "medium", "large"] as const;
 /**
  * getServicesData — الآن يقبل userId (اختياري).
  * لو شركة: تُستبدل الأسعار بأسعاره، وتُلغى الأسعار القديمة (لا خصومات إعلانية).
+ *
+ * صورة الكرت: من العمود الموحّد services.card_image (نفس مصدر كروت الهوم).
+ * لو card_image فارغ → image = "" (الواجهة تعرض placeholder، لا ترجع لـ image).
  */
 export async function getServicesData(_locale?: Locale, userId?: string | null) {
   const partner = await getPartnerForUser(userId);
@@ -24,7 +27,7 @@ export async function getServicesData(_locale?: Locale, userId?: string | null) 
      ORDER BY sort`
   );
 
-  // الخدمات بأسعارها — نجلب s.id كمان للدمج مع أسعار الشريك
+  // الخدمات بأسعارها — نجلب s.id كمان للدمج مع أسعار الشريك، و card_image لصورة الكرت
   const rows = await query(
     `SELECT s.id,
             s.slug,
@@ -32,7 +35,7 @@ export async function getServicesData(_locale?: Locale, userId?: string | null) 
             s.name AS name_raw,
             s.tagline AS tagline_raw,
             s.description AS description_raw,
-            s.image,
+            s.card_image,
             s.badge,
             s.duration AS duration_raw,
             s.warranty_duration AS warranty_raw,
@@ -78,7 +81,7 @@ export async function getServicesData(_locale?: Locale, userId?: string | null) 
       name: r.name_raw,
       tagline: r.tagline_raw ?? { en: "", ar: "" },
       description: r.description_raw ?? { en: "", ar: "" },
-      image: r.image,
+      image: r.card_image ?? "",   // ← صورة الكرت الموحّدة (فارغ = placeholder)
       badge: r.badge ?? undefined,
       duration: r.duration_raw ?? { en: "", ar: "" },
       prices,

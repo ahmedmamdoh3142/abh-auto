@@ -18,6 +18,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useLocale } from 'next-intl';
+import { CardImage } from '@/components/ui/card-image';
 import { ArrowUpRight, Check, ShieldCheck, Clock, Star, Plus } from 'lucide-react';
 
 import { ROMANS, formatPrice, sizes, type Service, type SizeSlug } from '@/lib/services-data';
@@ -61,14 +62,12 @@ export function ServiceCardLarge({ service, index, total }: Props) {
             animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
             transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <Image
+            <CardImage
               src={service.image}
               alt={service.name.en}
-              fill
               sizes="100vw"
               priority
               className="object-cover"
-              style={{ filter: 'grayscale(0.15) brightness(0.92) contrast(1.04)' }}
             />
           </motion.div>
           {/* تدرّج قوي لقراءة الاسم */}
@@ -140,14 +139,12 @@ export function ServiceCardLarge({ service, index, total }: Props) {
               animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
               transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Image
+              <CardImage
                 src={service.image}
                 alt={service.name.en}
-                fill
                 sizes="55vw"
                 priority
                 className="object-cover"
-                style={{ filter: 'grayscale(0.3) brightness(0.82) contrast(1.06)' }}
               />
             </motion.div>
             <div className="absolute inset-0 bg-gradient-to-r from-obsidian/30 via-transparent to-obsidian/70" />
