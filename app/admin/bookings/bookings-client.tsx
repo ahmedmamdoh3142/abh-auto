@@ -6,6 +6,7 @@
  * • عرضان: Grid (كروت سينمائية صورة السيارة خلفية الكرت) + List (صفوف كثيفة).
  * • هوفر على الكرت يكشف "دوسيه" تفاصيل كامل فوق الكرت بانسيابية (بيانات العميل،
  *   الخدمات، المراحل، وأكشنز سريعة) — مستوحى من لوحات Fortress/Bloomberg-terminal.
+ *   وعلى الموبايل (لمس) الدوسيه يظهر أصلاً بدون hover: صورة-هيدر فوق + جسم واضح تحت.
  * • بوردر بلون الحالة (رمادي=قادم، برتقالي=قيد التنفيذ، أخضر=مكتمل، أحمر=ملغي).
  * • فرز + بحث + تصدير CSV + اتصال/واتساب سريع.
  * • مودال تفاصيل: بيانات العميل كاملة، خدمات بالأسعار، بايبلاين مراحل متزامن مع
@@ -13,6 +14,19 @@
  */
 import React, { useMemo, useState } from "react";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
+
+/* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, [query]);
+  return matches;
+}
 
 /* ───────── خرائط الحالة/الدفع (ثنائية اللغة) ───────── */
 const STATUS: Record<string, { ar: string; en: string; color: string; soft: string; glow: string }> = {
@@ -166,13 +180,15 @@ function TimeGrid({ value, onPick, isAr }: any) {
 const qBtn = (primary?: boolean): React.CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "8px 14px", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", cursor: "pointer", border: primary ? "none" : "1px solid rgba(255,255,255,.2)", color: primary ? "#000" : "var(--abh-ivory)", background: primary ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 const qIcon = (color?: string): React.CSSProperties => ({ display: "grid", placeItems: "center", height: 34, width: 34, borderRadius: 999, cursor: "pointer", border: `1px solid ${color ? color : "rgba(255,255,255,.2)"}`, color: color || "var(--abh-ivory)", background: "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 
-/* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه كامل ═════════════════ */
+/* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
 function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false };
   const isActive = b.status === "active";
   const isCancelled = b.status === "cancelled";
   const [hover, setHover] = useState(false);
+  const touch = useMediaQuery("(hover: none)");
+  const reveal = hover || touch;
   const stop = (e: any, fn: () => void) => { e.stopPropagation(); fn(); };
 
   return (
@@ -180,11 +196,11 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={() => onOpen(b.id)}
       style={{
-        position: "relative", display: "flex", flexDirection: "column", minHeight: 392, borderRadius: 24, overflow: "hidden", cursor: "pointer",
-        border: `1.5px solid ${hover ? st.color : st.soft}`,
+        position: "relative", display: "flex", flexDirection: "column", minHeight: touch ? 0 : 392, borderRadius: 24, overflow: "hidden", cursor: "pointer",
+        border: `1.5px solid ${reveal ? st.color : st.soft}`,
         background: "#0b0c0e",
         boxShadow: hover ? `0 30px 70px -28px ${st.glow}, 0 0 0 1px ${st.glow}` : "0 14px 36px -22px rgba(0,0,0,.7)",
-        transform: hover ? "translateY(-5px)" : "none",
+        transform: hover && !touch ? "translateY(-5px)" : "none",
         transition: "transform .5s var(--abh-ease), box-shadow .5s var(--abh-ease), border-color .4s var(--abh-ease)",
         animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both`,
       }}
@@ -192,7 +208,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       {/* صورة السيارة خلفية الكرت بالكامل */}
       <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 900)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.96) 8%, rgba(8,9,11,.5) 44%, rgba(8,9,11,.1) 72%, rgba(8,9,11,.35) 100%)" }} />
-      <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${st.color}, transparent)` }} />
+      <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${st.color}, transparent)`, zIndex: 4 }} />
 
       {/* أعلى: شارات */}
       <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, padding: 16, zIndex: 2 }}>
@@ -205,10 +221,11 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
         <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
       </div>
 
-      <div style={{ flex: 1 }} />
+      {/* سبيسر: على اللاب يدفع المحتوى لتحت، وعلى اللمس ارتفاع ثابت كهيدر للصورة */}
+      <div style={{ flex: touch ? "none" : 1, height: touch ? 92 : undefined }} />
 
-      {/* أسفل: المحتوى الأساسي (يبهت عند الهوفر) */}
-      <div style={{ position: "relative", padding: "0 16px 16px", zIndex: 2, opacity: hover ? 0 : 1, transform: hover ? "translateY(8px)" : "none", transition: "opacity .35s var(--abh-ease), transform .35s var(--abh-ease)" }}>
+      {/* أسفل: المحتوى الأساسي (يبهت عند الهوفر) — مخفي على اللمس لمنع التكرار */}
+      <div style={{ display: touch ? "none" : "block", position: "relative", padding: "0 16px 16px", zIndex: 2, opacity: hover ? 0 : 1, transform: hover ? "translateY(8px)" : "none", transition: "opacity .35s var(--abh-ease), transform .35s var(--abh-ease)" }}>
         <h3 className="abh-display" style={{ margin: 0, fontSize: 26, lineHeight: 1.05, color: "#fff", textTransform: "uppercase", textShadow: "0 2px 14px rgba(0,0,0,.6)" }}>{b.vehicle}</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 12, color: "rgba(230,230,230,.92)" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{I.user(13)}{b.customer}</span>
@@ -225,8 +242,8 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
         </div>
       </div>
 
-      {/* ═══ دوسيه الهوفر (يظهر فوق الكرت) ═══ */}
-      <div style={{ position: "absolute", inset: 0, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, background: "linear-gradient(to top, rgba(6,7,9,.97) 30%, rgba(6,7,9,.86) 60%, rgba(6,7,9,.55))", backdropFilter: "blur(3px)", opacity: hover ? 1 : 0, transform: hover ? "translateY(0)" : "translateY(14px)", pointerEvents: hover ? "auto" : "none", transition: "opacity .4s var(--abh-ease), transform .45s var(--abh-ease)" }}>
+      {/* ═══ دوسيه الهوفر (overlay على اللاب · in-flow ثابت على اللمس) ═══ */}
+      <div style={{ position: touch ? "relative" : "absolute", inset: touch ? "auto" : 0, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, background: touch ? "linear-gradient(to top, rgba(6,7,9,.97) 62%, rgba(6,7,9,.78))" : "linear-gradient(to top, rgba(6,7,9,.97) 30%, rgba(6,7,9,.86) 60%, rgba(6,7,9,.55))", backdropFilter: "blur(3px)", opacity: reveal ? 1 : 0, transform: reveal ? "translateY(0)" : "translateY(14px)", pointerEvents: reveal ? "auto" : "none", transition: "opacity .4s var(--abh-ease), transform .45s var(--abh-ease)" }}>
         <h3 className="abh-display" style={{ margin: "0 0 3px", fontSize: 23, lineHeight: 1.05, color: "#fff", textTransform: "uppercase" }}>{b.vehicle}</h3>
         {b.plate && <div dir="ltr" style={{ fontSize: 11, color: "var(--abh-platinum)", marginBottom: 10 }}>{b.plate} · {b.size || "—"}</div>}
 
@@ -309,6 +326,7 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
 /* ═════════════════ مودال التفاصيل ═════════════════ */
 function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
+  const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false };
   const live = b.status === "upcoming" || b.status === "active";
@@ -321,7 +339,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
 
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
-      <div style={{ position: "relative", height: 168, borderRadius: 20, overflow: "hidden", marginBottom: 18, border: `1px solid ${st.soft}` }}>
+      <div style={{ position: "relative", height: mobile ? 130 : 168, borderRadius: 20, overflow: "hidden", marginBottom: 18, border: `1px solid ${st.soft}` }}>
         <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 1400)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.6) contrast(1.05)" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.95), rgba(8,9,11,.25))" }} />
         <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg,transparent,${st.color},transparent)` }} />
@@ -332,7 +350,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.paid ? "#3ecd8e" : "#f0c069", background: "rgba(0,0,0,.5)", border: `1px solid ${pay.paid ? "rgba(62,205,142,.5)" : "rgba(240,192,105,.45)"}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
               {b.isGuest && <span style={{ borderRadius: 999, padding: "5px 11px", fontSize: 10, color: "var(--abh-platinum)", background: "rgba(0,0,0,.5)", border: "1px solid rgba(203,205,205,.3)" }}>{T("زائر (بدون حساب)", "Guest (no account)")}</span>}
             </div>
-            <div className="abh-display" style={{ fontSize: 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
+            <div className="abh-display" style={{ fontSize: mobile ? 20 : 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
           </div>
           <span dir="ltr" className="abh-num" style={{ fontSize: 13, color: "var(--abh-platinum)", background: "rgba(0,0,0,.45)", borderRadius: 999, padding: "6px 12px" }}>{b.reference}</span>
         </div>
@@ -341,7 +359,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
       {mode === "view" && (
         <div className="abh-scale-in">
           <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 14 }}>
             <InfoTile icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
             <InfoTile icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
             <InfoTile icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
@@ -355,7 +373,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           )}
 
           <SectionLabel>{I.car(13)} {T("السيارة والموعد", "Vehicle & schedule")}</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
             <InfoTile icon={I.car(14)} label={T("اللوحة", "Plate")} value={b.plate || "—"} ltr />
             <InfoTile label={T("المقاس", "Size")} value={b.size || "—"} />
             <InfoTile icon={<Ic.pin s={14} />} label={T("الفرع", "Branch")} value={b.branch} />
@@ -382,7 +400,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "10px 0" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الإجمالي", "Total")}</span>
-              <span dir="ltr" className="abh-num" style={{ fontSize: 26, color: "var(--abh-ivory)" }}>{EGP(b.total)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></span>
+              <span dir="ltr" className="abh-num" style={{ fontSize: mobile ? 22 : 26, color: "var(--abh-ivory)" }}>{EGP(b.total)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></span>
             </div>
             <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>{T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}</div>
           </div>
@@ -489,6 +507,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const [view, setView] = useState<"grid" | "list">("grid");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mobile = useMediaQuery("(max-width: 640px)");
 
   const fmtDate = (iso: string) => {
     if (!iso) return "—";
@@ -606,7 +625,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       {filtered.length === 0 ? (
         <div style={{ ...card, borderStyle: "dashed", padding: 56, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد حجوزات في هذا التصنيف", "No bookings in this category")}</div>
       ) : view === "grid" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
             <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} />
           ))}

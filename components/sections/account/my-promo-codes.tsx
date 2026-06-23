@@ -121,7 +121,7 @@ function PromoTicket({ p, i, T, ccy, fmtDate, isAr }: {
         <button onClick={live ? copy : undefined} data-cursor={live ? 'hover' : undefined} disabled={!live}
           className="group/code flex w-full items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 transition-colors duration-300"
           style={{ borderColor: live ? 'rgba(203,205,205,0.35)' : 'rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', cursor: live ? 'pointer' : 'default' }}>
-          <span dir="ltr" className="font-display text-lg tracking-[0.16em] text-ivory" style={{ textDecoration: p.status === 'used' || p.status === 'expired' ? 'line-through' : 'none' }}>{p.code}</span>
+          <span dir="ltr" className="min-w-0 truncate font-display text-lg tracking-[0.16em] text-ivory" style={{ textDecoration: p.status === 'used' || p.status === 'expired' ? 'line-through' : 'none' }}>{p.code}</span>
           {live && (
             <span className="inline-flex items-center gap-1.5 text-[0.6rem] uppercase tracking-[0.14em] transition-colors"
               style={{ color: copied ? '#9fd4b0' : 'rgba(203,205,205,0.7)' }}>

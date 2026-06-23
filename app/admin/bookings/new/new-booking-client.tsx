@@ -5,10 +5,26 @@
  * تصميم احترافي بعرض الصفحة الكامل:
  *   • عمود رئيسي: العميل → السيارة → الخدمات → الموعد والدفع.
  *   • عمود جانبي ثابت (sticky): ملخّص الحجز الحيّ + زر الإنشاء.
+ *
+ * موبايل: كل الجريدات الداخلية تنهار لعمود واحد، وبادينج الكروت يصغر —
+ *   عشان مفيش حاجة تطلع بره إطارها ولا سكروول أفقي.
  */
 import React, { useMemo, useState, useEffect } from "react";
 import { card, Pill, Ic, EGP, useToast, PageHeader, Field } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
+
+/* ───────── هوك media query (للتجاوب مع الموبايل) ───────── */
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, [query]);
+  return matches;
+}
 
 type SizeCode = "small" | "medium" | "large";
 type Model = { name: string; size: SizeCode };
@@ -42,6 +58,11 @@ export default function NewBookingClient({
   const ccy = isAr ? "ريال" : "SAR";
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const toast = useToast();
+  const mobile = useMediaQuery("(max-width: 640px)");
+
+  // أعمدة الجريد: عمود واحد على الموبايل، عمودين بـ minmax(0,..) على الديسكتوب (يمنع التمطّط)
+  const twoCol = mobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)";
+  const cardPad = mobile ? 16 : 24;
 
   const [mode, setMode] = useState<"registered" | "guest">("guest");
   const [q, setQ] = useState("");
@@ -172,11 +193,11 @@ export default function NewBookingClient({
         seed="new-booking-hero" />
 
       <div className="abh-nb-layout">
-        <div className="abh-col" style={{ gap: 20 }}>
+        <div className="abh-col" style={{ gap: 20, minWidth: 0 }}>
           {/* 1) العميل */}
-          <div style={{ ...card, padding: 24 }}>
+          <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("1", T("العميل", "Customer"))}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+            <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 10, marginBottom: 18 }}>
               {([["guest", T("عميل جديد / زائر", "New / walk-in"), T("اكتب بياناته يدويًا", "Enter details manually")],
                  ["registered", T("عميل مسجّل", "Registered"), T("ابحث واختر من الحسابات", "Search existing accounts")]] as const).map(([val, ttl, desc]) => {
                 const on = mode === val;
@@ -206,7 +227,7 @@ export default function NewBookingClient({
                         <button key={u.id} onClick={() => pickUser(u)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 12px", border: "none", borderBottom: "1px solid rgba(255,255,255,.04)", background: on ? "rgba(203,205,205,.1)" : "transparent", cursor: "pointer", textAlign: isAr ? "right" : "left" }}>
                           <span style={{ minWidth: 0 }}>
                             <span style={{ display: "block", fontSize: 13, color: "var(--abh-ivory)" }}>{u.name}</span>
-                            <span dir="ltr" style={{ display: "block", fontSize: 10.5, color: "var(--abh-steel)" }}>{u.email}</span>
+                            <span dir="ltr" style={{ display: "block", fontSize: 10.5, color: "var(--abh-steel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
                           </span>
                           {on && <Ic.check s={15} />}
                         </button>
@@ -216,53 +237,67 @@ export default function NewBookingClient({
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <Field label={T("الاسم", "Name")}>
-                <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder={T("اسم العميل", "Customer name")} />
-                {touched && mode === "guest" && !name.trim() && <Err>{T("الاسم مطلوب", "Name required")}</Err>}
-              </Field>
-              <Field label={T("التليفون", "Phone")}>
-                <PhoneInput isAr={isAr} value={phone} onChange={setPhone} error={touched && phone.trim() && !phoneOk ? T("رقم غير صحيح", "Invalid number") : null} />
-                {touched && mode === "guest" && !phone.trim() && <Err>{T("التليفون مطلوب", "Phone required")}</Err>}
-              </Field>
-              <Field label={T("الإيميل (اختياري)", "Email (optional)")}>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" style={{ ...inp, textAlign: "left" }} placeholder="name@email.com" />
-              </Field>
-              <Field label={T("المدينة (اختياري)", "City (optional)")}>
-                <select value={city} onChange={(e) => setCity(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
-                  <option value="" style={{ background: "#0c0d0e" }}>{T("—", "—")}</option>
-                  {cities.map((c) => <option key={c.code} value={c.code} style={{ background: "#0c0d0e" }}>{c.label}</option>)}
-                </select>
-              </Field>
+            <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 14 }}>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الاسم", "Name")}>
+                  <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder={T("اسم العميل", "Customer name")} />
+                  {touched && mode === "guest" && !name.trim() && <Err>{T("الاسم مطلوب", "Name required")}</Err>}
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("التليفون", "Phone")}>
+                  <div className="abh-phone-wrap">
+                    <PhoneInput isAr={isAr} value={phone} onChange={setPhone} error={touched && phone.trim() && !phoneOk ? T("رقم غير صحيح", "Invalid number") : null} />
+                  </div>
+                  {touched && mode === "guest" && !phone.trim() && <Err>{T("التليفون مطلوب", "Phone required")}</Err>}
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الإيميل (اختياري)", "Email (optional)")}>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" style={{ ...inp, textAlign: "left" }} placeholder="name@email.com" />
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("المدينة (اختياري)", "City (optional)")}>
+                  <select value={city} onChange={(e) => setCity(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                    <option value="" style={{ background: "#0c0d0e" }}>{T("—", "—")}</option>
+                    {cities.map((c) => <option key={c.code} value={c.code} style={{ background: "#0c0d0e" }}>{c.label}</option>)}
+                  </select>
+                </Field>
+              </div>
             </div>
           </div>
 
           {/* 2) السيارة */}
-          <div style={{ ...card, padding: 24 }}>
+          <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("2", T("السيارة", "Vehicle"))}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-              <Field label={T("الماركة", "Brand")}>
-                <select value={brandId} onChange={(e) => { setBrandId(e.target.value); setModel(""); }} style={{ ...inp, cursor: "pointer" }}>
-                  <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الماركة", "Select brand")}</option>
-                  {brands.map((b) => <option key={b.id} value={b.id} style={{ background: "#0c0d0e" }}>{b.name}</option>)}
-                </select>
-              </Field>
-              <Field label={T("الموديل", "Model")}>
-                <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!brand} style={{ ...inp, cursor: brand ? "pointer" : "not-allowed", opacity: brand ? 1 : .5 }}>
-                  <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الموديل", "Select model")}</option>
-                  {(brand?.models ?? []).map((m) => <option key={m.name} value={m.name} style={{ background: "#0c0d0e" }}>{m.name}</option>)}
-                </select>
-              </Field>
+            <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 14, marginBottom: 14 }}>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الماركة", "Brand")}>
+                  <select value={brandId} onChange={(e) => { setBrandId(e.target.value); setModel(""); }} style={{ ...inp, cursor: "pointer" }}>
+                    <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الماركة", "Select brand")}</option>
+                    {brands.map((b) => <option key={b.id} value={b.id} style={{ background: "#0c0d0e" }}>{b.name}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الموديل", "Model")}>
+                  <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!brand} style={{ ...inp, cursor: brand ? "pointer" : "not-allowed", opacity: brand ? 1 : .5 }}>
+                    <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الموديل", "Select model")}</option>
+                    {(brand?.models ?? []).map((m) => <option key={m.name} value={m.name} style={{ background: "#0c0d0e" }}>{m.name}</option>)}
+                  </select>
+                </Field>
+              </div>
             </div>
 
             {model && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, border: "1px solid rgba(203,205,205,.3)", background: "rgba(203,205,205,.06)", padding: "6px 13px", marginBottom: 14, fontSize: 11.5, color: "var(--abh-platinum)" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8, borderRadius: 999, border: "1px solid rgba(203,205,205,.3)", background: "rgba(203,205,205,.06)", padding: "6px 13px", marginBottom: 14, fontSize: 11.5, color: "var(--abh-platinum)" }}>
                 {Ic.sparkle({ s: 13 })}{T("حجم السيارة", "Vehicle size")}: <strong style={{ color: "var(--abh-ivory)" }}>{isAr ? SIZE_LABEL[size].ar : SIZE_LABEL[size].en}</strong>
                 <span style={{ color: "var(--abh-steel)" }}>· {T("يحدّد أسعار الخدمات", "drives prices")}</span>
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1.4fr 1fr", gap: 14 }}>
               <Field label={T("اللون", "Color")}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {colors.map((c) => {
@@ -282,21 +317,21 @@ export default function NewBookingClient({
           </div>
 
           {/* 3) الخدمات */}
-          <div style={{ ...card, padding: 24 }}>
+          <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("3", T("الخدمات", "Services"))}
             {!model && <div style={{ fontSize: 12, color: "var(--abh-steel)", marginBottom: 12 }}>{T("اختر سيارة أولًا لعرض الأسعار حسب الحجم.", "Pick a vehicle first to price by size.")}</div>}
             <div className="abh-col" style={{ gap: 18 }}>
               {grouped.map(([cat, svcs]) => (
                 <div key={cat}>
                   <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 8 }}>{cat}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(auto-fill,minmax(150px,1fr))" : "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>
                     {svcs.map((s) => {
                       const on = chosen.has(s.slug);
                       const price = s.prices[size] ?? s.prices.large ?? 0;
                       const oldP = s.oldPrices[size] ?? s.oldPrices.large ?? 0;
                       const hasDiscount = !s.onRequest && oldP > 0 && oldP !== price;
                       return (
-                        <button key={s.slug} onClick={() => toggleSvc(s.slug)} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10, borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.07)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "14px 15px", cursor: "pointer", textAlign: isAr ? "right" : "left", transition: "all .2s", minHeight: 92 }}>
+                        <button key={s.slug} onClick={() => toggleSvc(s.slug)} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10, borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.07)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "14px 15px", cursor: "pointer", textAlign: isAr ? "right" : "left", transition: "all .2s", minHeight: 92, minWidth: 0 }}>
                           {/* الصف العلوي: مربّع الاختيار */}
                           <span style={{ display: "flex", justifyContent: isAr ? "flex-start" : "flex-end" }}>
                             <span style={{ display: "grid", placeItems: "center", height: 22, width: 22, flexShrink: 0, borderRadius: 7, border: on ? "none" : "1px solid rgba(255,255,255,.2)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", color: "#000" }}>{on && <Ic.check s={13} />}</span>
@@ -304,7 +339,7 @@ export default function NewBookingClient({
                           {/* اسم الخدمة — أكبر وعلى سطرين كاملين */}
                           <span style={{ flex: 1, fontSize: 14.5, lineHeight: 1.35, color: on ? "var(--abh-ivory)" : "var(--abh-platinum)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.name}</span>
                           {/* السعر تحت الاسم */}
-                          <span dir="ltr" className="abh-num" style={{ display: "inline-flex", alignItems: "baseline", gap: 7, justifyContent: isAr ? "flex-end" : "flex-start" }}>
+                          <span dir="ltr" className="abh-num" style={{ display: "inline-flex", alignItems: "baseline", gap: 7, justifyContent: isAr ? "flex-end" : "flex-start", flexWrap: "wrap" }}>
                             {s.onRequest ? (
                               <span style={{ fontSize: 14, color: "var(--abh-platinum)" }}>{T("حسب الطلب", "On request")}</span>
                             ) : (
@@ -337,28 +372,36 @@ export default function NewBookingClient({
           </div>
 
           {/* 4) الموعد والدفع */}
-          <div style={{ ...card, padding: 24 }}>
+          <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("4", T("الموعد والدفع", "Schedule & payment"))}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <Field label={T("الفرع", "Branch")}>
-                <select value={branch} onChange={(e) => setBranch(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
-                  {branches.map((b) => <option key={b.code} value={b.code} style={{ background: "#0c0d0e" }}>{b.label}</option>)}
-                </select>
-              </Field>
-              <Field label={T("طريقة الدفع", "Payment")}>
-                <select value={payment} onChange={(e) => setPayment(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
-                  {payments.map((p) => <option key={p.code} value={p.code} style={{ background: "#0c0d0e" }}>{p.label}</option>)}
-                </select>
-              </Field>
-              <Field label={T("التاريخ", "Date")}>
-                <input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} dir="ltr" style={inp} />
-              </Field>
-              <Field label={T("الوقت", "Time")}>
-                <select value={time} onChange={(e) => setTime(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
-                  <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الوقت", "Select time")}</option>
-                  {slots.map((s) => <option key={s} value={s} style={{ background: "#0c0d0e" }}>{s}</option>)}
-                </select>
-              </Field>
+            <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 14 }}>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الفرع", "Branch")}>
+                  <select value={branch} onChange={(e) => setBranch(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                    {branches.map((b) => <option key={b.code} value={b.code} style={{ background: "#0c0d0e" }}>{b.label}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("طريقة الدفع", "Payment")}>
+                  <select value={payment} onChange={(e) => setPayment(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                    {payments.map((p) => <option key={p.code} value={p.code} style={{ background: "#0c0d0e" }}>{p.label}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("التاريخ", "Date")}>
+                  <input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} dir="ltr" style={inp} />
+                </Field>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Field label={T("الوقت", "Time")}>
+                  <select value={time} onChange={(e) => setTime(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                    <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الوقت", "Select time")}</option>
+                    {slots.map((s) => <option key={s} value={s} style={{ background: "#0c0d0e" }}>{s}</option>)}
+                  </select>
+                </Field>
+              </div>
             </div>
             <div style={{ marginTop: 14 }}>
               <Field label={T("كود خصم (اختياري)", "Promo code (optional)")}>
@@ -380,7 +423,7 @@ export default function NewBookingClient({
 
         {/* العمود الجانبي — ملخّص ثابت */}
         <aside className="abh-nb-aside">
-          <div style={{ ...card, padding: 22 }}>
+          <div style={{ ...card, padding: mobile ? 18 : 22, minWidth: 0 }}>
             <div style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 16 }}>{T("ملخّص الحجز", "Booking summary")}</div>
 
             <SummaryRow label={T("العميل", "Customer")} value={name.trim() || "—"} isAr={isAr} />
@@ -470,9 +513,15 @@ const chipStyle = (on: boolean): React.CSSProperties => ({
 
 const NB_CSS = `
 .abh-nb-layout{ display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:24px; align-items:start; }
-.abh-nb-aside{ position:sticky; top:96px; }
+.abh-nb-aside{ position:sticky; top:96px; min-width:0; }
 @media (max-width:1024px){
   .abh-nb-layout{ grid-template-columns:1fr; }
   .abh-nb-aside{ position:static; }
 }
+@media (max-width:640px){
+  .abh-nb-layout{ gap:16px; }
+}
+.abh-phone-wrap{ width:100%; min-width:0; }
+.abh-phone-wrap > *{ width:100% !important; min-width:0 !important; box-sizing:border-box; max-width:100%; }
+.abh-phone-wrap input{ min-width:0 !important; }
 `;

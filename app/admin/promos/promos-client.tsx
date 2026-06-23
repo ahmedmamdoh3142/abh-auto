@@ -158,8 +158,8 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
               );
             })}
           </div>
-          <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 320 }}>
-            <span style={{ position: "absolute", insetInlineStart: 14, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)" }}><Ic.search s={15} /></span>
+          <div className="abh-promo-search" style={{ position: "relative", flex: "1 1 220px", maxWidth: 320 }}>
+            <span style={{ position: "absolute", insetInlineStart: 14, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)", pointerEvents: "none", display: "inline-flex" }}><Ic.search s={15} /></span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالكود أو الاسم…", "Search code or label…")}
               style={{ width: "100%", borderRadius: 13, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", padding: "11px 14px", paddingInlineStart: 38, fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
           </div>
@@ -221,7 +221,11 @@ const PROMO_CSS = `
 .abh-promo-kpis{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
 .abh-promo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:18px; }
 @media (max-width:1100px){ .abh-promo-kpis{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media (max-width:860px){ .abh-promo-toolbar{ flex-direction:column; align-items:stretch; } }
+@media (max-width:860px){
+  .abh-promo-toolbar{ flex-direction:column; align-items:stretch; }
+  /* في الوضع العمودي flex-basis بيأثّر على الارتفاع — نلغّيه عشان الأيقونة تفضل جوّه الإنبوت */
+  .abh-promo-search{ flex:0 0 auto !important; max-width:none !important; width:100%; }
+}
 @media (max-width:560px){ .abh-promo-kpis{ grid-template-columns:1fr; } .abh-promo-grid{ grid-template-columns:1fr; } }
 `;
 
@@ -417,7 +421,7 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
         </div>
 
         {/* الكود + الاسم */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="abh-promo-2col" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
           <Field label={T("الكود (يكتبه الأدمن)", "Code (you name it)")} hint={T("حروف وأرقام، بدون مسافات", "Letters & numbers, no spaces")}>
             <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))} dir="ltr"
               placeholder="SUMMER25" style={{ ...inp, fontFamily: "var(--abh-display, serif)", letterSpacing: ".08em", textAlign: "left" }} />
@@ -498,7 +502,7 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
               <input type="number" min={1} value={perUserLimit} onChange={(e) => setPerUserLimit(e.target.value)} dir="ltr" placeholder="∞" style={inp} />
             </Field>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+          <div className="abh-promo-2col" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 14, marginTop: 14 }}>
             <Field label={T("تاريخ البداية", "Starts at")} hint={T("فارغ = فوري", "Empty = now")}>
               <input type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} dir="ltr" style={inp} />
             </Field>
@@ -518,6 +522,8 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
           <Pill icon={Ic.check} onClick={submit}>{promo ? T("حفظ التعديلات", "Save changes") : T("إنشاء الكود", "Create code")}</Pill>
         </div>
       </div>
+
+      <style>{`@media (max-width:560px){ .abh-promo-2col{ grid-template-columns:1fr !important; } }`}</style>
     </Modal>
   );
 }
@@ -564,7 +570,7 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
           </div>
 
           {/* 2) الإيرادات + الخصومات */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
             <div style={{ borderRadius: 16, border: "1px solid rgba(159,212,176,.2)", background: "rgba(159,212,176,.05)", padding: 18 }}>
               <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", textAlign: align }}>{T("إجمالي الإيرادات", "Total revenue")}</div>
               <div className="abh-num" dir="ltr" style={{ fontSize: 26, color: "#9fd4b0", marginTop: 6, textAlign: align }}>{EGP(data.summary.totalRevenue)} <span style={{ fontSize: 12, color: "var(--abh-steel)" }}>{ccy}</span></div>

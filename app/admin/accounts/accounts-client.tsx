@@ -3,10 +3,33 @@
  * app/admin/accounts/accounts-client.tsx — إدارة الحسابات (CLIENT)
  * إنشاء/تعديل/حذف حسابات (member / staff / admin / partner).
  * عند اختيار دور «شركة» تظهر حقول اسم الشركة. الأدمن يكتب الباسوورد بنفسه.
+ *
+ * موبايل: حقول المودال (الاسم/الإيميل، الهاتف/المدينة) تنزل تحت بعض —
+ *   لا سكروول أفقي. رمز الدولة يفضل جنب الرقم داخل PhoneInput.
  */
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Pill, Ghost, IconBtn, Field, Input, Selectbox, Chip, Modal, Confirm, useToast, Ic, PageHeader } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
+
+/* ───────── هوك media query (للتجاوب مع الموبايل) ───────── */
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, [query]);
+  return matches;
+}
+
+/* يجبر جذر PhoneInput على ملء عرض الخلية ومنع الطفح في الـRTL */
+const PHONE_FIX_CSS = `
+.abh-phone-wrap{ width:100%; min-width:0; }
+.abh-phone-wrap > *{ width:100% !important; min-width:0 !important; box-sizing:border-box; max-width:100%; }
+.abh-phone-wrap input{ min-width:0 !important; }
+`;
 
 type Role = "member" | "staff" | "admin" | "partner";
 type Account = {
@@ -132,7 +155,7 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
                     <Chip tone={rm.tone}>{isAr ? rm.ar : rm.en}</Chip>
                     {a.role === "partner" && a.partnerActive === false && <Chip tone="bad">{T("شراكة موقوفة", "Paused")}</Chip>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--abh-steel)", marginTop: 3, direction: "ltr", textAlign: isAr ? "right" : "left" }}>
+                  <div style={{ fontSize: 11.5, color: "var(--abh-steel)", marginTop: 3, direction: "ltr", textAlign: isAr ? "right" : "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {a.email}{a.role === "partner" && a.companyName ? ` · ${a.name}` : ""}
                   </div>
                 </div>
@@ -163,6 +186,10 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
   onClose: () => void; onSave: (acc: any, isNew: boolean) => void;
 }) {
   const isNew = !acc;
+  const mobile = useMediaQuery("(max-width: 640px)");
+  // عمود واحد على الموبايل، عمودين بـ minmax(0,..) على الديسكتوب (يمنع التمطّط)
+  const twoCol = mobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)";
+
   const [f, setF] = useState({
     id: acc?.id ?? "",
     name: acc?.name ?? "",
@@ -205,25 +232,35 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
           </Field>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Field label={isPartner ? T("اسم مسؤول التواصل", "Contact person") : T("الاسم", "Name")}>
-            <Input value={f.name} onChange={(e: any) => set({ name: e.target.value })} style={inputStyle} />
-          </Field>
-          <Field label={T("الإيميل (للدخول)", "Email (login)")}>
-            <Input dir="ltr" value={f.email} onChange={(e: any) => set({ email: e.target.value })} style={{ textAlign: "left" }} />
-          </Field>
+        <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <Field label={isPartner ? T("اسم مسؤول التواصل", "Contact person") : T("الاسم", "Name")}>
+              <Input value={f.name} onChange={(e: any) => set({ name: e.target.value })} style={inputStyle} />
+            </Field>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <Field label={T("الإيميل (للدخول)", "Email (login)")}>
+              <Input dir="ltr" value={f.email} onChange={(e: any) => set({ email: e.target.value })} style={{ textAlign: "left" }} />
+            </Field>
+          </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Field label={T("الهاتف", "Phone")}>
-            <PhoneInput isAr={isAr} value={f.phone} onChange={(p) => set({ phone: p })}
-              error={touched && f.phone.trim() && !isValidPhone(f.phone) ? T("رقم غير صحيح", "Invalid number") : null} />
-          </Field>
-          <Field label={T("المدينة (اختياري)", "City (optional)")}>
-            <Selectbox value={f.city} onChange={(v: string) => set({ city: v })}
-              options={[{ value: "", label: T("بدون", "None") }, ...cities.map((c) => ({ value: c.code, label: c.label }))]}
-              placeholder={T("اختر", "Select")} />
-          </Field>
+        <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <Field label={T("الهاتف", "Phone")}>
+              <div className="abh-phone-wrap">
+                <PhoneInput isAr={isAr} value={f.phone} onChange={(p) => set({ phone: p })}
+                  error={touched && f.phone.trim() && !isValidPhone(f.phone) ? T("رقم غير صحيح", "Invalid number") : null} />
+              </div>
+            </Field>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <Field label={T("المدينة (اختياري)", "City (optional)")}>
+              <Selectbox value={f.city} onChange={(v: string) => set({ city: v })}
+                options={[{ value: "", label: T("بدون", "None") }, ...cities.map((c) => ({ value: c.code, label: c.label }))]}
+                placeholder={T("اختر", "Select")} />
+            </Field>
+          </div>
         </div>
 
         <Field label={isNew ? T("كلمة المرور", "Password") : T("كلمة مرور جديدة (اتركها فارغة لعدم التغيير)", "New password (leave blank to keep)")}
@@ -243,6 +280,8 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
           </p>
         )}
       </div>
+
+      <style>{PHONE_FIX_CSS}</style>
     </Modal>
   );
 }

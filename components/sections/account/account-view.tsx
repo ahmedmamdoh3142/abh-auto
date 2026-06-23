@@ -109,7 +109,7 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
 
       <section className="relative pb-28 pt-12 md:pt-14">
         <div className="container">
-          <div className="grid [&>*]:col-start-1 [&>*]:row-start-1">
+          <div className="grid grid-cols-1 [&>*]:col-start-1 [&>*]:row-start-1 [&>*]:min-w-0">
           <AnimatePresence initial={false}>
             <motion.div key={section}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
@@ -328,9 +328,9 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
 
       <div className="relative p-7 md:p-9">
         <div className="flex flex-wrap items-start justify-between gap-5">
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5"><StatusChip t={t} status={b.status} /><PaymentChip t={t} branch={b.payment === 'branch'} /></div>
-            <h3 className="mt-4 font-display text-3xl uppercase leading-none text-ivory md:text-[2.6rem]">{b.vehicleLabel}</h3>
+            <h3 className="mt-4 break-words font-display text-3xl uppercase leading-none text-ivory md:text-[2.6rem]">{b.vehicleLabel}</h3>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <MetaChip icon={MapPin}>{tb(`branches.${b.branchKey}`)}</MetaChip>
               <MetaChip icon={Clock}>{fmtDate(b.date, isAr)} · {b.time}</MetaChip>

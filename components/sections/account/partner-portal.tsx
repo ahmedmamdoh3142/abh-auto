@@ -86,9 +86,9 @@ export function PartnerPortal() {
         <div className="relative flex flex-wrap items-center justify-between gap-5 rounded-[25px] bg-[#0b0c0d]/80 px-6 py-5 backdrop-blur-xl md:px-8">
           <div className="flex items-center gap-4">
             <span className="grid h-14 w-14 flex-none place-items-center rounded-2xl border border-platinum/30 bg-platinum/[0.08]"><Building2 className="h-6 w-6 text-platinum" strokeWidth={1.6} /></span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-display text-2xl uppercase tracking-tight text-ivory">{data.company.name}</h2>
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="truncate font-display text-2xl uppercase tracking-tight text-ivory">{data.company.name}</h2>
                 <span className="inline-flex items-center gap-1 rounded-full border border-platinum/30 bg-platinum/[0.07] px-2.5 py-0.5 text-[0.5rem] uppercase tracking-[0.18em] text-platinum"><BadgeCheck className="h-3 w-3" strokeWidth={2} />{T('شريك', 'Partner')}</span>
               </div>
               <p className="mt-1 text-[0.78rem] text-platinum/60">{T('لوحة الشريك — أسعارك الخاصة وعمولاتك مع ABH.', 'Partner dashboard — your private pricing & commission with ABH.')}</p>
