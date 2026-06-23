@@ -42,8 +42,8 @@ export function ServicesAtelier({
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       <style>{`
-        .atl-orb1{left:25%;top:25%;transform:translate(-50%,-50%) scale(1);animation:atlOrb1 12s ease-in-out infinite;}
-        @keyframes atlOrb1{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.04}50%{transform:translate(-50%,-50%) scale(1.2);opacity:.08}}
+        .atl-orb1{left:25%;top:25%;transform:translate(-50%,-50%);animation:atlOrb1 12s ease-in-out infinite;}
+        @keyframes atlOrb1{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.2)}}
         .atl-orb2{animation:atlOrb2 18s ease-in-out infinite;}
         @keyframes atlOrb2{0%,100%{transform:scale(1.2) translateX(0)}50%{transform:scale(1) translateX(50px)}}
         @media (prefers-reduced-motion: reduce),(max-width: 820px){
@@ -53,7 +53,7 @@ export function ServicesAtelier({
 
       {/* Cinematic ambient background — CSS animated */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
-        <div className="atl-orb1 absolute h-[80rem] w-[80rem] rounded-full bg-platinum blur-[200px]" />
+        <div className="atl-orb1 absolute h-[80rem] w-[80rem] rounded-full bg-platinum/[0.06] blur-[200px]" />
         <div className="atl-orb2 absolute right-0 top-1/2 h-[60rem] w-[60rem] rounded-full bg-steel/30 blur-[180px]" />
         <div className="absolute bottom-0 left-1/2 h-[40rem] w-full -translate-x-1/2 bg-gradient-to-t from-platinum/[0.03] to-transparent" />
       </div>

@@ -63,7 +63,6 @@ export function ServiceCardLarge({ service, index, total }: Props) {
               src={service.image}
               alt={service.name.en}
               sizes="(max-width: 768px) 100vw, 640px"
-              priority
               className="object-cover"
             />
           </div>
@@ -134,7 +133,6 @@ export function ServiceCardLarge({ service, index, total }: Props) {
                 src={service.image}
                 alt={service.name.en}
                 sizes="55vw"
-                priority
                 className="object-cover"
               />
             </div>

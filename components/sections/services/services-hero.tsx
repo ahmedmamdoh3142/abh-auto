@@ -51,6 +51,7 @@ export function ServicesHero() {
           alt=""
           fill
           priority
+          quality={40}
           sizes="100vw"
           className="object-cover opacity-[0.18]"
           style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }}
