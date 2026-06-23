@@ -3,57 +3,46 @@
 /**
  * AboutChapters — يؤجّل تحميل وهيدريشن الفصول التي تحت الطية.
  *
- * المشكلة: الفصول الثمانية كانت كلها client components تعمل hydration وتفتح
- * مشتركات useScroll/useTransform وأنيميشن لا نهائي **عند التحميل دفعة واحدة**،
- * فيتراكم زمن حظر رئيسي ضخم (TBT ~13s).
+ * ColdOpen فقط يبقى eager. باقي الفصول تُحمَّل عبر next/dynamic({ ssr:false })
+ * ولا تُركَّب إلا عند الاقتراب منها 800px (IntersectionObserver). هذا يقلّل
+ * زمن الحظر الرئيسي (TBT) بشكل كبير ويوزّع الهيدريشن مع السكرول.
  *
- * الحل: ColdOpen فقط (عنصر الـLCP/أعلى الطية) يبقى eager. باقي الفصول تُحمَّل
- * عبر next/dynamic({ ssr:false }) ولا تُركّب إلا عند الاقتراب منها بمسافة 800px
- * (IntersectionObserver). بهذا:
- *   • مقاسات الـbundle الأولية تنخفض (كل فصل chunk منفصل يُطلب عند الحاجة).
- *   • أثناء قياس Lighthouse (الذي لا يُمرّر الصفحة) لا تُركَّب الفصول إطلاقًا
- *     → ينهار الـTBT لأن JS بتاعها لا يُنفَّذ في نافذة التحميل.
- *   • تجربة المستخدم الحقيقية تتحسّن: الهيدريشن يتوزّع مع السكرول لا دفعة واحدة.
- *
- * منع الـCLS: كل عنصر مؤجَّل له placeholder بنفس ارتفاع القسم (svh)، فلا يحدث
- * أي إزاحة عند التركيب (القسم نفسه يفرض نفس الارتفاع بعد ظهوره).
+ * ملاحظة بناء: خيارات next/dynamic يجب أن تكون object literal مكتوبًا داخل
+ * الاستدعاء مباشرة (لا متغيّر مشترك)، وإلا يفشل البناء.
  *
  * ملاحظة SEO: مع ssr:false لا يظهر نص الفصول في HTML الأولي. إن كان نص فصلٍ
- * مهمًّا للأرشفة (مثلاً المانيفستو/الدعوة)، انقله إلى eager بنفس نمط ColdOpen
- * أو أبقِ نسخة نصية مُخدَّمة من الخادم. التفاصيل في ردّي بالشات.
+ * مهمًّا للأرشفة انقله إلى eager بنفس نمط ColdOpen.
  */
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-const opts = { ssr: false } as const;
-
 const ChapterObsession = dynamic(
   () => import('@/components/sections/about/chapter-01-obsession').then((m) => ({ default: m.ChapterObsession })),
-  opts,
+  { ssr: false },
 );
 const ChapterCloseUp = dynamic(
   () => import('@/components/sections/about/chapter-02-closeup').then((m) => ({ default: m.ChapterCloseUp })),
-  opts,
+  { ssr: false },
 );
 const ChapterHand = dynamic(
   () => import('@/components/sections/about/chapter-03-hand').then((m) => ({ default: m.ChapterHand })),
-  opts,
+  { ssr: false },
 );
 const ChapterStandard = dynamic(
   () => import('@/components/sections/about/chapter-04-standard').then((m) => ({ default: m.ChapterStandard })),
-  opts,
+  { ssr: false },
 );
 const ChapterRoom = dynamic(
   () => import('@/components/sections/about/chapter-05-room').then((m) => ({ default: m.ChapterRoom })),
-  opts,
+  { ssr: false },
 );
 const ChapterRemains = dynamic(
   () => import('@/components/sections/about/chapter-06-remains').then((m) => ({ default: m.ChapterRemains })),
-  opts,
+  { ssr: false },
 );
 const ChapterInvitation = dynamic(
   () => import('@/components/sections/about/chapter-07-invitation').then((m) => ({ default: m.ChapterInvitation })),
-  opts,
+  { ssr: false },
 );
 
 /** يركّب children فقط عند الاقتراب من الـviewport؛ قبلها placeholder بنفس الارتفاع. */
