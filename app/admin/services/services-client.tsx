@@ -1,23 +1,25 @@
 "use client";
 /**
- * app/admin/services/services-client.tsx — الخدمات والأسعار (CLIENT) · v3
+ * app/admin/services/services-client.tsx — الخدمات والأسعار (CLIENT) · v4
  *
- * الجديد في v3 — وضع "أسعار شركة":
- *  • كومبو بوكس فوق فيه أسماء الشركات. الوضع الافتراضي = «الأسعار العامة» (زي ما كان).
- *  • لمّا تختار شركة: الكروت تفضل بنفس الشكل، لكن كل كرت يعرض حقول إدخال
- *    «سعر الشركة» + «عمولتك» لكل حجم، تتحفظ في partner_service_prices.
- *  • في وضع الشركة: التعديل بيكون على الأسعار/العمولات فقط (مش على الخدمة نفسها).
- *  • العمولة = مبلغ ثابت بالريال لكل خدمة/حجم.
+ * الجديد في v4 — أزرار «دفتر الأسعار المعتمد» داخل وضع الشركة:
+ *  • زرّان: «أسعار الشركاء · 20%» و«أسعار المناديب · 10%».
+ *  • الضغط على أيّهما يملأ — تلقائيًا — «سعر الشركة» + «عمولة الشركة» لكل خدمة/حجم
+ *    من دفتر الأسعار المعتمد (lib/admin/partner-price-book.ts):
+ *       السعر  = السعر بعد الخصم (موحّد للشركاء والمناديب).
+ *       العمولة = round(السعر × النسبة)  →  الشركاء 20% ، المناديب 10%.
+ *  • القيم تتحط في المسودة (partnerDraft) القابلة للتعديل — تقدر تعدّل أي خانة يدوي،
+ *    وبعدين تحفظ بزر «حفظ أسعار الشركة» الموجود. ولو غيّرت رأيك «تراجع» يرجّع آخر محفوظ.
+ *  • شريط الأزرار بيعرض عدّاد «مطابق X/الكل» قبل ما تضغط.
  *
- * تحديث الصور: لكل خدمة صورتان:
- *  • image      = الصورة العرضية (landscape) — تُستخدم في كرت الأدمن والمعاينة.
- *  • cardImage  = صورة الكرت الطولية (portrait) — تُستخدم في كروت الموقع/الخدمات.
- *  المودال يحتوي حقلَي رفع منفصلين.
+ *  ملاحظة v3 (وضع أسعار شركة): كومبو فوق فيه الشركات؛ الافتراضي «الأسعار العامة».
+ *  لكل خدمة صورتان: image (عرضية) + cardImage (طولية للكروت).
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, LocaleField, Selectbox, Chip, Modal, Confirm, useToast, Ic, EGP, PageHeader, ImageCard } from "@/components/admin/ui";
 import { emptyLoc, type Loc } from "@/lib/admin/i18n-json";
 import ImageUpload from "@/components/admin/image-upload";
+import { PRESET_RATES, matchPreset, type PresetKind } from "@/lib/admin/partner-price-book";
 
 type SizeKey = "small" | "medium" | "large";
 type SizePrice = { price: number; old: number };
@@ -60,6 +62,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   const [partnerDraft, setPartnerDraft] = useState<PartnerPriceMap>({}); // المسودة القابلة للتعديل
   const [loadingPartner, setLoadingPartner] = useState(false);
   const [savingPartner, setSavingPartner] = useState(false);
+  const [appliedKind, setAppliedKind] = useState<PresetKind | null>(null); // الزر المُطبَّق حاليًا (للتمييز اللوني)
   const isPartnerMode = partnerId !== "";
   const activePartner = partners.find((p) => p.id === partnerId);
 
@@ -74,8 +77,16 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     featured: list.filter((s) => s.featured).length,
   }), [list]);
 
+  // تغطية الدفتر: كام خدمة قابلة للتسعير (مش حسب الطلب) ليها صف في الدفتر
+  const pricable = useMemo(() => list.filter((s) => !s.onRequest), [list]);
+  const presetCoverage = useMemo(
+    () => pricable.filter((s) => matchPreset({ id: s.id, name: s.name })).length,
+    [pricable]
+  );
+
   // جلب أسعار الشركة عند اختيارها
   useEffect(() => {
+    setAppliedKind(null);
     if (!partnerId) { setPartnerPrices({}); setPartnerDraft({}); return; }
     let alive = true;
     setLoadingPartner(true);
@@ -96,8 +107,6 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     return () => { alive = false; };
   }, [partnerId]); // eslint-disable-line
 
-  const partnerKey = (serviceId: number, size: SizeKey) => `${serviceId}:${size}`;
-
   const setPartnerCell = useCallback((serviceId: number, size: SizeKey, field: "price" | "commission", val: number) => {
     setPartnerDraft((d) => {
       const k = `${serviceId}:${size}`;
@@ -105,6 +114,34 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
       return { ...d, [k]: { ...cur, [field]: val } };
     });
   }, []);
+
+  // ── تطبيق دفتر الأسعار المعتمد (شركاء 20% / مناديب 10%) على المسودة ──
+  const runApply = useCallback((kind: PresetKind) => {
+    const rate = PRESET_RATES[kind];
+    const patch: PartnerPriceMap = {};
+    let matched = 0; const missed: string[] = [];
+    // نحسب القيم والعدّاد الآن (مش داخل setState) عشان الرسالة تطلع صح
+    for (const s of list) {
+      if (!s.id || s.onRequest) continue;
+      const e = matchPreset({ id: s.id, name: s.name });
+      if (!e) { missed.push(txt(s.name) || s.slug || String(s.id)); continue; }
+      matched++;
+      for (const size of SIZE_ORDER) {
+        const price = e.prices[size];
+        if (!(price > 0)) continue;
+        patch[`${s.id}:${size}`] = { price, commission: Math.round(price * rate) };
+      }
+    }
+    setPartnerDraft((prev) => ({ ...prev, ...patch }));
+    setAppliedKind(kind);
+    const head = kind === "partner" ? T("أسعار الشركاء (20%)", "Partners (20%)") : T("أسعار المناديب (10%)", "Reps (10%)");
+    if (matched === 0) {
+      toast(T("مفيش خدمات مطابقة في الدفتر — راجِع الربط.", "No matching services in the book — check the mapping."), "bad");
+    } else {
+      const tail = missed.length ? T(` — لم يُطابَق ${missed.length}`, ` — ${missed.length} unmatched`) : "";
+      toast(T(`تم تطبيق ${head} على ${matched} خدمة. راجِع ثم اضغط «حفظ أسعار الشركة».`, `${head} applied to ${matched} services. Review, then click “Save partner prices”.`) + tail);
+    }
+  }, [list]); // eslint-disable-line
 
   // هل في تغييرات غير محفوظة؟
   const partnerDirty = useMemo(() => JSON.stringify(partnerPrices) !== JSON.stringify(partnerDraft), [partnerPrices, partnerDraft]);
@@ -168,7 +205,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   }
   const cats = [{ id: 0, label: T("الكل", "All") }, ...categories];
 
-  // إجمالي عمولتك المتوقّعة من دفتر الشركة الحالي (لكل الأحجام المملوءة)
+  // إجمالي عمولة الشركة المتوقّعة من دفتر الشركة الحالي (لكل الأحجام المملوءة)
   const draftCommissionSum = useMemo(() => {
     return Object.values(partnerDraft).reduce((sum, c) => sum + ((c.price || 0) > 0 ? (c.commission || 0) : 0), 0);
   }, [partnerDraft]);
@@ -212,6 +249,27 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           </>
         )}
       </div>
+
+      {/* ════ شريط دفتر الأسعار المعتمد (الزرّان) — في وضع الشركة فقط ════ */}
+      {isPartnerMode && (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 16, padding: "14px 18px", borderRadius: 16, border: "1px solid rgba(203,205,205,.18)", background: "linear-gradient(180deg, rgba(203,205,205,.06), rgba(255,255,255,.02))" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginInlineEnd: "auto" }}>
+            <span style={{ fontSize: 13, color: "var(--abh-ivory)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Ic.sparkle s={14} />{T("تطبيق دفتر الأسعار المعتمد", "Apply approved price book")}
+            </span>
+            <span style={{ fontSize: 10.5, color: "var(--abh-steel)", lineHeight: 1.6 }}>
+              {T(`يملأ «سعر الشركة» و«العمولة» لكل الخدمات المطابقة دفعة واحدة، وتقدر تعدّل بعدها. مطابق ${presetCoverage}/${pricable.length} خدمة.`,
+                 `Fills “partner price” + “commission” for all matched services at once; editable after. Matched ${presetCoverage}/${pricable.length}.`)}
+            </span>
+          </div>
+          {(["partner", "rep"] as PresetKind[]).map((k) => {
+            const active = appliedKind === k;
+            const Btn = active ? Pill : Ghost;        // العادي Ghost، والمتفعّل ياخد شكل Pill
+            const label = k === "partner" ? T("أسعار الشركاء · 20%", "Partners · 20%") : T("أسعار المناديب · 10%", "Reps · 10%");
+            return <Btn key={k} icon={Ic.sparkle} onClick={() => runApply(k)}>{label}</Btn>;
+          })}
+        </div>
+      )}
 
       {isPartnerMode && partnerDirty && (
         <div style={{ marginBottom: 16, padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(232,207,154,.3)", background: "rgba(232,207,154,.07)", color: "var(--abh-warn)", fontSize: 12.5 }}>
