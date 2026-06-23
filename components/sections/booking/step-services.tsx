@@ -8,7 +8,18 @@
  *  • الصورة فوق بنسبة ثابتة 4:3 — واضحة تمامًا بلا تغميق/grayscale (تُظهر تفاصيل الشغل).
  *  • لوحة سفلية صلبة (اسم + شيبس + سعر) على خلفية الكرت — تباين مثالي ونص مقروء دائمًا.
  *  • عند الهوفر: zoom خفيف للصورة + ظهور "يشمل" كـoverlay فوق الصورة (يُكشف عند الطلب).
+ *
+ * ── إصلاح أداء الموبايل (مهم) ──────────────────────────────────────────────
+ * كان الكرت الواحد يحمل عدة طبقات backdrop-blur (الشيبس + زر الاختيار + شارة
+ * الخصم + overlay "يشمل")، فمع عدة كروت تتراكم 25–30 طبقة backdrop-filter داخل
+ * نفس منطقة الـscroll، وفوقها شريط dossier-shimmer بأنيميشن لا نهائي. هذا يخنق
+ * الـcompositor على iOS Safari وأندرويد المتوسط → الصفحة "تعلّق" ويتوقف الـscroll.
+ *
+ * الحل: نكتشف الأجهزة اللمسية/الشاشات الصغيرة/تفضيل تقليل الحركة، ونضيف كلاس
+ * "fx-lite" على الحاوية. الـCSS بالأسفل يُعطّل backdrop-filter والشيمر والظلال
+ * والتحويلات الثقيلة في هذا الوضع فقط — بدون أي تغيير في شكل الديسكتوب.
  */
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import {
@@ -36,6 +47,37 @@ const SIZE_LABELS: Record<VehicleSize, { ar: string; en: string; tier: string }>
   large: { ar: 'كبيرة', en: 'Large', tier: 'Tier III' },
 };
 
+/**
+ * يُعيد true عندما يجب تخفيف التأثيرات الثقيلة (لمس / شاشة صغيرة / تقليل الحركة).
+ * SSR-safe: يبدأ false ثم يُحدَّث بعد التحميل مباشرةً قبل أي تفاعل من المستخدم.
+ */
+function useLiteFx(): boolean {
+  const [lite, setLite] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const queries = [
+      '(hover: none)',
+      '(pointer: coarse)',
+      '(max-width: 820px)',
+      '(prefers-reduced-motion: reduce)',
+    ].map((q) => window.matchMedia(q));
+
+    const update = () => setLite(queries.some((m) => m.matches));
+    update();
+
+    queries.forEach((m) => {
+      // addEventListener هو الأحدث؛ addListener للتوافق مع سفاري القديم
+      m.addEventListener ? m.addEventListener('change', update) : m.addListener(update);
+    });
+    return () => {
+      queries.forEach((m) => {
+        m.removeEventListener ? m.removeEventListener('change', update) : m.removeListener(update);
+      });
+    };
+  }, []);
+  return lite;
+}
+
 export function StepServices({
   t, isAr, data, set, total, categories, services: SERVICES, onBack, onNext,
 }: {
@@ -48,6 +90,8 @@ export function StepServices({
   services: DbServiceMeta[];
   onBack: () => void; onNext: () => void;
 }) {
+  const lite = useLiteFx();
+
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
   const list = SERVICES.filter((s) => s.cat === data.activeCat);
@@ -64,7 +108,7 @@ export function StepServices({
   const canNext = data.services.length > 0 && towingValid;
 
   return (
-    <div>
+    <div className={lite ? 'fx-lite' : undefined}>
       <Heading index="02" label={t('steps.services')} title={t('step2.heading')} sub={t('step2.subheading')} />
 
       {/* ── Dossier · atelier pass ── */}
@@ -121,6 +165,18 @@ export function StepServices({
       <style>{`
         .dossier-shimmer{background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,0.06) 50%,transparent 60%);background-size:280% 100%;animation:dossierSweep 7s ease-in-out infinite;}
         @keyframes dossierSweep{0%{background-position:140% 0}100%{background-position:-140% 0}}
+
+        /* ── وضع التأثيرات الخفيفة: لمس / شاشة صغيرة / تقليل الحركة ──
+           يُلغى backdrop-filter (السبب الرئيسي لتعليق الموبايل)، والشيمر،
+           والظلال/التحويلات الثقيلة — دون أي تأثير على الديسكتوب. */
+        @media (prefers-reduced-motion: reduce){ .dossier-shimmer{ animation:none; } }
+        .fx-lite [class*="backdrop-blur"]{ -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+        .fx-lite .dossier-shimmer{ display:none !important; }
+        .fx-lite .svc-card{ box-shadow:none !important; transition:border-color .3s ease !important; }
+        .fx-lite .svc-card:hover{ transform:none !important; }
+        .fx-lite .svc-img{ transform:none !important; transition:none !important; }
+        /* بدون البلور نرفع تعتيم الـoverlay لضمان قراءة النص فوق الصورة */
+        .fx-lite .svc-reveal{ background:rgba(8,9,11,0.94) !important; }
       `}</style>
 
       <div className="mt-9 grid grid-cols-1 gap-11 lg:grid-cols-[1.55fr_1fr]">
@@ -173,7 +229,7 @@ export function StepServices({
                     data-cursor="hover"
                     onClick={() => toggle(sv.slug)}
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.5, ease: EASE }}
+                    transition={{ delay: lite ? 0 : i * 0.06, duration: lite ? 0.3 : 0.5, ease: EASE }}
                     className={[
                       'svc-card group relative flex flex-col overflow-hidden rounded-[22px] border bg-obsidian text-start transition-all duration-500 hover:-translate-y-1',
                       on ? 'border-platinum/50 shadow-[0_30px_80px_-34px_rgba(203,205,205,0.55)]' : 'border-white/[0.08] hover:border-white/25',
@@ -200,7 +256,7 @@ export function StepServices({
                         </span>
                       )}
                       {/* زر الاختيار */}
-                      <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/35 text-ivory'}`}>
+                      <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/45 text-ivory'}`}>
                         {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : <span className="text-lg leading-none">+</span>}
                       </span>
 

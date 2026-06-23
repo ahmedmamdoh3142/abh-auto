@@ -1,7 +1,15 @@
 'use client';
 
 /**
- * ServicesHero — Stunning immersive hero with floating text and particle effects.
+ * ServicesHero — immersive hero.
+ *
+ * إصلاحات الأداء:
+ *  1) صورة الخلفية (التي يَعدّها Lighthouse عنصر الـLCP) كانت loading="lazy"
+ *     بلا priority → تأخّر تحميلها وتأخّر الـLCP. أضفنا priority (تحميل فوري
+ *     + fetchpriority=high).
+ *  2) الـ20 جزيء + مؤشر التمرير كانوا framer بـrepeat:Infinity (حلقات rAF على
+ *     الـmain thread). حُوّلوا إلى CSS keyframes (compositor) ويُعطَّلون مع
+ *     prefers-reduced-motion.
  */
 import { motion } from 'framer-motion';
 import { useLocale } from 'next-intl';
@@ -25,12 +33,24 @@ export function ServicesHero() {
 
   return (
     <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
-      {/* faint cinematic plate behind the band */}
+      <style>{`
+        .shero-particle{animation-name:sheroFloat;animation-timing-function:ease-out;animation-iteration-count:infinite;}
+        @keyframes sheroFloat{0%{opacity:0;transform:translateY(10px)}50%{opacity:.8}100%{opacity:0;transform:translateY(-100px)}}
+        .shero-scroll{animation:sheroScroll 2s ease-in-out infinite;}
+        @keyframes sheroScroll{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+        @media (prefers-reduced-motion: reduce){
+          .shero-particle{animation:none;opacity:.4}
+          .shero-scroll{animation:none}
+        }
+      `}</style>
+
+      {/* faint cinematic plate — عنصر الـLCP: priority بدل lazy */}
       <div aria-hidden className="absolute inset-0 -z-20">
         <Image
           src={BOOKING_IMAGE}
           alt=""
           fill
+          priority
           sizes="100vw"
           className="object-cover opacity-[0.18]"
           style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }}
@@ -40,21 +60,16 @@ export function ServicesHero() {
         aria-hidden
         className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/60 via-obsidian/30 to-obsidian"
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         {particles.map((p) => (
-          <motion.span
+          <span
             key={p.id}
-            className="absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
-            style={{ left: `${p.left}%`, top: `${p.top}%` }}
-            animate={{ opacity: [0, 0.8, 0], y: [10, -50, -100] }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              ease: 'easeOut',
-              delay: p.delay,
+            className="shero-particle absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
+            style={{
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
             }}
           />
         ))}
@@ -79,7 +94,7 @@ export function ServicesHero() {
           <span className="h-px w-10 bg-gradient-to-l from-transparent to-platinum/60" />
         </motion.div>
 
-        {/* Main heading with staggered reveal */}
+        {/* Main heading */}
         <h1 className="font-display text-[clamp(2.8rem,8vw,6.5rem)] font-light leading-[0.95] tracking-tight">
           <span className="block overflow-hidden">
             <motion.span
@@ -123,18 +138,14 @@ export function ServicesHero() {
           className="mx-auto mt-10 h-px w-[min(420px,70%)] origin-center bg-gradient-to-r from-transparent via-platinum/40 to-transparent"
         />
 
-        {/* Scroll indicator */}
+        {/* Scroll indicator — CSS bob */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2 }}
           className="mt-16 flex flex-col items-center gap-3"
         >
-          <motion.div
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            className="h-12 w-px bg-gradient-to-b from-transparent via-platinum/50 to-transparent"
-          />
+          <span className="shero-scroll block h-12 w-px bg-gradient-to-b from-transparent via-platinum/50 to-transparent" />
           <span className="font-mono text-[0.55rem] uppercase tracking-[0.5em] text-platinum/40">
             {isAr ? 'استكشف' : 'Explore'}
           </span>

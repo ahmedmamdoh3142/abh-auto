@@ -1,12 +1,11 @@
 'use client';
 
 /**
- * ConciergeClose — Elegant closing CTA section,
- * now with the cinematic treatment from the main CTA.
+ * ConciergeClose — Elegant closing CTA section.
  *
- * تعديل: على الموبايل السكشن بقى بارتفاع محتوى + padding معقول (py-16) بدل
- * ما يفرض 82svh/620px، عشان ما ياخدش مساحة رأسية كبيرة. الارتفاع السينمائي
- * الكامل بيبقى من md فأكتر.
+ * إصلاح الأداء: الـ28 جزيء كانوا framer بـrepeat:Infinity (28 حلقة rAF على
+ * الـmain thread). حُوّلوا إلى CSS keyframes (compositor) ويُعطَّلون مع
+ * prefers-reduced-motion. الـparallax (useScroll) يبقى لأنه يعمل عند التمرير فقط.
  */
 import { useRef } from 'react';
 import Image from 'next/image';
@@ -15,8 +14,7 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useLocale } from 'next-intl';
 import { ArrowUpRight, MessageCircle } from 'lucide-react';
 
-const CTA_IMAGE =
-  '/images/cta-service.webp';
+const CTA_IMAGE = '/images/cta-service.webp';
 
 export function ConciergeClose() {
   const locale = useLocale();
@@ -30,11 +28,7 @@ export function ConciergeClose() {
 
   const bgY = useTransform(scrollYProgress, [0, 1], ['-12%', '12%']);
   const bgScale = useTransform(scrollYProgress, [0, 0.5, 1], [1.08, 1.0, 1.08]);
-  const overlayOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.4, 0.7, 1],
-    [0.7, 0.55, 0.55, 0.7],
-  );
+  const overlayOpacity = useTransform(scrollYProgress, [0, 0.4, 0.7, 1], [0.7, 0.55, 0.55, 0.7]);
 
   const particles = Array.from({ length: 28 }, (_, i) => ({
     id: i,
@@ -50,11 +44,14 @@ export function ConciergeClose() {
       ref={ref}
       className="relative isolate flex w-full items-center overflow-hidden py-16 sm:py-20 md:h-[82svh] md:min-h-[620px] md:py-0"
     >
+      <style>{`
+        .cc-particle{animation-name:ccFloat;animation-timing-function:ease-out;animation-iteration-count:infinite;}
+        @keyframes ccFloat{0%{opacity:0;transform:translateY(20px)}50%{opacity:.8}100%{opacity:0;transform:translateY(-120px)}}
+        @media (prefers-reduced-motion: reduce){ .cc-particle{animation:none;opacity:.35} }
+      `}</style>
+
       {/* Background image with parallax */}
-      <motion.div
-        className="absolute inset-0 -z-30"
-        style={{ y: bgY, scale: bgScale }}
-      >
+      <motion.div className="absolute inset-0 -z-30" style={{ y: bgY, scale: bgScale }}>
         <Image
           src={CTA_IMAGE}
           alt=""
@@ -76,28 +73,19 @@ export function ConciergeClose() {
       <div className="grid-lines absolute inset-0 -z-10 opacity-30" />
       <div className="noise absolute inset-0 -z-10 opacity-[0.04]" />
 
-      {/* Floating particles */}
+      {/* Floating particles — CSS */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         {particles.map((p) => (
-          <motion.span
+          <span
             key={p.id}
-            className="absolute rounded-full bg-platinum/60"
+            className="cc-particle absolute rounded-full bg-platinum/60"
             style={{
               left: `${p.left}%`,
               top: `${p.top}%`,
               width: p.size,
               height: p.size,
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{
-              opacity: [0, 0.8, 0],
-              y: [20, -60, -120],
-            }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              ease: 'easeOut',
-              delay: p.delay,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
             }}
           />
         ))}
@@ -110,7 +98,6 @@ export function ConciergeClose() {
       <div className="relative z-10 flex w-full items-center justify-center">
         <div className="container mx-auto px-6 md:px-10">
           <div className="mx-auto max-w-5xl text-center">
-            {/* Decorative element – replaces the original eyebrow */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -125,11 +112,8 @@ export function ConciergeClose() {
               <span className="h-px w-16 bg-gradient-to-l from-transparent to-platinum/40" />
             </motion.div>
 
-            {/* Headline – same content, lifted typography */}
             <h2 className="mt-8 font-display text-hero-sm md:mt-10 md:text-hero font-light italic leading-[0.92] tracking-tight text-ivory">
-              {isAr
-                ? 'هل تفكّر في أكثر من خدمة؟'
-                : 'Considering several services?'}
+              {isAr ? 'هل تفكّر في أكثر من خدمة؟' : 'Considering several services?'}
             </h2>
 
             <p className="mx-auto mt-6 max-w-lg text-sm leading-relaxed text-platinum/60 md:text-base">
@@ -138,7 +122,6 @@ export function ConciergeClose() {
                 : 'The team composes a bespoke programme for your vehicle, precisely tailored to your needs.'}
             </p>
 
-            {/* CTA – transformed into the mirror‑polished Chrome button */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -157,32 +140,17 @@ export function ConciergeClose() {
   );
 }
 
-/**
- * ChromePrimaryButton — Mirror-polished chrome pill with halo, ring,
- * shimmer sweep on hover. The flagship CTA component.
- */
-function ChromePrimaryButton({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
+function ChromePrimaryButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link href={href} data-cursor="hover" className="group relative inline-block">
-      {/* Outer animated halo */}
       <span
         aria-hidden
         className="absolute -inset-3 rounded-full bg-gradient-to-r from-platinum/50 via-ivory/40 to-platinum/50 opacity-0 blur-2xl transition-opacity duration-700 group-hover:opacity-100"
       />
-
-      {/* Chrome ring */}
       <span
         aria-hidden
         className="absolute -inset-px rounded-full bg-gradient-to-br from-ivory/80 via-platinum/40 to-ivory/50"
       />
-
-      {/* Inner pill */}
       <span className="relative inline-flex items-center gap-3 rounded-full bg-gradient-to-br from-ivory via-platinum to-ivory/95 px-10 py-5 text-[0.75rem] font-semibold uppercase tracking-[0.3em] text-obsidian shadow-[inset_0_1px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(0,0,0,0.12),0_22px_70px_-15px_rgba(203,205,205,0.65)] transition-all duration-500 group-hover:-translate-y-0.5 group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,1),inset_0_-1px_0_rgba(0,0,0,0.18),0_30px_90px_-12px_rgba(203,205,205,0.9)]">
         {children}
         <ArrowUpRight
@@ -190,12 +158,7 @@ function ChromePrimaryButton({
           strokeWidth={2.2}
         />
       </span>
-
-      {/* Shimmer sweep */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden rounded-full"
-      >
+      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
         <span className="absolute -inset-y-2 -left-3/4 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-0 transition-all duration-1000 group-hover:left-[120%] group-hover:opacity-100" />
       </span>
     </Link>

@@ -245,7 +245,12 @@ function AccountMenu({ member }: { member: Member }) {
   return (
     <div className="relative hidden md:block" ref={ref}>
       <button
-        data-cursor="hover" onClick={() => setOpen((o) => !o)}
+        data-cursor="hover"
+        onClick={() => setOpen((o) => !o)}
+        // اسم وحالة للزر: بدونها يقرأه الـscreen reader "button" فقط (فشل a11y)
+        aria-label={`Account menu — ${firstName(member.name)}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={cn(
           'flex items-center gap-2.5 rounded-full border py-1.5 pe-3 ps-1.5 transition-all duration-300',
           open ? 'border-white/25 bg-white/[0.06]' : 'border-white/12 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.05]',

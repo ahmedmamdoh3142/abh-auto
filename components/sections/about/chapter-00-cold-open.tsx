@@ -1,43 +1,35 @@
 'use client';
 
 /**
- * Chapter 00 — Title Card
+ * Chapter 00 — Title Card  (perf-optimized)
  *
- * A cinematic opening title, not an empty screen. The composition is
- * built around quiet signals that establish credibility, place and
- * intent before the manifesto fires in chapter 01:
+ * إصلاحات الأداء الأساسية في هذا الملف:
+ *  1) عنصر الـLCP (كلمة "ABH") لم يعد يعمل fade من opacity:0 بتأخير 1.5s.
+ *     الآن يُرسم بكامل وضوحه من أول فريم → ينهار تأخير رندر الـLCP (كان ~3150ms).
+ *  2) كل الأنيميشن اللانهائي (bloom / scan / ring / dot / caret / scroll) تحوّل
+ *     من framer-motion (يعمل على الـmain thread عبر rAF) إلى CSS keyframes
+ *     (تعمل على الـcompositor) → يقلّل الـTBT و"Other" بشكل كبير.
+ *  3) أُسقط فلتر blur المربوط بالسكرول (repaint مكلف) وبقي فقط y + opacity.
+ *  4) رُفعت تباينات النص الصغير (platinum/55→/80) لتجاوز فحص التباين (a11y).
+ *  5) كل الحركة تُعطَّل تلقائيًا مع prefers-reduced-motion.
  *
- *   1.  Passe-partout frame   — hairlines + 4 corner crosshairs
- *   2.  Top metadata strip    — live indicator + locale stamp
- *   3.  Chapter counter       — "00 / 07 · Chapters" in brackets
- *   4.  Atelier monogram      — animated SVG ring + "ABH"
- *   5.  Bilingual title       — "About · من نحن" with diamond divider
- *   6.  Geo coordinates       — Jeddah's real lat/long, typed live
- *   7.  Live atelier clock    — Jeddah local time, updates every second
- *   8.  Scroll prompt         — "Chapter 01 follows" + pulsing rail
- *
- * As the user scrolls, the entire composition lifts and disperses, with
- * each element fading on its own curve so the exit feels alive.
+ * الحركات لمرة-واحدة (entrance) تركناها framer لأنها تنتهي بسرعة ولا تساهم في
+ * الـTBT المستمر؛ أما اللانهائية فقط هي التي نُقلت إلى CSS.
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, type MotionValue } from 'framer-motion';
-import { useLocale } from 'next-intl';
 
 export function ColdOpen() {
   const ref = useRef<HTMLElement>(null);
-  const locale = useLocale();
-  const isAr = locale === 'ar';
 
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ['start start', 'end start'],
   });
 
-  // Master composition lift on scroll
+  // Master composition lift on scroll (y + opacity فقط — بدون blur filter)
   const compY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const compOp = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.8, 0]);
-  const compBlur = useTransform(scrollYProgress, [0.4, 1], [0, 16]);
-  const compFilter = useTransform(compBlur, (v) => `blur(${v}px)`);
 
   // Frame opacity — fades earlier than content for layered exit
   const frameOp = useTransform(scrollYProgress, [0, 0.3, 0.7], [1, 1, 0]);
@@ -48,26 +40,34 @@ export function ColdOpen() {
       className="relative h-[140svh] w-full bg-obsidian"
       data-chapter="00"
     >
+      {/* أنيميشن CSS المحلية لهذا الفصل (compositor، لا main-thread) */}
+      <style>{`
+        .co-bloom{left:50%;top:50%;transform:translate(-50%,-50%) scale(1);animation:coBloom 12s ease-in-out infinite;}
+        @keyframes coBloom{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.6}50%{transform:translate(-50%,-50%) scale(1.06);opacity:1}}
+        .co-scan{animation:coScan 22s ease-in-out infinite alternate;}
+        @keyframes coScan{0%{transform:translateX(-30vw)}100%{transform:translateX(30vw)}}
+        .co-spin{animation:coSpin 80s linear infinite;}
+        @keyframes coSpin{to{transform:rotate(360deg)}}
+        .co-ping{animation:coPing 2.4s ease-out infinite;}
+        @keyframes coPing{0%{transform:scale(1);opacity:.7}70%,100%{transform:scale(2.2);opacity:0}}
+        .co-caret{animation:coBlink 1s steps(1,end) infinite;}
+        @keyframes coBlink{0%,100%{opacity:1}50%{opacity:0}}
+        @media (prefers-reduced-motion: reduce){
+          .co-bloom,.co-scan,.co-spin,.co-ping,.co-caret{animation:none!important}
+        }
+      `}</style>
+
       <div className="sticky top-0 flex h-screen w-full items-center justify-center overflow-hidden">
-        {/* Ambient platinum bloom */}
-        <motion.div
+        {/* Ambient platinum bloom — CSS infinite */}
+        <div
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[60rem] w-[60rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.045] blur-[200px]"
-          animate={{ scale: [1, 1.06, 1], opacity: [0.6, 1, 0.6] }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+          className="co-bloom pointer-events-none absolute z-0 h-[60rem] w-[60rem] rounded-full bg-platinum/[0.045] blur-[200px]"
         />
 
-        {/* Drifting vertical scan line */}
-        <motion.div
+        {/* Drifting vertical scan line — CSS infinite */}
+        <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 z-0 w-px bg-gradient-to-b from-transparent via-platinum/15 to-transparent"
-          animate={{ x: ['-30vw', '30vw'] }}
-          transition={{
-            duration: 22,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            repeatType: 'reverse',
-          }}
+          className="co-scan pointer-events-none absolute inset-y-0 z-0 w-px bg-gradient-to-b from-transparent via-platinum/15 to-transparent"
         />
 
         {/* Faint grid lines */}
@@ -76,9 +76,9 @@ export function ColdOpen() {
         {/* Passe-partout frame */}
         <Frame opacity={frameOp} />
 
-        {/* Center composition */}
+        {/* Center composition (y + opacity فقط) */}
         <motion.div
-          style={{ y: compY, opacity: compOp, filter: compFilter }}
+          style={{ y: compY, opacity: compOp }}
           className="relative z-10 flex flex-col items-center"
         >
           <ChapterCounter />
@@ -101,7 +101,7 @@ export function ColdOpen() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Frame — passe-partout, 4 hairlines + 4 corner crosshairs
+   Frame — passe-partout (entrances لمرة واحدة، تبقى framer)
    ═══════════════════════════════════════════════════════════ */
 function Frame({ opacity }: { opacity: MotionValue<number> }) {
   const corners = [
@@ -117,7 +117,6 @@ function Frame({ opacity }: { opacity: MotionValue<number> }) {
       aria-hidden
       className="pointer-events-none absolute inset-6 z-[5] md:inset-10"
     >
-      {/* Horizontal rails */}
       <motion.div
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
@@ -130,7 +129,6 @@ function Frame({ opacity }: { opacity: MotionValue<number> }) {
         transition={{ duration: 1.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="absolute inset-x-0 bottom-0 h-px origin-right bg-gradient-to-r from-transparent via-platinum/35 to-transparent"
       />
-      {/* Vertical rails */}
       <motion.div
         initial={{ scaleY: 0 }}
         animate={{ scaleY: 1 }}
@@ -144,17 +142,12 @@ function Frame({ opacity }: { opacity: MotionValue<number> }) {
         className="absolute inset-y-0 right-0 w-px origin-bottom bg-gradient-to-b from-transparent via-platinum/35 to-transparent"
       />
 
-      {/* Corner crosshairs */}
       {corners.map((c, i) => (
         <motion.div
           key={c.pos}
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{
-            duration: 0.8,
-            delay: 1.4 + i * 0.08,
-            ease: [0.16, 1, 0.3, 1],
-          }}
+          transition={{ duration: 0.8, delay: 1.4 + i * 0.08, ease: [0.16, 1, 0.3, 1] }}
           className={`absolute ${c.pos}`}
           style={{ transform: `translate(${c.tx}, ${c.ty})` }}
         >
@@ -169,104 +162,54 @@ function Frame({ opacity }: { opacity: MotionValue<number> }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   PulsingDot — "live" indicator
-   ═══════════════════════════════════════════════════════════ */
-function PulsingDot() {
-  return (
-    <span className="relative grid h-2 w-2 place-items-center">
-      <motion.span
-        animate={{ scale: [1, 2.2, 1], opacity: [0.7, 0, 0.7] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeOut' }}
-        className="absolute inset-0 rounded-full bg-platinum"
-      />
-      <span className="relative h-1.5 w-1.5 rounded-full bg-platinum shadow-[0_0_8px_rgba(203,205,205,0.8)]" />
-    </span>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Chapter counter
+   Chapter counter — تباين مرفوع (/55 → /80)
    ═══════════════════════════════════════════════════════════ */
 function ChapterCounter() {
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1, delay: 1.8, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 1, delay: 1.2, ease: [0.16, 1, 0.3, 1] }}
       className="mb-10 flex items-center gap-3"
       dir="ltr"
     >
-      <span className="font-mono text-[0.55rem] uppercase tracking-[0.45em] text-platinum/55">
-        [
-      </span>
-      <span className="font-mono text-[0.6rem] uppercase tracking-[0.35em] text-platinum/85">
+      <span className="font-mono text-[0.55rem] uppercase tracking-[0.45em] text-platinum/80">[</span>
+      <span className="font-mono text-[0.6rem] uppercase tracking-[0.35em] text-platinum/90">
         00 / 07 · Chapters
       </span>
-      <span className="font-mono text-[0.55rem] uppercase tracking-[0.45em] text-platinum/55">
-        ]
-      </span>
+      <span className="font-mono text-[0.55rem] uppercase tracking-[0.45em] text-platinum/80">]</span>
     </motion.div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Monogram — animated SVG rings + ABH wordmark
+   Monogram — الـwordmark (عنصر LCP) يُرسم فورًا، بلا opacity-fade
    ═══════════════════════════════════════════════════════════ */
 function Monogram() {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 1.4, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="relative"
-      dir="ltr"
-    >
-      {/* Outer dashed ring — rotates very slowly */}
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 80, repeat: Infinity, ease: 'linear' }}
-        className="absolute inset-0 grid place-items-center"
-      >
-        <svg
-          viewBox="0 0 200 200"
-          className="h-[clamp(13rem,22vw,18rem)] w-[clamp(13rem,22vw,18rem)]"
-        >
+    <div className="relative" dir="ltr">
+      {/* Outer dashed ring — CSS rotate (كان framer infinite) */}
+      <div className="co-spin absolute inset-0 grid place-items-center">
+        <svg viewBox="0 0 200 200" className="h-[clamp(13rem,22vw,18rem)] w-[clamp(13rem,22vw,18rem)]">
           <motion.circle
-            cx="100"
-            cy="100"
-            r="96"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="0.5"
-            strokeDasharray="2 6"
-            className="text-platinum/50"
+            cx="100" cy="100" r="96" fill="none" stroke="currentColor" strokeWidth="0.5"
+            strokeDasharray="2 6" className="text-platinum/50"
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={{ duration: 2.2, delay: 0.9, ease: [0.16, 1, 0.3, 1] }}
           />
         </svg>
-      </motion.div>
+      </div>
 
       {/* Static inner ring + cardinal ticks */}
       <div className="absolute inset-0 grid place-items-center">
-        <svg
-          viewBox="0 0 200 200"
-          className="h-[clamp(13rem,22vw,18rem)] w-[clamp(13rem,22vw,18rem)]"
-        >
+        <svg viewBox="0 0 200 200" className="h-[clamp(13rem,22vw,18rem)] w-[clamp(13rem,22vw,18rem)]">
           <motion.circle
-            cx="100"
-            cy="100"
-            r="78"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="0.4"
+            cx="100" cy="100" r="78" fill="none" stroke="currentColor" strokeWidth="0.4"
             className="text-platinum/40"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
+            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
             transition={{ duration: 1.8, delay: 1.1, ease: [0.16, 1, 0.3, 1] }}
           />
-
-          {/* Cardinal tick marks at 12, 3, 6, 9 */}
           {[
             { x1: 100, y1: 6,   x2: 100, y2: 12 },
             { x1: 194, y1: 100, x2: 188, y2: 100 },
@@ -274,28 +217,19 @@ function Monogram() {
             { x1: 6,   y1: 100, x2: 12,  y2: 100 },
           ].map((tick, i) => (
             <motion.line
-              key={i}
-              x1={tick.x1}
-              y1={tick.y1}
-              x2={tick.x2}
-              y2={tick.y2}
-              stroke="currentColor"
-              strokeWidth="1"
-              className="text-platinum/80"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              key={i} x1={tick.x1} y1={tick.y1} x2={tick.x2} y2={tick.y2}
+              stroke="currentColor" strokeWidth="1" className="text-platinum/80"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               transition={{ duration: 0.6, delay: 2 + i * 0.08 }}
             />
           ))}
         </svg>
       </div>
 
-      {/* Center wordmark */}
-      <motion.div
-        initial={{ opacity: 0, letterSpacing: '0.6em' }}
-        animate={{ opacity: 1, letterSpacing: '0.12em' }}
-        transition={{ duration: 2, delay: 1.5, ease: [0.16, 1, 0.3, 1] }}
+      {/* Center wordmark — LCP: مرئي بالكامل من أول فريم (لا fade، لا delay) */}
+      <div
         className="grid h-[clamp(13rem,22vw,18rem)] w-[clamp(13rem,22vw,18rem)] place-items-center"
+        style={{ letterSpacing: '0.12em' }}
       >
         <div className="flex flex-col items-center gap-1">
           <span className="font-display text-[clamp(3rem,6vw,5rem)] leading-none">
@@ -303,74 +237,60 @@ function Monogram() {
               ABH
             </span>
           </span>
-          <motion.span
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 1, delay: 2.2, ease: [0.16, 1, 0.3, 1] }}
-            className="block h-px w-10 bg-platinum/60"
-          />
-          <span className="font-mono text-[0.5rem] uppercase tracking-[0.5em] text-platinum/65">
+          <span className="block h-px w-10 bg-platinum/60" />
+          <span className="font-mono text-[0.5rem] uppercase tracking-[0.5em] text-platinum/80">
             Atelier
           </span>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Section title — bilingual "About · من نحن"
+   Section title — bilingual
    ═══════════════════════════════════════════════════════════ */
 function SectionTitle() {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 1, delay: 2.4 }}
+      transition={{ duration: 1, delay: 1.6 }}
       className="mt-12 flex flex-col items-center gap-6"
     >
-      {/* Animated divider — line, diamond, line */}
       <div className="flex items-center gap-3">
         <motion.span
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 1.4, delay: 2.6, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+          transition={{ duration: 1.4, delay: 1.8, ease: [0.16, 1, 0.3, 1] }}
           className="block h-px w-20 origin-right bg-gradient-to-r from-transparent to-platinum/70 md:w-32"
         />
         <span className="relative grid h-2 w-2 rotate-45 place-items-center bg-gradient-to-br from-ivory via-platinum to-steel shadow-[0_0_12px_rgba(203,205,205,0.5)]">
           <span className="absolute inset-[1px] bg-obsidian" />
         </span>
         <motion.span
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 1.4, delay: 2.6, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+          transition={{ duration: 1.4, delay: 1.8, ease: [0.16, 1, 0.3, 1] }}
           className="block h-px w-20 origin-left bg-gradient-to-l from-transparent to-platinum/70 md:w-32"
         />
       </div>
 
-      {/* Bilingual pair */}
       <div className="flex flex-col items-center gap-2 md:flex-row md:gap-6">
         <motion.span
-          initial={{ opacity: 0, y: 14, filter: 'blur(8px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 1.2, delay: 2.8, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.2, delay: 2, ease: [0.16, 1, 0.3, 1] }}
           className="font-display text-[clamp(1.8rem,3.5vw,2.8rem)] uppercase tracking-[0.18em] text-ivory"
           dir="ltr"
         >
           About
         </motion.span>
-
         <motion.span
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 3.1 }}
+          initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, delay: 2.3 }}
           className="hidden h-1 w-1 rotate-45 bg-platinum/60 md:block"
         />
-
         <motion.span
-          initial={{ opacity: 0, y: 14, filter: 'blur(8px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 1.2, delay: 3, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.2, delay: 2.2, ease: [0.16, 1, 0.3, 1] }}
           className="font-arabic text-[clamp(1.8rem,3.5vw,2.8rem)] tracking-tight text-platinum/85"
           dir="rtl"
         >
@@ -382,15 +302,14 @@ function SectionTitle() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Coordinates — Jeddah lat/long, typewriter reveal
+   Coordinates — typewriter + CSS caret
    ═══════════════════════════════════════════════════════════ */
 function Coordinates() {
-  // Real Jeddah coordinates
   const fullText = 'JEDDAH · EST. 2022';
   const [shown, setShown] = useState('');
 
   useEffect(() => {
-    const startDelay = 3200;
+    const startDelay = 2400;
     let i = 0;
     let interval: ReturnType<typeof setInterval> | undefined;
     const timeout = setTimeout(() => {
@@ -411,44 +330,33 @@ function Coordinates() {
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.8, delay: 3.2 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      transition={{ duration: 0.8, delay: 2.4 }}
       className="mt-10 flex items-center gap-3"
       dir="ltr"
     >
-      <span className="font-mono text-[0.55rem] uppercase tracking-[0.35em] text-platinum/60">
+      <span className="font-mono text-[0.55rem] uppercase tracking-[0.35em] text-platinum/80">
         {shown}
       </span>
-      <motion.span
-        animate={{ opacity: [1, 0, 1] }}
-        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-        className="block h-2 w-px bg-platinum/70"
-      />
+      <span className="co-caret block h-2 w-px bg-platinum/80" />
     </motion.div>
   );
 }
 
-
 /* ═══════════════════════════════════════════════════════════
-   ScrollPrompt — bottom-right, subtle
+   ScrollPrompt — CSS pulsing rail (يعيد استخدام .anim-scrollbar)
    ═══════════════════════════════════════════════════════════ */
 function ScrollPrompt() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1, delay: 3.4, ease: [0.16, 1, 0.3, 1] }}
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 1, delay: 2.6, ease: [0.16, 1, 0.3, 1] }}
       className="flex flex-col items-end gap-3"
     >
-      <span className="font-mono text-[0.5rem] uppercase tracking-[0.45em] text-platinum/55">
+      <span className="font-mono text-[0.5rem] uppercase tracking-[0.45em] text-platinum/80">
         Chapter 01 follows
       </span>
-      <motion.span
-        animate={{ scaleY: [0.3, 1, 0.3], opacity: [0.3, 1, 0.3] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-        className="block h-10 w-px origin-top bg-gradient-to-b from-platinum/80 to-transparent"
-      />
+      <span className="anim-scrollbar block h-10 w-px origin-top bg-gradient-to-b from-platinum/80 to-transparent" />
     </motion.div>
   );
 }

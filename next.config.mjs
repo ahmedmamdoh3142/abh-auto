@@ -4,9 +4,14 @@ const withNextIntl = createNextIntlPlugin('./lib/i18n.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false, // disable double-render in dev for perf
+  reactStrictMode: false,
   poweredByHeader: false,
   compress: true,
+
+  // يزيل console.* في الإنتاج (يقلّل JS التنفيذ)، مع إبقاء error/warn
+  compiler: {
+    removeConsole: { exclude: ['error', 'warn'] },
+  },
 
   images: {
     remotePatterns: [
@@ -14,14 +19,13 @@ const nextConfig = {
       { protocol: 'https', hostname: 'plus.unsplash.com' },
       { protocol: 'https', hostname: 'cdn.pixabay.com' },
     ],
-    formats: ['image/webp'],            // skip AVIF (slow to encode in dev)
-    minimumCacheTTL: 60 * 60 * 24 * 7,  // 1 week — drastically reduces re-fetches
+    formats: ['image/webp'],
+    minimumCacheTTL: 60 * 60 * 24 * 7,
     deviceSizes: [640, 828, 1200, 1920],
     imageSizes: [16, 64, 256, 512],
   },
 
   experimental: {
-    // يقلّل الـ CSS غير المستخدم ويستخرج الـ critical CSS (يقلّل render-blocking)
     optimizeCss: true,
     optimizePackageImports: [
       'lucide-react',
@@ -32,11 +36,10 @@ const nextConfig = {
       '@radix-ui/react-slot',
       'embla-carousel-react',
       'sonner',
-      '@react-three/drei',
+      // أُزيل '@react-three/drei' لأنه غير مثبّت في package.json
     ],
   },
 
-  // Silence the multiple-lockfile warning
   outputFileTracingRoot: process.cwd(),
 
   webpack: (config) => {

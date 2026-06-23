@@ -27,6 +27,9 @@ export function LocaleSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        // اسم وصفي للزر: على الموبايل يختفي النص ويبقى الأيقونة فقط، فبدون
+        // aria-label يقرأه الـscreen reader "button" → فشل فحص التباين/الاسم.
+        aria-label={`Change language — current: ${locale.toUpperCase()}`}
         className={cn(
           'inline-flex items-center gap-2 h-10 px-3.5 rounded-full glass text-[0.65rem] uppercase tracking-[0.22em] transition-colors hover:text-ivory',
           pending && 'opacity-60',

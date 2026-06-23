@@ -3,13 +3,10 @@
 /**
  * AboutProgress — Vertical chapter scrubber.
  *
- * Sits fixed on the right edge of the viewport (left in RTL) and shows:
- *  - 7 chapter dots
- *  - The active chapter highlighted with a longer "rail"
- *  - The current chapter label revealed on the active dot
- *
- * Tracks chapters via IntersectionObserver on each <section data-chapter>.
- * Hidden on mobile to preserve screen real estate.
+ * تعديل ضروري بعد تأجيل الفصول: الفصول 01–07 الآن تُركَّب لاحقًا (ssr:false)،
+ * فلو رصدنا الأقسام مرة واحدة عند mount سنجد القسم "00" فقط. لذلك نستخدم
+ * MutationObserver لإعادة الفحص وربط IntersectionObserver بأي قسم جديد
+ * [data-chapter] يظهر في DOM. مخفي على الموبايل.
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,15 +29,10 @@ export function AboutProgress() {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const sections = chapters
-      .map(({ id }) => document.querySelector<HTMLElement>(`[data-chapter="${id}"]`))
-      .filter((el): el is HTMLElement => !!el);
-
-    if (sections.length === 0) return;
+    const observed = new Set<Element>();
 
     const io = new IntersectionObserver(
       (entries) => {
-        // Pick the most-visible chapter
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
@@ -53,8 +45,25 @@ export function AboutProgress() {
       { threshold: [0.25, 0.5, 0.75] },
     );
 
-    sections.forEach((s) => io.observe(s));
-    return () => io.disconnect();
+    // يربط أي قسم فصل غير مرصود بعد (يشمل الفصول المؤجَّلة عند ظهورها)
+    const scan = () => {
+      for (const { id } of chapters) {
+        const el = document.querySelector<HTMLElement>(`[data-chapter="${id}"]`);
+        if (el && !observed.has(el)) {
+          observed.add(el);
+          io.observe(el);
+        }
+      }
+    };
+
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      io.disconnect();
+      mo.disconnect();
+    };
   }, []);
 
   return (
@@ -65,10 +74,7 @@ export function AboutProgress() {
       {chapters.map((chapter, i) => {
         const isActive = i === active;
         return (
-          <div
-            key={chapter.id}
-            className="flex items-center gap-3"
-          >
+          <div key={chapter.id} className="flex items-center gap-3">
             <AnimatePresence>
               {isActive && (
                 <motion.span
@@ -77,7 +83,7 @@ export function AboutProgress() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
                   transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className="font-mono text-[0.55rem] uppercase tracking-[0.35em] text-platinum/70"
+                  className="font-mono text-[0.55rem] uppercase tracking-[0.35em] text-platinum/80"
                   dir="ltr"
                 >
                   {chapter.id} — {isAr ? chapter.labelAr : chapter.label}
@@ -88,8 +94,8 @@ export function AboutProgress() {
             <motion.span
               animate={{
                 width: isActive ? 28 : 12,
-                opacity: isActive ? 1 : 0.3,
-                backgroundColor: isActive ? '#cbcdcd' : '#666a6e',
+                opacity: isActive ? 1 : 0.4,
+                backgroundColor: isActive ? '#cbcdcd' : '#8a8e92',
               }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="block h-px rounded-full"

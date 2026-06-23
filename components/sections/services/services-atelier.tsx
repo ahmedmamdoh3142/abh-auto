@@ -3,11 +3,12 @@
 /**
  * ServicesAtelier — DB-driven. يستقبل categories + services كـ props.
  *
- * ⚠️ إصلاح البَج: كان فيه <AnimatePresence mode="wait"> حوالين محتوى التصنيف.
- * الـ"wait" بيمنع التصنيف الجديد ما يركّبش (mount) لحد ما الـexit بتاع القديم
- * يخلّص. لما بتدوس بسرعة على التابات، framer ساعات بيدخل في حالة قفل (deadlock)
- * فالخدمات الجديدة عمرها ما بتظهر إلا بعد ريفرش. الحل: شِلنا الـAnimatePresence
- * خالص، والمحتوى دلوقتي بيتركّب فورًا مع كل تغيير تصنيف وبيعمل أنيميشن دخول بس.
+ * إصلاح الأداء: الأوربتان الخلفيتان (blur 180–200px) كانتا framer بـrepeat:Infinity
+ * (حلقتا rAF + تحريك عناصر blur عملاقة على الـmain thread). حُوّلتا إلى CSS
+ * keyframes وتُعطَّل حركتهما على الموبايل ومع prefers-reduced-motion (يبقى التوهّج
+ * ثابتًا، فلا تكلفة إعادة رسم أثناء التمرير على الأجهزة البطيئة).
+ *
+ * (ملاحظة: AnimatePresence أُزيل سابقًا لمنع قفل framer عند التبديل السريع.)
  */
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -32,7 +33,6 @@ export function ServicesAtelier({
     [services, category],
   );
 
-  // عدد الخدمات في كل تصنيف — يظهر كرقم صغير جوه التاب
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const s of services) m[s.category] = (m[s.category] ?? 0) + 1;
@@ -41,18 +41,20 @@ export function ServicesAtelier({
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
-      {/* Cinematic ambient background */}
+      <style>{`
+        .atl-orb1{left:25%;top:25%;transform:translate(-50%,-50%) scale(1);animation:atlOrb1 12s ease-in-out infinite;}
+        @keyframes atlOrb1{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.04}50%{transform:translate(-50%,-50%) scale(1.2);opacity:.08}}
+        .atl-orb2{animation:atlOrb2 18s ease-in-out infinite;}
+        @keyframes atlOrb2{0%,100%{transform:scale(1.2) translateX(0)}50%{transform:scale(1) translateX(50px)}}
+        @media (prefers-reduced-motion: reduce),(max-width: 820px){
+          .atl-orb1,.atl-orb2{animation:none!important}
+        }
+      `}</style>
+
+      {/* Cinematic ambient background — CSS animated */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
-        <motion.div
-          animate={{ scale: [1, 1.2, 1], opacity: [0.04, 0.08, 0.04] }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute left-1/4 top-1/4 h-[80rem] w-[80rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum blur-[200px]"
-        />
-        <motion.div
-          animate={{ scale: [1.2, 1, 1.2], x: [0, 50, 0] }}
-          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute right-0 top-1/2 h-[60rem] w-[60rem] rounded-full bg-steel/30 blur-[180px]"
-        />
+        <div className="atl-orb1 absolute h-[80rem] w-[80rem] rounded-full bg-platinum blur-[200px]" />
+        <div className="atl-orb2 absolute right-0 top-1/2 h-[60rem] w-[60rem] rounded-full bg-steel/30 blur-[180px]" />
         <div className="absolute bottom-0 left-1/2 h-[40rem] w-full -translate-x-1/2 bg-gradient-to-t from-platinum/[0.03] to-transparent" />
       </div>
 

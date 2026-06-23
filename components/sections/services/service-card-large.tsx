@@ -3,20 +3,16 @@
 /**
  * ServiceCardLarge — "The Plate"
  *
- * تخطيطان منفصلان:
- *  • MOBILE (< md): هيرو احترافي زي كروت العروض — صورة بنسبة 4:3 مع الاسم والمدة
- *    فوقها بتدرّج قوي (تبقى مقروءة فوق أي صورة)، وتحتها كل المحتوى متستّك
- *    (سعر/أحجام/مشمولات/ضمان/زر) بمقاسات مناسبة. الكرت بياخد عرض الشاشة كامل.
- *  • DESKTOP (md+): نفس التخطيط القديم (صورة شمال + محتوى يمين، عناصر جنب بعض).
- *  • على الموبايل العناصر اللي جنب بعض في اللاب بتبقى تحت بعض.
- *  • الخصم: شطب نظيف + شارة — لون واحد متغيّر (ACCENT).
+ * إصلاح الأداء: حركة "تنفّس" الصورة كانت framer بـrepeat:Infinity في النسختين
+ * (الموبايل والديسكتوب)، وكانت تعمل حتى على النسخة المخفية (display:none لا
+ * يوقف framer). حُوّلت إلى CSS (.card-breath): تتوقف تلقائيًا على display:none،
+ * وتُعطَّل كليًا على الموبايل ومع prefers-reduced-motion.
  *
  * كل الأسعار من الـprops (service.prices / service.oldPrices) = جدول service_prices.
  */
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLocale } from 'next-intl';
 import { CardImage } from '@/components/ui/card-image';
 import { ArrowUpRight, Check, ShieldCheck, Clock, Star, Plus } from 'lucide-react';
@@ -46,31 +42,31 @@ function priceInfo(service: Service, size: SizeSlug) {
 export function ServiceCardLarge({ service, index, total }: Props) {
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const reduce = useReducedMotion();
   const [activeSize, setActiveSize] = useState<SizeSlug>('m');
 
   const shared = { service, isAr, activeSize, setActiveSize };
 
   return (
     <article className="relative w-full min-w-0">
+      <style>{`
+        .card-breath{animation:cardBreath 26s ease-in-out infinite;}
+        @keyframes cardBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+        @media (prefers-reduced-motion: reduce),(max-width: 820px){ .card-breath{animation:none} }
+      `}</style>
+
       {/* ============ MOBILE — hero + stacked ============ */}
       <div className="w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian md:hidden">
-        {/* IMAGE HERO — الاسم فوقها بتدرّج قوي */}
+        {/* IMAGE HERO */}
         <div className="relative aspect-[4/3] w-full overflow-hidden">
-          <motion.div
-            className="absolute inset-0"
-            animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
-            transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
-          >
+          <div className="card-breath absolute inset-0">
             <CardImage
               src={service.image}
               alt={service.name.en}
-              sizes="100vw"
+              sizes="(max-width: 768px) 100vw, 640px"
               priority
               className="object-cover"
             />
-          </motion.div>
-          {/* تدرّج قوي لقراءة الاسم */}
+          </div>
           <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-obsidian/40" />
 
@@ -92,7 +88,7 @@ export function ServiceCardLarge({ service, index, total }: Props) {
           </div>
         </div>
 
-        {/* CONTENT — متستّك */}
+        {/* CONTENT */}
         <div className="flex flex-col gap-5 p-5">
           <div>
             <p className="font-editorial text-base italic text-platinum/80">
@@ -117,7 +113,6 @@ export function ServiceCardLarge({ service, index, total }: Props) {
             <IncludesList service={service} isAr={isAr} className="mt-3 grid gap-2" />
           </div>
 
-          {/* في اللاب جنب بعض — في الموبايل تحت بعض */}
           <div className="flex flex-col gap-4 border-t border-white/[0.06] pt-5">
             <WarrantyMark service={service} isAr={isAr} />
             <ReserveButton service={service} isAr={isAr} />
@@ -134,11 +129,7 @@ export function ServiceCardLarge({ service, index, total }: Props) {
 
           {/* image */}
           <div className="relative overflow-hidden">
-            <motion.div
-              className="absolute inset-0"
-              animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
-              transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
-            >
+            <div className="card-breath absolute inset-0">
               <CardImage
                 src={service.image}
                 alt={service.name.en}
@@ -146,7 +137,7 @@ export function ServiceCardLarge({ service, index, total }: Props) {
                 priority
                 className="object-cover"
               />
-            </motion.div>
+            </div>
             <div className="absolute inset-0 bg-gradient-to-r from-obsidian/30 via-transparent to-obsidian/70" />
             <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/15 to-transparent" />
 
@@ -202,7 +193,6 @@ export function ServiceCardLarge({ service, index, total }: Props) {
 
             <div className="flex-1" />
 
-            {/* في اللاب جنب بعض */}
             <div className="mt-7 flex items-end justify-between gap-4">
               <WarrantyMark service={service} isAr={isAr} />
               <ReserveButton service={service} isAr={isAr} />

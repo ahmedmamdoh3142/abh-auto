@@ -7,7 +7,12 @@ import { useEffect, useRef, useState } from 'react';
  *   - a small dot (instant follow)
  *   - a large soft ring (lagged spring follow, scales on hover-interactives)
  *
- * Disabled on touch devices via CSS (hover: none).
+ * Disabled on touch devices via CSS (hover: none) and bailed early in JS.
+ *
+ * تحسين الأداء:
+ *   النسخة السابقة كانت تُبقي حلقة requestAnimationFrame تعمل **للأبد** حتى لو
+ *   الماوس ثابت. الآن نوقف الحلقة عندما تستقر الحلقة عند الماوس، ونعيد تشغيلها
+ *   فقط عند الحركة → لا rAF مستمر على سطح المكتب أثناء السكون.
  */
 export function LuxuryCursor() {
   const dotRef = useRef<HTMLDivElement>(null);
@@ -16,13 +21,36 @@ export function LuxuryCursor() {
   const [variant, setVariant] = useState<'default' | 'hover'>('default');
 
   useEffect(() => {
-    // Detect coarse pointer (touch) — bail if so
     if (typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches) return;
 
     let mouseX = window.innerWidth / 2;
     let mouseY = window.innerHeight / 2;
     let ringX = mouseX;
     let ringY = mouseY;
+
+    let rafId = 0;
+    let looping = false;
+
+    const animate = () => {
+      ringX += (mouseX - ringX) * 0.16;
+      ringY += (mouseY - ringY) * 0.16;
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
+      }
+      // أوقف الحلقة عند الاستقرار؛ تُستأنف عند الحركة التالية
+      if (Math.abs(mouseX - ringX) < 0.1 && Math.abs(mouseY - ringY) < 0.1) {
+        looping = false;
+        return;
+      }
+      rafId = requestAnimationFrame(animate);
+    };
+
+    const startLoop = () => {
+      if (!looping) {
+        looping = true;
+        rafId = requestAnimationFrame(animate);
+      }
+    };
 
     const onMove = (e: MouseEvent) => {
       mouseX = e.clientX;
@@ -31,6 +59,7 @@ export function LuxuryCursor() {
       if (dotRef.current) {
         dotRef.current.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%)`;
       }
+      startLoop();
     };
 
     const onLeave = () => setActive(false);
@@ -43,22 +72,11 @@ export function LuxuryCursor() {
       }
     };
 
-    let rafId: number;
-    const animate = () => {
-      ringX += (mouseX - ringX) * 0.16;
-      ringY += (mouseY - ringY) * 0.16;
-      if (ringRef.current) {
-        ringRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
-      }
-      rafId = requestAnimationFrame(animate);
-    };
-    rafId = requestAnimationFrame(animate);
-
     window.addEventListener('mousemove', onMove, { passive: true });
     window.addEventListener('mouseover', onOver, { passive: true });
     window.addEventListener('mouseleave', onLeave);
     return () => {
-      cancelAnimationFrame(rafId);
+      if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseover', onOver);
       window.removeEventListener('mouseleave', onLeave);

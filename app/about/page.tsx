@@ -1,33 +1,25 @@
 /**
- * About — a film, not a page.
+ * About — a film, not a page.  (perf-optimized)
  *
- * Seven chapters, each with its own personality, each cutting hard to
- * the next. Read top-to-bottom like a short film.
+ * ColdOpen (أعلى الطية / عنصر الـLCP) يُحمَّل eager. باقي الفصول 01–07 تُؤجَّل
+ * داخل <AboutChapters/> عبر next/dynamic + IntersectionObserver، فلا تُركَّب إلا
+ * عند الاقتراب منها — وهذا أكبر مكسب لـTBT.
  *
- *   00 · Cold Open       — black screen, a single word
- *   01 · The Obsession   — sticky manifesto, line-by-line
- *   02 · Close-Up        — horizontal scroll through 4 details
- *   03 · The Hand        — full-bleed portrait, camera pull-back
- *   04 · The Standard    — 3 rules, hard cut transitions
- *   05 · The Room        — parallax atelier reveal
- *   06 · What Remains    — numbers, one at a time, monumental
- *   07 · Invitation      — quiet close, one CTA
- *
- * The AboutProgress scrubber tracks the active chapter on the right
- * edge of the screen, giving the user a "you are here in the film."
+ *   00 · Cold Open       — black screen, a single word   (eager)
+ *   01 · The Obsession   — sticky manifesto               (deferred)
+ *   02 · Close-Up        — horizontal scroll              (deferred)
+ *   03 · The Hand        — full-bleed portrait            (deferred)
+ *   04 · The Standard    — 3 rules, hard cut              (deferred)
+ *   05 · The Room        — parallax atelier               (deferred)
+ *   06 · What Remains    — numbers, monumental            (deferred)
+ *   07 · Invitation      — quiet close, one CTA           (deferred)
  */
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 
 import { ColdOpen } from '@/components/sections/about/chapter-00-cold-open';
-import { ChapterObsession } from '@/components/sections/about/chapter-01-obsession';
-import { ChapterCloseUp } from '@/components/sections/about/chapter-02-closeup';
-import { ChapterHand } from '@/components/sections/about/chapter-03-hand';
-import { ChapterStandard } from '@/components/sections/about/chapter-04-standard';
-import { ChapterRoom } from '@/components/sections/about/chapter-05-room';
-import { ChapterRemains } from '@/components/sections/about/chapter-06-remains';
-import { ChapterInvitation } from '@/components/sections/about/chapter-07-invitation';
 import { AboutProgress } from '@/components/sections/about/about-progress';
+import { AboutChapters } from '@/components/sections/about/about-chapters';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('about.meta');
@@ -42,13 +34,7 @@ export default function AboutPage() {
     <>
       <AboutProgress />
       <ColdOpen />
-      <ChapterObsession />
-      <ChapterCloseUp />
-      <ChapterHand />
-      <ChapterStandard />
-      <ChapterRoom />
-      <ChapterRemains />
-      <ChapterInvitation />
+      <AboutChapters />
     </>
   );
 }
