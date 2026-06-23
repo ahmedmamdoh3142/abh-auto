@@ -81,7 +81,7 @@ export function ChapterStandard() {
   return (
     <section
       ref={ref}
-      className="relative h-[450svh] w-full bg-obsidian"
+      className="relative h-[300svh] w-full bg-obsidian"
       data-chapter="04"
     >
       <div className="sticky top-0 h-screen w-full overflow-hidden bg-obsidian">

@@ -67,7 +67,7 @@ export function ChapterObsession() {
   return (
     <section
       ref={ref}
-      className="relative h-[320svh] w-full bg-obsidian"
+      className="relative h-[200svh] w-full bg-obsidian"
       data-chapter="01"
     >
       <div className="sticky top-0 flex h-screen w-full items-center justify-center overflow-hidden">

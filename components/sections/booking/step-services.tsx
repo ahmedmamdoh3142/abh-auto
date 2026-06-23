@@ -2,22 +2,18 @@
 
 /**
  * StepServices — act 02. الخدمات والتصنيفات تأتي من القاعدة كـ props.
- * شريحة الحجم دلوقتي ديناميكية حسب data.size (مش ثابتة "كبيرة").
  *
- * إعادة تصميم الكرت (نهج Netflix/Behance):
- *  • الصورة فوق بنسبة ثابتة 4:3 — واضحة تمامًا بلا تغميق/grayscale (تُظهر تفاصيل الشغل).
- *  • لوحة سفلية صلبة (اسم + شيبس + سعر) على خلفية الكرت — تباين مثالي ونص مقروء دائمًا.
- *  • عند الهوفر: zoom خفيف للصورة + ظهور "يشمل" كـoverlay فوق الصورة (يُكشف عند الطلب).
+ * ── إصلاح تعليق الموبايل ───────────────────────────────────────────────────
+ *  • وضع fx-lite (لمس/شاشة صغيرة/تقليل الحركة): يُلغى backdrop-filter والشيمر
+ *    والظلال/التحويلات الثقيلة.
+ *  • على lite: تبديل الكاتيجوري يصبح فوريًا (بدون AnimatePresence mode="wait"
+ *    ولا أنيميشن دخول لكل كرت) — كان اندفاع framer + فك تشفير الصور دفعة واحدة
+ *    يسبّب التعليق عند تغيير التصنيف.
+ *  • على lite: تُلغى أنيميشن layout في قائمة الـdock (تسبّب reflow).
+ *  • أوربة blur-3xl تُخفى على lite (طبقة GPU ثقيلة).
  *
- * ── إصلاح أداء الموبايل (مهم) ──────────────────────────────────────────────
- * كان الكرت الواحد يحمل عدة طبقات backdrop-blur (الشيبس + زر الاختيار + شارة
- * الخصم + overlay "يشمل")، فمع عدة كروت تتراكم 25–30 طبقة backdrop-filter داخل
- * نفس منطقة الـscroll، وفوقها شريط dossier-shimmer بأنيميشن لا نهائي. هذا يخنق
- * الـcompositor على iOS Safari وأندرويد المتوسط → الصفحة "تعلّق" ويتوقف الـscroll.
- *
- * الحل: نكتشف الأجهزة اللمسية/الشاشات الصغيرة/تفضيل تقليل الحركة، ونضيف كلاس
- * "fx-lite" على الحاوية. الـCSS بالأسفل يُعطّل backdrop-filter والشيمر والظلال
- * والتحويلات الثقيلة في هذا الوضع فقط — بدون أي تغيير في شكل الديسكتوب.
+ * ملاحظة: تعطيل backdrop-filter على كلاس glass الأب يتم في booking-flow عبر
+ * media query (لأن glass خارج جذر هذا المكوّن).
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -47,10 +43,6 @@ const SIZE_LABELS: Record<VehicleSize, { ar: string; en: string; tier: string }>
   large: { ar: 'كبيرة', en: 'Large', tier: 'Tier III' },
 };
 
-/**
- * يُعيد true عندما يجب تخفيف التأثيرات الثقيلة (لمس / شاشة صغيرة / تقليل الحركة).
- * SSR-safe: يبدأ false ثم يُحدَّث بعد التحميل مباشرةً قبل أي تفاعل من المستخدم.
- */
 function useLiteFx(): boolean {
   const [lite, setLite] = useState(false);
   useEffect(() => {
@@ -66,7 +58,6 @@ function useLiteFx(): boolean {
     update();
 
     queries.forEach((m) => {
-      // addEventListener هو الأحدث؛ addListener للتوافق مع سفاري القديم
       m.addEventListener ? m.addEventListener('change', update) : m.addListener(update);
     });
     return () => {
@@ -106,6 +97,94 @@ export function StepServices({
 
   const towingValid = !data.towing || (!!data.towingMode && data.towingAddress.trim().length > 2);
   const canNext = data.services.length > 0 && towingValid;
+
+  // ── كرت خدمة واحد — على lite يكون button عادي بلا أنيميشن (يمنع الاندفاع) ──
+  const renderCard = (sv: DbServiceMeta, i: number) => {
+    const on = data.services.includes(sv.slug);
+    const price = dbPriceFor(sv, data.size);
+    const oldPrice = dbOldPriceFor(sv, data.size);
+    const off = dbDiscountPct(sv, data.size);
+    const Tag: any = lite ? 'button' : motion.button;
+    const anim = lite ? {} : {
+      initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 },
+      transition: { delay: i * 0.06, duration: 0.5, ease: EASE },
+    };
+    return (
+      <Tag
+        key={sv.slug}
+        {...anim}
+        data-cursor="hover"
+        onClick={() => toggle(sv.slug)}
+        className={[
+          'svc-card group relative flex flex-col overflow-hidden rounded-[22px] border bg-obsidian text-start transition-all duration-500 hover:-translate-y-1',
+          on ? 'border-platinum/50 shadow-[0_30px_80px_-34px_rgba(203,205,205,0.55)]' : 'border-white/[0.08] hover:border-white/25',
+        ].join(' ')}
+      >
+        {/* ── الصورة — فوق، واضحة تمامًا (نسبة 4:3) ── */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden">
+          <div
+            className="svc-img absolute inset-0 bg-cover bg-center transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
+            style={{ backgroundImage: `url('${sv.img}')` }}
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian to-transparent" />
+
+          {sv.featured && (
+            <span className="absolute start-3.5 top-3.5 z-[3] inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-white to-platinum px-2.5 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.14em] text-obsidian shadow-[0_8px_24px_-8px_rgba(203,205,205,0.6)]">
+              <Star className="h-2.5 w-2.5 fill-obsidian" strokeWidth={0} />{t('step2.mostChosen')}
+            </span>
+          )}
+          {off > 0 && (
+            <span className={`absolute z-[3] inline-flex items-center gap-1 rounded-full border border-[#c98a8a]/40 bg-[#2a1414]/70 px-2.5 py-1 text-[0.55rem] font-semibold tracking-[0.06em] text-[#e7b4b4] backdrop-blur-sm ${sv.featured ? 'start-3.5 top-[2.9rem]' : 'start-3.5 top-3.5'}`}>
+              −{off}%
+            </span>
+          )}
+          <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/45 text-ivory'}`}>
+            {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : <span className="text-lg leading-none">+</span>}
+          </span>
+
+          <div className={`svc-reveal absolute inset-0 z-[2] flex flex-col justify-center gap-2.5 bg-[#08090b]/85 p-5 backdrop-blur-[2px] transition-opacity duration-400 ${on ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            <span className="text-[0.5rem] uppercase tracking-[0.24em] text-platinum/70">{isAr ? 'يشمل' : 'Includes'}</span>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {sv.incl.map((x) => (
+                <span key={x} className="inline-flex items-start gap-1.5 text-[0.68rem] leading-snug text-ivory/85">
+                  <Check className="mt-0.5 h-3 w-3 flex-none text-platinum" strokeWidth={2.4} />{x}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── اللوحة السفلية — صلبة، نص مقروء دائمًا ── */}
+        <div className="relative z-[1] flex flex-1 flex-col gap-3 bg-obsidian p-5">
+          <div className="flex gap-2">
+            <Chip icon={<Shield className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.warranty}</Chip>
+            <Chip icon={<Clock className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.dur}</Chip>
+          </div>
+          <h4 className="font-display text-[1.35rem] uppercase leading-[1.05] text-ivory">{sv.name}</h4>
+          <p className="text-[0.74rem] leading-[1.5] text-platinum/60 line-clamp-2">{sv.desc}</p>
+
+          <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-3.5">
+            {sv.onRequest ? (
+              <span className="font-display text-xl text-ivory">{t('onRequest')}</span>
+            ) : (
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-[0.5rem] uppercase tracking-[0.2em] text-steel">{t('from')}</span>
+                {oldPrice && (
+                  <span dir="ltr" className="font-display text-sm text-steel line-through decoration-[#c98a8a]/70 tabular-nums">{currencyFmt(oldPrice)}</span>
+                )}
+                <span dir="ltr" className={`font-display text-[1.7rem] leading-[0.9] tabular-nums ${oldPrice ? 'text-[#e7b4b4]' : 'text-ivory'}`}>{currencyFmt(price)}</span>
+                <span className="text-[0.55rem] uppercase tracking-[0.18em] text-steel">{t('currency')}</span>
+              </span>
+            )}
+            <span className={`inline-flex items-center gap-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.2em] ${on ? 'text-ivory' : 'text-platinum'}`}>
+              {on ? t('step2.added') : t('step2.select')}
+              {on ? <Check className="h-3 w-3" strokeWidth={2.4} /> : <ArrowUpRight className="reversible-icon h-3 w-3" strokeWidth={2} />}
+            </span>
+          </div>
+        </div>
+      </Tag>
+    );
+  };
 
   return (
     <div className={lite ? 'fx-lite' : undefined}>
@@ -166,16 +245,13 @@ export function StepServices({
         .dossier-shimmer{background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,0.06) 50%,transparent 60%);background-size:280% 100%;animation:dossierSweep 7s ease-in-out infinite;}
         @keyframes dossierSweep{0%{background-position:140% 0}100%{background-position:-140% 0}}
 
-        /* ── وضع التأثيرات الخفيفة: لمس / شاشة صغيرة / تقليل الحركة ──
-           يُلغى backdrop-filter (السبب الرئيسي لتعليق الموبايل)، والشيمر،
-           والظلال/التحويلات الثقيلة — دون أي تأثير على الديسكتوب. */
         @media (prefers-reduced-motion: reduce){ .dossier-shimmer{ animation:none; } }
         .fx-lite [class*="backdrop-blur"]{ -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+        .fx-lite [class*="blur-3xl"],.fx-lite [class*="blur-2xl"]{ display:none !important; }
         .fx-lite .dossier-shimmer{ display:none !important; }
         .fx-lite .svc-card{ box-shadow:none !important; transition:border-color .3s ease !important; }
         .fx-lite .svc-card:hover{ transform:none !important; }
         .fx-lite .svc-img{ transform:none !important; transition:none !important; }
-        /* بدون البلور نرفع تعتيم الـoverlay لضمان قراءة النص فوق الصورة */
         .fx-lite .svc-reveal{ background:rgba(8,9,11,0.94) !important; }
       `}</style>
 
@@ -210,102 +286,23 @@ export function StepServices({
             })}
           </div>
 
-          {/* cards — صورة واضحة فوق + لوحة معلومات تحت + overlay عند الهوفر */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={data.activeCat}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.4, ease: EASE }}
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-            >
-              {list.map((sv, i) => {
-                const on = data.services.includes(sv.slug);
-                const price = dbPriceFor(sv, data.size);
-                const oldPrice = dbOldPriceFor(sv, data.size);
-                const off = dbDiscountPct(sv, data.size);
-                return (
-                  <motion.button
-                    key={sv.slug}
-                    data-cursor="hover"
-                    onClick={() => toggle(sv.slug)}
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: lite ? 0 : i * 0.06, duration: lite ? 0.3 : 0.5, ease: EASE }}
-                    className={[
-                      'svc-card group relative flex flex-col overflow-hidden rounded-[22px] border bg-obsidian text-start transition-all duration-500 hover:-translate-y-1',
-                      on ? 'border-platinum/50 shadow-[0_30px_80px_-34px_rgba(203,205,205,0.55)]' : 'border-white/[0.08] hover:border-white/25',
-                    ].join(' ')}
-                  >
-                    {/* ── الصورة — فوق، واضحة تمامًا (نسبة 4:3) ── */}
-                    <div className="relative aspect-[4/3] w-full overflow-hidden">
-                      <div
-                        className="svc-img absolute inset-0 bg-cover bg-center transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
-                        style={{ backgroundImage: `url('${sv.img}')` }}
-                      />
-                      {/* تدرّج خفيف أسفل الصورة لدمجها مع اللوحة */}
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian to-transparent" />
-
-                      {/* الشارات */}
-                      {sv.featured && (
-                        <span className="absolute start-3.5 top-3.5 z-[3] inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-white to-platinum px-2.5 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.14em] text-obsidian shadow-[0_8px_24px_-8px_rgba(203,205,205,0.6)]">
-                          <Star className="h-2.5 w-2.5 fill-obsidian" strokeWidth={0} />{t('step2.mostChosen')}
-                        </span>
-                      )}
-                      {off > 0 && (
-                        <span className={`absolute z-[3] inline-flex items-center gap-1 rounded-full border border-[#c98a8a]/40 bg-[#2a1414]/70 px-2.5 py-1 text-[0.55rem] font-semibold tracking-[0.06em] text-[#e7b4b4] backdrop-blur-sm ${sv.featured ? 'start-3.5 top-[2.9rem]' : 'start-3.5 top-3.5'}`}>
-                          −{off}%
-                        </span>
-                      )}
-                      {/* زر الاختيار */}
-                      <span className={`absolute end-3.5 top-3.5 z-[3] grid h-[30px] w-[30px] place-items-center rounded-full border backdrop-blur-sm transition-all duration-300 ${on ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25 bg-black/45 text-ivory'}`}>
-                        {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : <span className="text-lg leading-none">+</span>}
-                      </span>
-
-                      {/* overlay "يشمل" — يظهر عند الهوفر أو عند الاختيار (صفّان جنب بعض) */}
-                      <div className={`svc-reveal absolute inset-0 z-[2] flex flex-col justify-center gap-2.5 bg-[#08090b]/85 p-5 backdrop-blur-[2px] transition-opacity duration-400 ${on ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                        <span className="text-[0.5rem] uppercase tracking-[0.24em] text-platinum/70">{isAr ? 'يشمل' : 'Includes'}</span>
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                          {sv.incl.map((x) => (
-                            <span key={x} className="inline-flex items-start gap-1.5 text-[0.68rem] leading-snug text-ivory/85">
-                              <Check className="mt-0.5 h-3 w-3 flex-none text-platinum" strokeWidth={2.4} />{x}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ── اللوحة السفلية — صلبة، نص مقروء دائمًا ── */}
-                    <div className="relative z-[1] flex flex-1 flex-col gap-3 bg-obsidian p-5">
-                      <div className="flex gap-2">
-                        <Chip icon={<Shield className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.warranty}</Chip>
-                        <Chip icon={<Clock className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.dur}</Chip>
-                      </div>
-                      <h4 className="font-display text-[1.35rem] uppercase leading-[1.05] text-ivory">{sv.name}</h4>
-                      <p className="text-[0.74rem] leading-[1.5] text-platinum/60 line-clamp-2">{sv.desc}</p>
-
-                      <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-3.5">
-                        {sv.onRequest ? (
-                          <span className="font-display text-xl text-ivory">{t('onRequest')}</span>
-                        ) : (
-                          <span className="flex items-baseline gap-1.5">
-                            <span className="text-[0.5rem] uppercase tracking-[0.2em] text-steel">{t('from')}</span>
-                            {oldPrice && (
-                              <span dir="ltr" className="font-display text-sm text-steel line-through decoration-[#c98a8a]/70 tabular-nums">{currencyFmt(oldPrice)}</span>
-                            )}
-                            <span dir="ltr" className={`font-display text-[1.7rem] leading-[0.9] tabular-nums ${oldPrice ? 'text-[#e7b4b4]' : 'text-ivory'}`}>{currencyFmt(price)}</span>
-                            <span className="text-[0.55rem] uppercase tracking-[0.18em] text-steel">{t('currency')}</span>
-                          </span>
-                        )}
-                        <span className={`inline-flex items-center gap-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.2em] ${on ? 'text-ivory' : 'text-platinum'}`}>
-                          {on ? t('step2.added') : t('step2.select')}
-                          {on ? <Check className="h-3 w-3" strokeWidth={2.4} /> : <ArrowUpRight className="reversible-icon h-3 w-3" strokeWidth={2} />}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </AnimatePresence>
+          {/* cards — على lite تبديل فوري بدون أنيميشن دخول؛ على الديسكتوب cross-fade */}
+          {lite ? (
+            <div key={data.activeCat} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {list.map((sv, i) => renderCard(sv, i))}
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={data.activeCat}
+                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.4, ease: EASE }}
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+              >
+                {list.map((sv, i) => renderCard(sv, i))}
+              </motion.div>
+            </AnimatePresence>
+          )}
 
           {data.services.length === 0 && (
             <p className="mt-4 text-[0.7rem] text-steel">{t('step2.selectAtLeast')}</p>
@@ -385,7 +382,7 @@ export function StepServices({
                 {data.services.map((sl) => {
                   const m = SERVICES.find((s) => s.slug === sl)!;
                   return (
-                    <motion.div key={sl} layout initial={{ opacity: 0, x: isAr ? -10 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+                    <motion.div key={sl} {...(lite ? {} : { layout: true })} initial={{ opacity: 0, x: isAr ? -10 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                       className="flex items-center gap-2.5 text-sm">
                       <span className="flex-1 text-ivory/85">{m?.name ?? sl}</span>
                       <span dir="ltr" className="font-display text-platinum tabular-nums">{m?.onRequest ? '—' : currencyFmt(dbPriceFor(m, data.size))}</span>
@@ -397,7 +394,7 @@ export function StepServices({
                   );
                 })}
                 {data.towing && data.towingMode && (
-                  <motion.div key="tow" layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5 text-sm">
+                  <motion.div key="tow" {...(lite ? {} : { layout: true })} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5 text-sm">
                     <span className="flex-1 text-ivory/85">{t('step2.towingCost')}</span>
                     <span dir="ltr" className="font-display text-platinum tabular-nums">{currencyFmt(total.tow)}</span>
                     <span className="w-[22px]" />

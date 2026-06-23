@@ -85,12 +85,12 @@ export function StepDetails({
       <Heading index="03" label={t('steps.customer')} title={t('step3.heading')} sub={t('step3.subheading')} />
 
       <div className="mt-9 grid gap-x-6 gap-y-7 md:grid-cols-2">
-        <Field label={t('step3.fullName')}>
+        <Field label={`${t('step3.fullName')} ${isAr ? '(اسم العميل)' : '(Customer name)'}`}>
           <IconInput icon={User} value={data.name} onChange={(v) => set({ name: v })}
             placeholder={t('step3.fullNamePlaceholder')} error={touched ? errors.name : null} />
         </Field>
 
-        <Field label={t('step3.phone')}>
+        <Field label={`${t('step3.phone')} ${isAr ? '(رقم تليفون العميل)' : '(Customer phone)'}`}>
           <PhoneField isAr={isAr} value={data.phone} onChange={(p) => set({ phone: p })}
             placeholder={t('step3.phonePlaceholder')} error={touched ? errors.phone : null} />
         </Field>

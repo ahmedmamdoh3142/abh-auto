@@ -70,7 +70,7 @@ export function ChapterCloseUp() {
     <section
       ref={ref}
       className="relative w-full bg-obsidian"
-      style={{ height: `${(totalTravel + 1) * 100}svh` }}
+      style={{ height: `${(totalTravel + 1) * 70}svh` }}
       data-chapter="02"
     >
       <div className="sticky top-0 h-screen w-full overflow-hidden">

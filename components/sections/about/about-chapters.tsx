@@ -3,15 +3,8 @@
 /**
  * AboutChapters — يؤجّل تحميل وهيدريشن الفصول التي تحت الطية.
  *
- * ColdOpen فقط يبقى eager. باقي الفصول تُحمَّل عبر next/dynamic({ ssr:false })
- * ولا تُركَّب إلا عند الاقتراب منها 800px (IntersectionObserver). هذا يقلّل
- * زمن الحظر الرئيسي (TBT) بشكل كبير ويوزّع الهيدريشن مع السكرول.
- *
- * ملاحظة بناء: خيارات next/dynamic يجب أن تكون object literal مكتوبًا داخل
- * الاستدعاء مباشرة (لا متغيّر مشترك)، وإلا يفشل البناء.
- *
- * ملاحظة SEO: مع ssr:false لا يظهر نص الفصول في HTML الأولي. إن كان نص فصلٍ
- * مهمًّا للأرشفة انقله إلى eager بنفس نمط ColdOpen.
+ * ملاحظة: ارتفاعات الـplaceholder (minH) لازم تساوي ارتفاعات الأقسام الجديدة
+ * بعد تقليلها، حتى لا يحدث أي قفز (CLS) عند التركيب.
  */
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -80,12 +73,12 @@ function Defer({ minH, children }: { minH: string; children: ReactNode }) {
 export function AboutChapters() {
   return (
     <>
-      <Defer minH="320svh"><ChapterObsession /></Defer>
-      <Defer minH="500svh"><ChapterCloseUp /></Defer>
-      <Defer minH="280svh"><ChapterHand /></Defer>
-      <Defer minH="450svh"><ChapterStandard /></Defer>
-      <Defer minH="300svh"><ChapterRoom /></Defer>
-      <Defer minH="550svh"><ChapterRemains /></Defer>
+      <Defer minH="200svh"><ChapterObsession /></Defer>
+      <Defer minH="350svh"><ChapterCloseUp /></Defer>
+      <Defer minH="190svh"><ChapterHand /></Defer>
+      <Defer minH="300svh"><ChapterStandard /></Defer>
+      <Defer minH="200svh"><ChapterRoom /></Defer>
+      <Defer minH="340svh"><ChapterRemains /></Defer>
       <Defer minH="100svh"><ChapterInvitation /></Defer>
     </>
   );

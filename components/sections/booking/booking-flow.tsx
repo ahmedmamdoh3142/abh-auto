@@ -3,8 +3,13 @@
 /**
  * BookingFlow — the /booking experience. (DB-driven services + promo code + colors)
  *
- * تحديث أكواد الخصم: الخصم يُحسب في الخادم حسب نوع الكود (إجمالي/مبلغ/خدمات)،
- * ويُخزّن في الحالة كـ promoDiscount جاهز. لا نطبّق أي نسبة عمياء في الواجهة.
+ * ── إصلاح أداء/تعليق الموبايل (مهم) ─────────────────────────────────────────
+ *  1) جُزيئات الهيرو (20) كانت motion.span بأنيميشن repeat:Infinity تعمل على
+ *     الـmain thread دائمًا. حُوِّلت إلى CSS keyframes (compositor) وتُخفى تمامًا
+ *     على اللمس/تقليل الحركة.
+ *  2) media query تعطّل backdrop-filter (السبب الرئيسي لاسوداد الشاشة على iOS)
+ *     على كلاس glass الأب وكل عناصر backdrop-blur، وتُخفي البلور الثقيل
+ *     (blur-3xl/2xl) على الموبايل — يمنع طرد طبقات GPU أثناء السكرول.
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -53,13 +58,13 @@ export interface BookingState {
   payment: PaymentMethod | null;
   showBreakdown: boolean;
   calMonth: { y: number; m: number } | null;
-  promoCode: string | null;   // كود الخصم المطبّق (بعد التحقق)
-  promoPercent: number;       // نسبة الكود (للأنواع النسبية فقط — للعرض)
-  promoKind: string | null;   // نوع الكود: percentage|fixed|service_percent|service_each
-  promoDiscount: number;      // قيمة الخصم الفعلية المحسوبة في الخادم
-  promoServiceIds: number[];  // الخدمات اللي اتطبّق عليها الخصم (للأنواع المرتبطة بخدمات)
-  promoPerService: Record<number, number>; // خصم كل خدمة (للعرض المفصّل)
-  whatsappOptIn: boolean;                   // موافقة التواصل عبر واتساب
+  promoCode: string | null;
+  promoPercent: number;
+  promoKind: string | null;
+  promoDiscount: number;
+  promoServiceIds: number[];
+  promoPerService: Record<number, number>;
+  whatsappOptIn: boolean;
 }
 
 const INITIAL: BookingState = {
@@ -105,7 +110,6 @@ export function BookingFlow({
     [],
   );
 
-  // لو القاعدة رجّعت ماركات فيها موديلات نستخدمها، وإلا نرجع لبيانات الإكسل المدمجة (fallback آمن)
   const effectiveBrands = (brands && brands.some((b) => (b.models?.length ?? 0) > 0)) ? brands : LIB_BRANDS;
   const sizeOf = useCallback((brandId: string, model: string): VehicleSize => {
     return modelSizes[`${brandId}::${model}`] ?? sizeForModel(brandId, model) ?? 'large';
@@ -134,8 +138,6 @@ export function BookingFlow({
     });
   }, [sizeOf]);
 
-  // ── إعادة التحقق من الكود كلما تغيّرت الخدمات/الحجم (يمنع بقاء خصم غير صالح) ──
-  // نبني توقيع الطلب الحالي؛ لو الكود مطبّق ثم تغيّر الطلب، نعيد الحساب من الخادم.
   const revalidatePromo = useCallback(async (state: BookingState) => {
     if (!state.promoCode) return;
     const lines = state.services
@@ -162,13 +164,11 @@ export function BookingFlow({
           promoPerService: j.perService ?? {},
         });
       } else {
-        // الكود بطل يكون صالح (مثلاً الحد الأدنى مابقاش متحقّق) → نشيله
         set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
       }
     } catch { /* تجاهل أخطاء الشبكة هنا */ }
   }, [SERVICES, set]);
 
-  // أعِد التحقق عند تغيّر الخدمات/الحجم/النقل طالما فيه كود مطبّق
   useEffect(() => {
     if (data.promoCode) revalidatePromo(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,7 +188,6 @@ export function BookingFlow({
     }, 0);
     const tow = data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0;
     const beforePromo = services + tow;
-    // الخصم = القيمة المحسوبة في الخادم (محدودة بالإجمالي)، مش نسبة عمياء.
     const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
     const grand = Math.max(0, beforePromo - promoCut);
     return { services, tow, beforePromo, promoCut, grand, onReq, saved };
@@ -318,16 +317,31 @@ function BookingHero({ t }: { t: ReturnType<typeof useTranslations> }) {
   }));
   return (
     <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
+      <style>{`
+        /* جُزيئات الهيرو على الـcompositor (كانت framer infinite) — مخفية على اللمس */
+        .bk-particle{opacity:0;animation-name:bkRise;animation-timing-function:ease-out;animation-iteration-count:infinite;will-change:transform,opacity;}
+        @keyframes bkRise{0%{opacity:0;transform:translateY(10px)}20%{opacity:.8}60%{opacity:.5}100%{opacity:0;transform:translateY(-110px)}}
+        @media (hover:none),(pointer:coarse),(prefers-reduced-motion:reduce){.bk-particle{display:none!important}}
+
+        /* ── منع تعليق/اسوداد الموبايل ──
+           تعطيل backdrop-filter (يطرد طبقات GPU على iOS عند السكرول) على glass
+           الأب وكل backdrop-blur، وإخفاء البلور الثقيل. يسري على صفحة الحجز فقط. */
+        @media (hover:none),(pointer:coarse),(max-width:820px){
+          .glass,.spotlight{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+          .glass{background:rgba(10,11,12,0.92)!important;}
+          [class*="backdrop-blur"]{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+          [class*="blur-3xl"],[class*="blur-2xl"]{display:none!important;}
+        }
+      `}</style>
+
       <div aria-hidden className="absolute inset-0 -z-20">
-        <Image src={CINEMATIC} alt="" fill sizes="100vw" className="object-cover opacity-[0.18]" style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }} />
+        <Image src={CINEMATIC} alt="" fill sizes="100vw" quality={45} className="object-cover opacity-[0.18]" style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }} />
       </div>
       <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/60 via-obsidian/30 to-obsidian" />
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         {particles.map((p) => (
-          <motion.span key={p.id} className="absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
-            style={{ left: `${p.left}%`, top: `${p.top}%` }}
-            animate={{ opacity: [0, 0.8, 0], y: [10, -50, -100] }}
-            transition={{ duration: p.duration, repeat: Infinity, ease: 'easeOut', delay: p.delay }} />
+          <span key={p.id} className="bk-particle absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
+            style={{ left: `${p.left}%`, top: `${p.top}%`, animationDelay: `${p.delay}s`, animationDuration: `${p.duration}s` }} />
         ))}
       </div>
       <div className="container">
