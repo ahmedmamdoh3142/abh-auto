@@ -4,26 +4,25 @@
  * Hero — ABH Auto · cinematic stage
  * Path: components/sections/hero.tsx  (export `Hero`)
  *
- * استراتيجية الأداء (نهج المواقع العالمية):
- *  • الموبايل: صورة poster ثابتة فقط — لا فيديو إطلاقًا. الصورة هي عنصر LCP وتظهر
- *    في ~1ث، فيرتفع سكور الموبايل بقوة. (الفيديو الثقيل لا يُحمَّل أصلًا على الموبايل.)
- *  • اللاب/التابلت (>=768px): الفيديو يعمل كالمعتاد فوق صورة الـ poster.
- *  • نكتشف الجهاز بعد التركيب (mounted) ثم نقرر هل نُركّب الفيديو أم لا.
- *  • صورة الموبايل (posterUrlMobile) منفصلة عن الديسكتوب — لو فاضية تُستخدم
- *    صورة الديسكتوب. الاختيار يتم بعد اكتشاف الجهاز.
- *  • الـ poster يُعمل له preload بأولوية عالية (يعمل في App Router).
- *  • نص الهيرو يتحرّك بـ CSS لا framer-motion.
+ * ── إصلاح LCP على الموبايل (مهم) ───────────────────────────────────────────
+ * كان الـposter مرسومًا كـ background-image (CSS) على الصورة الخام بحجمها الكامل،
+ * فالموبايل يحمّل نسخة الديسكتوب الضخمة → LCP ~5.5s. الآن الـposter يُرسم عبر
+ * next/image بـ priority + sizes="100vw" + quality منخفضة (الصورة معتمة أصلًا)،
+ * فيخدّم Next نسخة مصغّرة محسّنة لكل جهاز ويعمل لها preload تلقائيًا → LCP ينهار.
+ *
+ * ملاحظة: نستخدم صورة الديسكتوب كمصدر واحد responsive (next/image يصغّرها للموبايل
+ * تلقائيًا) لتفادي تحميل صورتين/تبديل يضر بالـLCP. لم نَعُد نحتاج preload يدوي.
+ *
+ * باقي الاستراتيجية كما هي: الفيديو على اللاب فقط فوق الـposter؛ ونص الهيرو CSS.
  */
 import { useRef, useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslations } from 'next-intl';
 import { ArrowUpRight, ArrowDown } from 'lucide-react';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const INTRO = 0.35;
-const STAGGER = 0.1;
 
 export interface HeroVideoSources {
   webm: string | null;
@@ -33,7 +32,6 @@ export interface HeroMedia {
   desktop: HeroVideoSources;
   mobile: HeroVideoSources;
   posterUrl: string | null;
-  /** صورة poster مخصّصة للموبايل — اختيارية؛ لو فاضية تُستخدم posterUrl. */
   posterUrlMobile?: string | null;
 }
 
@@ -43,14 +41,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const posterDesktop = media?.posterUrl ?? '/images/hero-bg.webp';
-  // صورة الموبايل: لو محدّدة نستخدمها، وإلا نرجع لصورة الديسكتوب.
   const posterMobile = media?.posterUrlMobile ?? posterDesktop;
-
-  // نعمل preload للاتنين بأولوية عالية (عنصر LCP يختلف حسب الجهاز).
-  ReactDOM.preload(posterDesktop, { as: 'image', fetchPriority: 'high' });
-  if (posterMobile !== posterDesktop) {
-    ReactDOM.preload(posterMobile, { as: 'image', fetchPriority: 'high' });
-  }
 
   const desktop = media?.desktop ?? { webm: null, mp4: null };
   const mobile = media?.mobile ?? { webm: null, mp4: null };
@@ -68,15 +59,12 @@ export function Hero({ media }: { media?: HeroMedia }) {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // صورة الـ poster المعروضة: على الموبايل المؤكّد (isDesktop===false) نستخدم صورة
-  // الموبايل؛ غير كده (ديسكتوب أو قبل الاكتشاف) نستخدم صورة الديسكتوب — لتفادي
-  // وميض الصورة الخطأ، نُبقي الديسكتوب كافتراضي حتى يتأكد أنه موبايل.
-  const poster = isDesktop === false ? posterMobile : posterDesktop;
-
   // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion).
-  // نختار مصدر الديسكتوب؛ ولو مش موجود نستخدم مصدر الموبايل على اللاب فقط.
   const deskSrc: HeroVideoSources = hasDesktopVid ? desktop : mobile;
   const showVideo = isDesktop === true && !reduce && !!(deskSrc.webm || deskSrc.mp4);
+
+  // poster للفيديو (سمة poster) — نختار صورة الموبايل لو الجهاز موبايل.
+  const videoPoster = isDesktop === false ? posterMobile : posterDesktop;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -91,12 +79,19 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
   return (
     <section data-section="hero" className="relative h-[100svh] w-full overflow-hidden bg-obsidian">
-      {/* ── الـ poster: خلفية ثابتة دائمًا. على الموبايل هي العنصر الوحيد (وعنصر LCP). ── */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url('${poster}')`, filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
-      />
+      {/* ── الـ poster: عنصر LCP — next/image responsive + priority ── */}
+      <div aria-hidden className="absolute inset-0" style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}>
+        <Image
+          src={posterDesktop}
+          alt=""
+          fill
+          priority
+          fetchPriority="high"
+          sizes="100vw"
+          quality={50}
+          className="object-cover object-center"
+        />
+      </div>
 
       {/* ── الفيديو: على اللاب فقط، فوق الـ poster ── */}
       {showVideo && (
@@ -105,7 +100,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
           className="absolute inset-0 h-full w-full object-cover"
           style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
           autoPlay muted loop playsInline preload="auto"
-          poster={poster}
+          poster={videoPoster}
         >
           {deskSrc.webm && <source src={deskSrc.webm} type="video/webm" />}
           {deskSrc.mp4 && <source src={deskSrc.mp4} type="video/mp4" />}

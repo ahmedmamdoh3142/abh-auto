@@ -66,9 +66,9 @@ function ServiceCard({ item, index, discover, onOpen }: { item: ServiceRow; inde
       className="spotlight group relative h-[540px] w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-obsidian text-start md:h-[620px]"
       data-cursor="hover"
     >
-      <CardImage src={item.image} alt={item.title} quality={60}
+      <CardImage src={item.image} alt={item.title} quality={50}
         className="scale-[1.08] object-cover transition-transform duration-[1600ms] ease-out group-hover:scale-[1.16]"
-        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+        sizes="(max-width: 768px) 90vw, (max-width: 1024px) 50vw, 33vw" />
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-obsidian/70" />
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover:opacity-100"

@@ -14,6 +14,7 @@ const nextConfig = {
   },
 
   images: {
+    qualities: [40, 50, 55, 60, 65, 70, 75],
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'plus.unsplash.com' },
