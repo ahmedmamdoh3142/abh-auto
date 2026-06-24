@@ -107,7 +107,7 @@ export default function OffersPage() {
             <SectionHead icon={Gift}
               eyebrow={T('خدمة + هدية', 'Service + Gift')}
               title={T('اختر باقتك، وخد هديتك', 'Pick a package, claim a gift')} />
-            <div className="mx-auto mt-9 max-w-5xl space-y-8">
+            <div className="mx-auto mt-9 grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
               {bundles.map((b, i) => <BundleBlock key={b.id} b={b} i={i} isAr={isAr} T={T} nm={nm} />)}
             </div>
           </div>
@@ -218,7 +218,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
       <div>
         <StepLabel n="2" text={T('استلم هديتك', 'Get your gift')}
           hint={isFree ? T('مجانًا بالكامل', 'Completely free') : T(`بخصم ${b.giftPercent}%`, `${b.giftPercent}% off`)} />
-        <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-3.5 grid grid-cols-2 gap-3">
           {b.gifts.map((g) => <GiftCard key={g.id} g={g} T={T} nm={nm} />)}
         </div>
         {b.maxGifts > 0 && b.gifts.length > 1 && (
