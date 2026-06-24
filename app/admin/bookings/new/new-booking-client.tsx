@@ -608,7 +608,9 @@ function GiftPickerAdmin({ bundle, services, size, isAr, chosen, onConfirm, onCl
               <div style={{ fontSize: 11, color: "var(--abh-steel)" }}>{limit}</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ display: "grid", placeItems: "center", height: 36, width: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: "var(--abh-platinum)", cursor: "pointer" }}><Ic.close s={16} /></button>
+          <button onClick={onClose} style={{ display: "grid", placeItems: "center", height: 36, width: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: "var(--abh-platinum)", cursor: "pointer" }}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
 
         {/* القائمة */}
