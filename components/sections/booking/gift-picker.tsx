@@ -12,9 +12,14 @@
  *   • <GiftBadge/>                     → شارة صغيرة على كرت الخدمة المؤهِّلة
  *   • <GiftPicker/>                    → مودال اختيار الهدية/الهدايا
  *
+ * إصلاح: المودال بيتعمله Portal لـ document.body عشان يهرب من أي أب عليه
+ * transform (الـmotion.div بتاع خطوة الحجز) فيتمركز في نص الشاشة بدل ما يفتح
+ * عند مكان الأب وتضطر تطلع له.
+ *
  * نوع الهدية المختارة: { slug, bundleId, unit } — unit = السعر المحمَّل (0 لو مجانية).
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Gift, Check, X, Sparkles } from 'lucide-react';
 
@@ -92,6 +97,15 @@ export function GiftPicker({
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const ccy = T('ريال', 'SAR');
 
+  // ضمان وجود body قبل الـportal + قفل تمرير الصفحة الخلفية أثناء فتح المودال.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const gifts = bundle.giftIds
     .map((id) => services.find((s) => s.id === id))
     .filter((s): s is DbServiceMeta => !!s && !s.onRequest);
@@ -123,9 +137,9 @@ export function GiftPicker({
     ? T(`اختر حتى ${bundle.maxGifts} هدايا`, `Choose up to ${bundle.maxGifts} gifts`)
     : T('اختر هدية واحدة', 'Choose one gift');
 
-  return (
+  const modal = (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[80] grid place-items-center p-4">
+      className="fixed inset-0 z-[100] grid place-items-center p-4">
       <div aria-hidden onClick={onClose} className="absolute inset-0 bg-obsidian/80 backdrop-blur-md" />
       <motion.div initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }}
         transition={{ duration: 0.4, ease: EASE }}
@@ -200,4 +214,8 @@ export function GiftPicker({
       </motion.div>
     </motion.div>
   );
+
+  // Portal لـ body — يهرب من أي أب عليه transform فيتمركز في نص الشاشة.
+  if (!mounted) return null;
+  return createPortal(modal, document.body);
 }

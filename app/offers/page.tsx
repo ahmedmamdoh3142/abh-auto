@@ -168,7 +168,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
   return (
     <motion.div initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.55, delay: i * 0.06, ease: EASE }}
-      className="relative overflow-hidden rounded-[28px] border border-white/[0.1] bg-gradient-to-br from-white/[0.055] via-white/[0.02] to-transparent p-6 md:p-8">
+      className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-white/[0.1] bg-gradient-to-br from-white/[0.055] via-white/[0.02] to-transparent p-6 md:p-8">
       <span aria-hidden className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-platinum/55 to-transparent" />
       <span aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-platinum/[0.05] blur-3xl" />
 
@@ -229,7 +229,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
       </div>
 
       {/* CTA */}
-      <div className="mt-7">
+      <div className="mt-auto pt-7">
         <Link href="/booking" data-cursor="hover"
           className="group/btn flex items-center justify-center gap-2.5 rounded-full px-6 py-4 text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-obsidian transition-transform duration-500 hover:-translate-y-0.5"
           style={{ background: 'linear-gradient(135deg,#fff,#cbcdcd)', boxShadow: '0 18px 50px -18px rgba(203,205,205,0.55)' }}>

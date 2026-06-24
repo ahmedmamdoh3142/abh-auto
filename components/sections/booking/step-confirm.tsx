@@ -4,11 +4,13 @@
  * StepConfirm — act 04. الخدمات من القاعدة + كود خصم متعدّد الأنواع.
  * التحقق من الكود يرسل بنود الطلب (serviceId + السعر) فيحسب الخادم الخصم الصحيح
  * حسب نوع الكود (إجمالي/مبلغ/خدمات محددة) ويرجّع الخصم لكل خدمة.
+ *
+ * (عروض) أُضيف عرض الهدايا في الدوسيه وفي التفصيل (breakdown) — مجانًا أو بخصم.
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2 } from 'lucide-react';
+import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift } from 'lucide-react';
 
 import {
   BRANDS, PAYMENT_METHODS, PAYMENT_DISABLED, branchLabel, currencyFmt,
@@ -42,6 +44,7 @@ export function StepConfirm({
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const szL = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
   const sizeChip = `${isAr ? szL.ar : szL.en} · ${szL.tier}`;
+  const gifts = data.gifts ?? [];
 
   const confirm = () => {
     if (!data.payment) return;
@@ -99,6 +102,20 @@ export function StepConfirm({
               <Row k={t('step4.towing')} v={`${currencyFmt(total.tow)} ${t('currency')}`} mono />
             )}
           </DossierCard>
+
+          {/* (عروض) هداياك */}
+          {gifts.length > 0 && (
+            <DossierCard icon={Gift} title={isAr ? 'هداياك' : 'Your gifts'}>
+              {gifts.map((g) => {
+                const svc = SERVICES.find((s) => s.slug === g.slug);
+                if (!svc) return null;
+                return <Row key={`gift-${g.slug}`} k={svc.name}
+                  v={g.unit === 0 ? (isAr ? 'مجانًا' : 'Free') : `${currencyFmt(g.unit)} ${t('currency')}`}
+                  mono={g.unit !== 0}
+                  tag={isAr ? 'هدية' : 'Gift'} />;
+              })}
+            </DossierCard>
+          )}
 
           <DossierCard icon={UserRound} title={t('step4.detailsTitle')}>
             <Row k={t('step3.fullName')} v={data.name} />
@@ -168,6 +185,20 @@ export function StepConfirm({
                           <span dir="ltr" className="font-display text-platinum tabular-nums">{currencyFmt(total.tow)}</span>
                         </div>
                       )}
+                      {/* (عروض) سطور الهدايا */}
+                      {gifts.map((g) => {
+                        const svc = SERVICES.find((s) => s.slug === g.slug);
+                        if (!svc) return null;
+                        return (
+                          <div key={`bd-gift-${g.slug}`} className="flex justify-between gap-3 py-1.5 text-[0.82rem] text-ivory/82">
+                            <span className="inline-flex items-center gap-1.5">
+                              {svc.name}
+                              <span className="rounded-full bg-[#d9b25f]/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wide text-[#e8d6a8]">{isAr ? 'هدية' : 'Gift'}</span>
+                            </span>
+                            <span dir="ltr" className="font-display tabular-nums text-[#e8d6a8]">{g.unit === 0 ? (isAr ? 'مجانًا' : 'Free') : currencyFmt(g.unit)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}

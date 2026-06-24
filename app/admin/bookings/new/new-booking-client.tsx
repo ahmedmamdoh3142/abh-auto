@@ -6,12 +6,15 @@
  *   • عمود رئيسي: العميل → السيارة → الخدمات → الموعد والدفع.
  *   • عمود جانبي ثابت (sticky): ملخّص الحجز الحيّ + زر الإنشاء.
  *
- * موبايل: كل الجريدات الداخلية تنهار لعمود واحد، وبادينج الكروت يصغر —
- *   عشان مفيش حاجة تطلع بره إطارها ولا سكروول أفقي.
+ * (عروض) نفس فكرة الموقع: الخدمات المؤهِّلة لهدية تتعلّم بشارة، ولمّا تختار
+ *   ما يكفي منها يظهر بانر «فتحت هدية» تفتح منه مودال اختيار الهدية. الهدية
+ *   تتضاف للملخّص والإجمالي وتترسل للسيرفر اللي بيسجّلها.
  */
 import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { card, Pill, Ic, EGP, useToast, PageHeader, Field } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
+import { useBundles, isTriggerService, unlockedBundles, giftChargeFor, type Bundle, type ChosenGift } from "@/components/sections/booking/gift-picker";
 
 /* ───────── هوك media query (للتجاوب مع الموبايل) ───────── */
 function useMediaQuery(query: string) {
@@ -40,6 +43,15 @@ const SIZE_LABEL: Record<SizeCode, { ar: string; en: string }> = {
   medium: { ar: "متوسطة", en: "Medium" },
   large: { ar: "كبيرة", en: "Large" },
 };
+const GIFT_GOLD = "#e8d6a8";
+
+/* أيقونة هدية صغيرة */
+const giftIco = (s = 12) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M20 12v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9" /><path d="M2 7h20v5H2z" /><path d="M12 22V7" />
+    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+  </svg>
+);
 
 export default function NewBookingClient({
   locale, brands, services, branches, colors, cities, payments, towing, slots,
@@ -115,6 +127,24 @@ export default function NewBookingClient({
     const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n;
   });
 
+  // ── (عروض) البندلات والهدايا ──
+  const bundles = useBundles();
+  const [gifts, setGifts] = useState<ChosenGift[]>([]);
+  const [giftBundle, setGiftBundle] = useState<Bundle | null>(null);
+
+  const chosenServices = useMemo(
+    () => Array.from(chosen).map((slug) => services.find((x) => x.slug === slug)).filter(Boolean) as Service[],
+    [chosen, services]
+  );
+  const selectedIds = useMemo(() => chosenServices.map((s) => s.id), [chosenServices]);
+  const openBundles = useMemo(() => unlockedBundles(bundles, selectedIds), [bundles, selectedIds]);
+
+  // لو خدمة اتشالت وقفل بندلها، نشيل هداياه تلقائيًا
+  useEffect(() => {
+    const openIds = new Set(openBundles.map((b) => b.id));
+    setGifts((gs) => gs.filter((g) => openIds.has(g.bundleId)));
+  }, [openBundles]);
+
   const [towMode, setTowMode] = useState<string>("");
   const [towAddress, setTowAddress] = useState("");
 
@@ -127,10 +157,6 @@ export default function NewBookingClient({
 
   const [busy, setBusy] = useState(false);
 
-  const chosenServices = useMemo(
-    () => Array.from(chosen).map((slug) => services.find((x) => x.slug === slug)).filter(Boolean) as Service[],
-    [chosen, services]
-  );
   const total = useMemo(() => {
     let svc = 0; let onReq = false;
     for (const s of chosenServices) {
@@ -138,8 +164,9 @@ export default function NewBookingClient({
       svc += s.prices[size] ?? s.prices.large ?? 0;
     }
     const tow = towMode ? (towing.find((t) => t.code === towMode)?.cost ?? 0) : 0;
-    return { svc, tow, grand: svc + tow, onReq };
-  }, [chosenServices, size, towMode, towing]);
+    const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
+    return { svc, tow, giftsCharge, grand: svc + tow + giftsCharge, onReq };
+  }, [chosenServices, size, towMode, towing, gifts]);
 
   const phoneOk = !phone.trim() || isValidPhone(phone);
   const customerOk = mode === "registered" ? !!userId : (!!name.trim() && !!phone.trim() && phoneOk);
@@ -161,6 +188,7 @@ export default function NewBookingClient({
           branch, date, time, payment,
           towingMode: towMode || null, towingAddress: towMode ? towAddress : null,
           services: Array.from(chosen),
+          gifts: gifts.map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
           promoCode: promo.trim() || null,
           whatsappOptIn: waOptIn,
         }),
@@ -168,7 +196,7 @@ export default function NewBookingClient({
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "fail");
       toast(T(`تم إنشاء الحجز ${j.reference}`, `Booking ${j.reference} created`));
-      setChosen(new Set()); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
+      setChosen(new Set()); setGifts([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
       setDate(""); setTime(""); setPromo(""); setTowMode(""); setTowAddress("");
       if (mode === "guest") { setName(""); setPhone(""); setEmail(""); setCity(""); }
       setUserId(""); setTouched(false);
@@ -330,6 +358,7 @@ export default function NewBookingClient({
                       const price = s.prices[size] ?? s.prices.large ?? 0;
                       const oldP = s.oldPrices[size] ?? s.oldPrices.large ?? 0;
                       const hasDiscount = !s.onRequest && oldP > 0 && oldP !== price;
+                      const isTrigger = isTriggerService(bundles, s.id);
                       return (
                         <button key={s.slug} onClick={() => toggleSvc(s.slug)} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10, borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.07)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "14px 15px", cursor: "pointer", textAlign: isAr ? "right" : "left", transition: "all .2s", minHeight: 92, minWidth: 0 }}>
                           {/* الصف العلوي: مربّع الاختيار */}
@@ -338,6 +367,12 @@ export default function NewBookingClient({
                           </span>
                           {/* اسم الخدمة — أكبر وعلى سطرين كاملين */}
                           <span style={{ flex: 1, fontSize: 14.5, lineHeight: 1.35, color: on ? "var(--abh-ivory)" : "var(--abh-platinum)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.name}</span>
+                          {/* شارة هدية لو الخدمة مؤهِّلة */}
+                          {isTrigger && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, alignSelf: isAr ? "flex-end" : "flex-start", width: "fit-content", borderRadius: 999, border: "1px solid rgba(217,178,95,.4)", background: "rgba(217,178,95,.1)", padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD }}>
+                              {giftIco(11)}{T("خدها وخد هدية", "Get a gift")}
+                            </span>
+                          )}
                           {/* السعر تحت الاسم */}
                           <span dir="ltr" className="abh-num" style={{ display: "inline-flex", alignItems: "baseline", gap: 7, justifyContent: isAr ? "flex-end" : "flex-start", flexWrap: "wrap" }}>
                             {s.onRequest ? (
@@ -358,6 +393,21 @@ export default function NewBookingClient({
               ))}
             </div>
             {touched && chosen.size === 0 && <Err>{T("اختر خدمة واحدة على الأقل", "Select at least one service")}</Err>}
+
+            {/* (عروض) بانر فتح الهدية */}
+            {openBundles.length > 0 && (
+              <button onClick={() => setGiftBundle(openBundles[0])}
+                style={{ marginTop: 16, display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 14, border: "1px solid rgba(217,178,95,.4)", background: "rgba(217,178,95,.08)", padding: "14px 16px", cursor: "pointer", textAlign: "start" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ display: "grid", placeItems: "center", height: 36, width: 36, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(217,178,95,.4)", background: "rgba(217,178,95,.12)", color: GIFT_GOLD }}>{giftIco(16)}</span>
+                  <span>
+                    <span style={{ display: "block", fontSize: 13.5, color: GIFT_GOLD }}>{T("مبروك! فتحت هدية", "You unlocked a gift")}</span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--abh-steel)", marginTop: 2 }}>{gifts.length > 0 ? T("اضغط لتغيير الهدية", "Tap to change gift") : T("اضغط لاختيار الهدية", "Tap to choose gift")}</span>
+                  </span>
+                </span>
+                <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", color: GIFT_GOLD }}>{gifts.length > 0 ? T("تغيير", "Change") : T("اختر", "Choose")}</span>
+              </button>
+            )}
 
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
               <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("النقل / السطحة (اختياري)", "Towing (optional)")}</div>
@@ -457,6 +507,16 @@ export default function NewBookingClient({
                       </div>
                     );
                   })}
+                  {/* سطور الهدايا */}
+                  {gifts.map((g) => {
+                    const svc = services.find((x) => x.slug === g.slug);
+                    return (
+                      <div key={`gift-${g.slug}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GIFT_GOLD, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{giftIco(11)}{svc?.name ?? g.slug}</span>
+                        <span dir="ltr" className="abh-num" style={{ color: GIFT_GOLD, flexShrink: 0 }}>{g.unit === 0 ? T("هدية", "Gift") : EGP(g.unit)}</span>
+                      </div>
+                    );
+                  })}
                   {total.tow > 0 && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
                       <span style={{ color: "var(--abh-platinum)" }}>{T("النقل", "Towing")}</span>
@@ -487,8 +547,103 @@ export default function NewBookingClient({
         </aside>
       </div>
 
+      {/* مودال اختيار الهدية */}
+      {giftBundle && (
+        <GiftPickerAdmin bundle={giftBundle} services={services} size={size} isAr={isAr}
+          chosen={gifts} onClose={() => setGiftBundle(null)}
+          onConfirm={(g) => { setGifts(g); setGiftBundle(null); }} />
+      )}
+
       <style>{NB_CSS}</style>
     </div>
+  );
+}
+
+/* ─── مودال اختيار الهدية (Portal، يتمركز في الشاشة) ─── */
+function GiftPickerAdmin({ bundle, services, size, isAr, chosen, onConfirm, onClose }: {
+  bundle: Bundle; services: Service[]; size: SizeCode; isAr: boolean;
+  chosen: ChosenGift[]; onConfirm: (g: ChosenGift[]) => void; onClose: () => void;
+}) {
+  const T = (a: string, e: string) => (isAr ? a : e);
+  const ccy = T("ريال", "SAR");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const gifts = bundle.giftIds.map((id) => services.find((s) => s.id === id)).filter((s): s is Service => !!s && !s.onRequest);
+  const priceOf = (s: Service) => s.prices[size] ?? s.prices.large ?? 0;
+  const [picked, setPicked] = useState<string[]>(() => chosen.filter((c) => c.bundleId === bundle.id).map((c) => c.slug).filter((sl) => gifts.some((g) => g.slug === sl)));
+
+  const toggle = (slug: string) => setPicked((prev) =>
+    prev.includes(slug) ? prev.filter((s) => s !== slug)
+      : prev.length >= bundle.maxGifts ? [...prev.slice(1), slug] : [...prev, slug]);
+
+  const confirm = () => {
+    const out: ChosenGift[] = picked.map((slug) => {
+      const svc = gifts.find((g) => g.slug === slug)!;
+      return { slug, bundleId: bundle.id, unit: giftChargeFor(priceOf(svc), bundle.giftPercent) };
+    });
+    onConfirm(out);
+  };
+
+  const title = (isAr ? bundle.title?.ar : bundle.title?.en) || T("اختر هديتك", "Pick your gift");
+  const limit = bundle.maxGifts > 1 ? T(`اختر حتى ${bundle.maxGifts} هدايا`, `Up to ${bundle.maxGifts} gifts`) : T("اختر هدية واحدة", "Choose one gift");
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 16 }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(8,9,11,.8)", backdropFilter: "blur(8px)" }} />
+      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", borderRadius: 24, border: "1px solid rgba(255,255,255,.1)", background: "#0c0d0e", boxShadow: "0 50px 120px -40px rgba(0,0,0,.85)" }}>
+        {/* الرأس */}
+        <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)", background: "rgba(12,13,14,.96)", padding: "16px 20px", backdropFilter: "blur(8px)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ display: "grid", placeItems: "center", height: 38, width: 38, borderRadius: 999, border: "1px solid rgba(217,178,95,.4)", background: "rgba(217,178,95,.1)", color: GIFT_GOLD }}>{giftIco(18)}</span>
+            <div>
+              <div style={{ fontSize: 16, color: "var(--abh-ivory)" }}>{title}</div>
+              <div style={{ fontSize: 11, color: "var(--abh-steel)" }}>{limit}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ display: "grid", placeItems: "center", height: 36, width: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: "var(--abh-platinum)", cursor: "pointer" }}><Ic.close s={16} /></button>
+        </div>
+
+        {/* القائمة */}
+        <div className="abh-col" style={{ gap: 10, padding: 20 }}>
+          {gifts.map((g) => {
+            const on = picked.includes(g.slug);
+            const full = priceOf(g);
+            const charge = giftChargeFor(full, bundle.giftPercent);
+            return (
+              <button key={g.slug} onClick={() => toggle(g.slug)} style={{ display: "flex", alignItems: "center", gap: 14, borderRadius: 16, border: `1px solid ${on ? "rgba(217,178,95,.45)" : "rgba(255,255,255,.08)"}`, background: on ? "rgba(217,178,95,.07)" : "rgba(255,255,255,.02)", padding: 14, cursor: "pointer", textAlign: isAr ? "right" : "left" }}>
+                <span style={{ display: "grid", placeItems: "center", height: 48, width: 48, flexShrink: 0, borderRadius: 12, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.03)", color: GIFT_GOLD }}>{giftIco(20)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 14.5, color: "var(--abh-ivory)" }}>{g.name}</span>
+                  <span dir="ltr" style={{ display: "inline-flex", alignItems: "baseline", gap: 8, marginTop: 3 }}>
+                    <span className="abh-num" style={{ fontSize: 12.5, color: "var(--abh-steel)", textDecoration: "line-through" }}>{EGP(full)}</span>
+                    <span className="abh-num" style={{ fontSize: 14, color: GIFT_GOLD }}>{charge === 0 ? T("مجانًا", "Free") : `${EGP(charge)} ${ccy}`}</span>
+                  </span>
+                </span>
+                <span style={{ display: "grid", placeItems: "center", height: 24, width: 24, flexShrink: 0, borderRadius: 999, border: on ? "none" : "1px solid rgba(255,255,255,.2)", background: on ? "linear-gradient(135deg,#f0dca6,#d9b25f)" : "transparent", color: "#0c0d0e" }}>{on && <Ic.check s={14} />}</span>
+              </button>
+            );
+          })}
+          {gifts.length === 0 && <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--abh-steel)" }}>{T("لا توجد هدايا متاحة حاليًا.", "No gifts available right now.")}</div>}
+        </div>
+
+        {/* التذييل */}
+        <div style={{ position: "sticky", bottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderTop: "1px solid rgba(255,255,255,.08)", background: "rgba(12,13,14,.96)", padding: "14px 20px", backdropFilter: "blur(8px)" }}>
+          <span style={{ fontSize: 12, color: "var(--abh-steel)" }}>{picked.length > 0 ? T(`${picked.length} مختارة`, `${picked.length} selected`) : T("لم تختر بعد", "Nothing selected")}</span>
+          <button onClick={confirm} style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, border: "none", padding: "11px 22px", fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: "#0c0d0e", background: "linear-gradient(135deg,#f0dca6,#d9b25f)", cursor: "pointer" }}>
+            {Ic.sparkle({ s: 15 })}{picked.length > 0 ? T("أضف الهدية", "Add gift") : T("تخطّى", "Skip")}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

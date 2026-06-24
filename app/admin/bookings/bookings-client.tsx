@@ -11,6 +11,7 @@
  * • فرز + بحث + تصدير CSV + اتصال/واتساب سريع.
  * • مودال تفاصيل: بيانات العميل كاملة، خدمات بالأسعار، بايبلاين مراحل متزامن مع
  *   حساب العميل، إعادة جدولة (تقويم+مواعيد)، إلغاء بسبب اجباري، تأكيد دفع.
+ * • الخدمات الهدية تظهر معلَّمة «هدية/مجانية» في الكرت والمودال.
  */
 import React, { useMemo, useState } from "react";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
@@ -69,6 +70,7 @@ const I = {
   city: (s = 14) => mini(["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 9h.01", "M9 13h.01", "M9 17h.01", "M15 9h.01", "M15 13h.01", "M15 17h.01"], s),
   car: (s = 14) => mini(["M5 17a2 2 0 1 0 0-.01", "M19 17a2 2 0 1 0 0-.01", "M5 17H3v-5l2-4h11l3 4h1a1 1 0 0 1 1 1v4h-2", "M7 17h10"], s),
   tag: (s = 14) => mini(["M20.6 13.4 12 22l-9-9V3h10l8 8a2 2 0 0 1-.4 2.4z", "M7 7h.01"], s),
+  gift: (s = 14) => mini(["M20 12v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9", "M2 7h20v5H2z", "M12 22V7", "M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z", "M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"], s),
   chevL: (s = 16) => mini("M15 18l-6-6 6-6", s),
   chevR: (s = 16) => mini("M9 18l6-6-6-6", s),
   back: (s = 15) => mini(["M19 12H5", "M12 19l-7-7 7-7"], s),
@@ -180,6 +182,12 @@ function TimeGrid({ value, onPick, isAr }: any) {
 const qBtn = (primary?: boolean): React.CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "8px 14px", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", cursor: "pointer", border: primary ? "none" : "1px solid rgba(255,255,255,.2)", color: primary ? "#000" : "var(--abh-ivory)", background: primary ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 const qIcon = (color?: string): React.CSSProperties => ({ display: "grid", placeItems: "center", height: 34, width: 34, borderRadius: 999, cursor: "pointer", border: `1px solid ${color ? color : "rgba(255,255,255,.2)"}`, color: color || "var(--abh-ivory)", background: "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 
+/* شارة «هدية» صغيرة */
+const GIFT_GOLD = "#e8d6a8";
+function giftChipStyle(): React.CSSProperties {
+  return { borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.45)", display: "inline-flex", alignItems: "center", gap: 4 };
+}
+
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
 function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -254,11 +262,15 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Ic.pin s={12} />{b.branch} · {fmtDate(b.date)} · {b.time}</span>
         </div>
 
-        {/* خدمات */}
+        {/* خدمات — العناصر الهدية بشارة ذهبية «هدية/مجانية» */}
         {b.services.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 11 }}>
             {b.services.slice(0, 4).map((s: any, j: number) => (
-              <span key={j} style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "rgba(230,230,230,.95)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>{s.name}</span>
+              s.isGift ? (
+                <span key={j} style={giftChipStyle()}>{I.gift(11)}{s.name}{s.price === 0 ? ` · ${isAr ? "مجانية" : "Free"}` : ""}</span>
+              ) : (
+                <span key={j} style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "rgba(230,230,230,.95)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>{s.name}</span>
+              )
             ))}
             {b.services.length > 4 && <span style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "var(--abh-platinum)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>+{b.services.length - 4}</span>}
           </div>
@@ -385,9 +397,15 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
               <SectionLabel>{Ic.sparkle({ s: 13 })} {T("الخدمات", "Services")}</SectionLabel>
               <div className="abh-col" style={{ gap: 8, marginBottom: 14 }}>
                 {b.services.map((s: any, i: number) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)", padding: "12px 15px" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>{Ic.sparkle({ s: 14 })}{s.name}</span>
-                    <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: "var(--abh-platinum)" }}>{s.price > 0 ? `${EGP(s.price)} ${ccy}` : T("حسب الطلب", "On request")}</span>
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 14, border: `1px solid ${s.isGift ? "rgba(217,178,95,.35)" : "rgba(255,255,255,.07)"}`, background: s.isGift ? "rgba(217,178,95,.06)" : "rgba(255,255,255,.02)", padding: "12px 15px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>
+                      {s.isGift ? <span style={{ color: GIFT_GOLD, display: "inline-flex" }}>{I.gift(14)}</span> : Ic.sparkle({ s: 14 })}
+                      {s.name}
+                      {s.isGift && <span style={{ borderRadius: 999, padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.4)", letterSpacing: ".04em" }}>{T("هدية", "Gift")}</span>}
+                    </span>
+                    <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: s.isGift ? GIFT_GOLD : "var(--abh-platinum)" }}>
+                      {s.isGift && s.price === 0 ? T("مجانية", "Free") : (s.price > 0 ? `${EGP(s.price)} ${ccy}` : T("حسب الطلب", "On request"))}
+                    </span>
                   </div>
                 ))}
               </div>

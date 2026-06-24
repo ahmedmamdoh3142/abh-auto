@@ -1,7 +1,7 @@
 /**
  * app/admin/bookings/page.tsx — قائمة الحجوزات (SERVER).
  * تجلب الحجوزات + بيانات العميل (بيانات الحجز لها الأولوية، ثم المستخدم المسجّل)
- * + الدفع + الخدمات بالأسعار + الفروع/الألوان للعرض، وتمرّرها لـ BookingsClient.
+ * + الدفع + الخدمات بالأسعار + علم «هدية» لكل عنصر + الفروع/الألوان، وتمرّرها لـ BookingsClient.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -30,11 +30,17 @@ export default async function BookingsPage() {
             COALESCE(b.customer_email, u.email::text) AS customer_email,
             COALESCE(b.customer_city,  u.city_code)   AS customer_city,
             (b.user_id IS NULL) AS is_guest,
+            -- العناصر + علم «هدية» (لو الخدمة موجودة في booking_bundle_gifts لنفس الحجز)
             COALESCE((
               SELECT json_agg(json_build_object(
                        'name', bi.name_snapshot,
                        'slug', bi.service_slug,
-                       'price', bi.line_total
+                       'price', bi.line_total,
+                       'isGift', EXISTS (
+                         SELECT 1 FROM booking_bundle_gifts g
+                         WHERE g.booking_id = bi.booking_id
+                           AND g.gift_service_id = bi.service_id
+                       )
                      ) ORDER BY bi.id)
               FROM booking_items bi WHERE bi.booking_id = b.id
             ), '[]') AS items
@@ -83,6 +89,7 @@ export default async function BookingsPage() {
     services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,
+      isGift: !!it.isGift,
     })).filter((s: any) => s.name),
   }));
 

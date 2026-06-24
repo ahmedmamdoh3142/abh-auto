@@ -5,6 +5,8 @@
  *   • يُنسب الحجز للعميل المختار (userId) لو مسجّل، أو يُحفظ كزائر ببياناته.
  *   • الأسعار تُحسب في الخادم حسب حجم السيارة (size) — لا نثق بأي سعر من الواجهة.
  *   • لو العميل المختار شركة (partner): تُطبّق أسعاره الخاصة وعمولته (تُجمّد).
+ *   • هدايا البندلات (خدمة + هدية): تُسعّر وتُتحقّق من الخادم وتُسجّل في
+ *     booking_items + booking_bundle_gifts — نفس الموقع.
  *   • الدفع: cash → pending (معلّق)، غيره → paid. والبرومو يتبع نفس قاعدة الدفع.
  */
 import { NextResponse } from "next/server";
@@ -12,6 +14,7 @@ import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 import { getPromoByCode, checkPromoValidity, computePromo, recordRedemption, type PromoLine } from "@/lib/promo";
+import { getBundleById, giftChargeFor } from "@/lib/bundles";
 import { enqueueBookingConfirm, enqueueBookingReminder } from "@/lib/whatsapp";
 
 const SIZE_OK = new Set(["small", "medium", "large"]);
@@ -43,6 +46,11 @@ export async function POST(request: Request) {
     const towingMode = body.towingMode ? String(body.towingMode) : null;
     const towingAddress = body.towingAddress ? String(body.towingAddress).trim() : null;
     const services: string[] = Array.isArray(body.services) ? body.services : [];
+    const giftInputs: { slug: string; bundleId: string }[] = Array.isArray(body.gifts)
+      ? body.gifts
+          .map((g: any) => ({ slug: String(g?.slug || ""), bundleId: String(g?.bundleId || "") }))
+          .filter((g: any) => g.slug && g.bundleId)
+      : [];
     const promoCodeInput = !partner && body.promoCode ? String(body.promoCode).trim() : null;
 
     // بيانات العميل (للزائر، أو نسخة احتياطية للمسجّل)
@@ -110,7 +118,39 @@ export async function POST(request: Request) {
       }
     }
 
-    const total = Math.max(0, beforePromo - promoDiscount);
+    // ── هدايا البندلات — تُسعّر وتُتحقّق من جهة الخادم (نفس الموقع) ──
+    type GiftLine = { serviceId: number; slug: string; nameSnapshot: string | null; unit: number; bundleId: string; giftValue: number };
+    const giftLines: GiftLine[] = [];
+    if (!partner && giftInputs.length > 0) {
+      const bundleCache = new Map<string, Awaited<ReturnType<typeof getBundleById>>>();
+      const giftSlugs = [...new Set(giftInputs.map((g) => g.slug))];
+      const giftRows = await query<any>(
+        `SELECT s.id, s.slug, s.name, sp.price
+           FROM services s
+           LEFT JOIN service_prices sp ON sp.service_id = s.id AND sp.size_code = $2
+          WHERE s.surface = 'catalog' AND s.slug = ANY($1)`,
+        [giftSlugs, sizeCode]
+      );
+      const seen = new Set<string>();
+      for (const g of giftInputs) {
+        if (seen.has(g.slug)) continue;
+        const row = giftRows.find((r) => r.slug === g.slug);
+        if (!row) continue;
+        if (!bundleCache.has(g.bundleId)) bundleCache.set(g.bundleId, await getBundleById(g.bundleId));
+        const bundle = bundleCache.get(g.bundleId);
+        if (!bundle || !bundle.giftIds.includes(Number(row.id))) continue;
+        const full = Number(row.price) || 0;
+        const unit = giftChargeFor(full, bundle.giftPercent);
+        giftLines.push({
+          serviceId: row.id, slug: row.slug, nameSnapshot: row.name ? JSON.stringify(row.name) : null,
+          unit, bundleId: g.bundleId, giftValue: Math.max(0, full - unit),
+        });
+        seen.add(g.slug);
+      }
+    }
+    const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
+
+    const total = Math.max(0, beforePromo - promoDiscount) + giftsCharge;
     const paidImmediately = paymentMethod !== "cash";
     const paymentStatus = paidImmediately ? "paid" : "pending";
 
@@ -150,6 +190,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // عناصر الهدايا + سجلّها
+    for (const g of giftLines) {
+      await query(
+        `INSERT INTO booking_items
+           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
+         VALUES ($1,$2,$3,$4,$5,$6,1,$6,0)`,
+        [booking.id, g.serviceId, g.slug, g.nameSnapshot, sizeCode, g.unit]
+      );
+      await query(
+        `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
+         VALUES ($1,$2,$3,$4)`,
+        [booking.id, g.bundleId, g.serviceId, g.giftValue]
+      );
+    }
+
     if (promoCode) {
       await recordRedemption({
         promoId, code: promoCode, bookingId: booking.id, userId,
@@ -182,7 +237,7 @@ export async function POST(request: Request) {
       } catch (e) { console.error("whatsapp enqueue failed:", e); }
     }
 
-    return NextResponse.json({ ok: true, reference: booking.reference, total, commissionTotal });
+    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, commissionTotal });
   } catch (err) {
     console.error("POST /api/admin/bookings/create failed:", err);
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });
