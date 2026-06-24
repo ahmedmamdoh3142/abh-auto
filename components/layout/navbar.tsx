@@ -268,7 +268,7 @@ function AccountMenu({ member }: { member: Member }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.97 }}
             transition={{ duration: 0.22, ease: EASE }}
-            className="absolute end-0 mt-3 w-72 overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/96 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+            className="absolute end-0 mt-3 w-72 overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/95 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
           >
             <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-platinum/30 to-transparent" />
 

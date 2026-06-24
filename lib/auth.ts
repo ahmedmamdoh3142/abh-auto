@@ -9,7 +9,7 @@ import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 
 const SESSION_COOKIE = "abh_session";
-const SESSION_DAYS = 30; // مدة صلاحية الجلسة
+const SESSION_DAYS = 150; // مدة صلاحية الجلسة
 
 // ── كلمات المرور ───────────────────────────────────────────
 // نخزّن hash فقط، أبدًا النص الصريح. cost=12 توازن جيد بين الأمان والسرعة.

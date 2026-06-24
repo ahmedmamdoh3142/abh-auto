@@ -30,6 +30,7 @@ export const navLinks = [
   { key: 'services', href: '/services' },
   { key: 'projects', href: '/projects' },
   { key: 'about', href: '/about' },
+  { key: 'offers', href: '/offers' },
   { key: 'contact', href: '/contact' },
   { key: 'booking', href: '/booking' },
 ] as const;

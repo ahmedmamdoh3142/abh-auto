@@ -35,7 +35,6 @@ const T = {
   titleA: { en: 'Jeddah', ar: 'جدة' },
   titleB: { en: 'Al Tahlia', ar: 'التحلية' },
   subtitle: { en: 'The center sits on Prince Mohammed bin Abdulaziz Street.', ar: 'المركز في شارع الأمير محمد بن عبد العزيز.' },
-  hoursTitle: { en: 'Opening hours', ar: 'مواعيد العمل' },
   directions: { en: 'Open in Maps', ar: 'افتح على الخريطة' },
   whatsapp: { en: 'WhatsApp', ar: 'واتساب' },
   call: { en: 'Call', ar: 'اتصال' },
@@ -82,25 +81,6 @@ export function Location() {
               <div className="flex flex-col gap-1">
                 {ADDRESS[isAr ? 'ar' : 'en'].map((line, i) => (
                   <span key={i} className={`text-sm leading-relaxed ${i === 0 ? 'font-medium text-ivory' : 'text-platinum/75'}`}>{line}</span>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* hours card */}
-            <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-80px' }}
-              transition={{ duration: 1, delay: 0.8 }} className="mt-7 overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.02]">
-              <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-3.5">
-                <Clock className="h-3.5 w-3.5 text-platinum/70" strokeWidth={1.7} />
-                <span className="text-[0.55rem] font-medium uppercase tracking-[0.4em] text-platinum/75">{L(T.hoursTitle)}</span>
-              </div>
-              <div className="divide-y divide-white/[0.06]">
-                {HOURS[isAr ? 'ar' : 'en'].map((row, i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                    <span className="text-sm text-ivory/85">{row.d}</span>
-                    <span className={`inline-flex items-center gap-2 font-mono text-xs tracking-[0.1em] ${row.open ? 'text-ivory' : 'text-[#c98a8a]'}`} dir="ltr">
-                      <span className={`h-1.5 w-1.5 rounded-full ${row.open ? 'bg-emerald-400/80' : 'bg-[#c98a8a]'}`} />{row.h}
-                    </span>
-                  </div>
                 ))}
               </div>
             </motion.div>

@@ -65,6 +65,7 @@ export interface BookingState {
   promoServiceIds: number[];
   promoPerService: Record<number, number>;
   whatsappOptIn: boolean;
+  gifts: { slug: string; bundleId: string; unit: number }[];
 }
 
 const INITIAL: BookingState = {
@@ -76,6 +77,7 @@ const INITIAL: BookingState = {
   promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
   promoServiceIds: [], promoPerService: {},
   whatsappOptIn: false,
+  gifts: [],
 };
 
 const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
@@ -189,9 +191,10 @@ export function BookingFlow({
     const tow = data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0;
     const beforePromo = services + tow;
     const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
-    const grand = Math.max(0, beforePromo - promoCut);
+    const giftsCharge = (data.gifts ?? []).reduce((s, g) => s + (g.unit || 0), 0);
+    const grand = Math.max(0, beforePromo - promoCut) + giftsCharge;
     return { services, tow, beforePromo, promoCut, grand, onReq, saved };
-  }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, SERVICES]);
+  }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, SERVICES]);
 
   const go = useCallback((to: number) => {
     setStep(to);
@@ -222,6 +225,7 @@ export function BookingFlow({
           towingCost: total.tow,
           towingAddress: data.towing ? data.towingAddress : null,
           services: data.services,
+          gifts: (data.gifts ?? []).map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
           promoCode: data.promoCode ?? null,
           name: data.name,
           phone: data.phone,

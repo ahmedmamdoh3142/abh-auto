@@ -43,6 +43,7 @@ export default function AdminShell({
       { href: "/admin/content", label: t("نصوص الصفحات", "Page content"), icon: Ic.type },
       { href: "/admin/services", label: t("الخدمات والأسعار", "Services & pricing"), icon: Ic.sliders },
       { href: "/admin/promos", label: t("أكواد الخصم", "Promo codes"), icon: Ic.clock },
+      { href: "/admin/offers", label: t("العروض والولاء", "Offers & loyalty"), icon: Ic.sparkle },
     ]},
   ];
 

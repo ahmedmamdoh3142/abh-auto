@@ -19,7 +19,7 @@ import {
   LayoutGrid, CalendarCheck, Car, UserRound, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowLeft, Clock, MapPin,
   ShieldCheck, CircleDot, Calendar, LogOut, CreditCard, Wallet, CalendarClock, Sparkles,
-  Gauge, Hourglass, History, KeyRound, Hash, Building2,
+  Gauge, Hourglass, History, KeyRound, Hash, Building2, Crown,
 } from 'lucide-react';
 
 import {
@@ -29,6 +29,7 @@ import type { DbColor } from '@/lib/booking-data-db';
 import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 import { useAuth, type Vehicle, type BookingRecord, type BookingStatus } from '@/components/shared/auth-provider';
 import { PartnerPortal } from '@/components/sections/account/partner-portal';
+import { MembershipPanel } from '@/components/sections/account/membership-panel';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -48,7 +49,7 @@ const STATUS_TONES: Record<BookingStatus, StatusTone> = {
   cancelled: { dot: '#c98a8a', glow: 'rgba(201,138,138,0.4)',  text: '#e7b4b4', border: 'rgba(124,26,26,0.4)',   bg: 'rgba(42,20,20,0.4)',     bar: 'linear-gradient(90deg,#7c1a1a,#c98a8a)' },
 };
 
-type SectionId = 'overview' | 'partner' | 'bookings' | 'garage' | 'profile';
+type SectionId = 'overview' | 'partner' | 'membership' | 'bookings' | 'garage' | 'profile';
 type Tr = ReturnType<typeof useTranslations>;
 type Mem = NonNullable<ReturnType<typeof useAuth>['member']>;
 
@@ -117,6 +118,7 @@ export function AccountView({ colors = [] }: { colors?: DbColor[] }) {
             >
               {section === 'overview' && <Overview t={t} tb={tb} isAr={isAr} member={member} colors={colors} onGo={setSection} onOpen={setDetailId} />}
               {section === 'partner' && <PartnerPortal />}
+              {section === 'membership' && <MembershipPanel />}
               {section === 'bookings' && <Bookings t={t} tb={tb} isAr={isAr} member={member} onOpen={setDetailId} />}
               {section === 'garage' && <Garage t={t} tb={tb} member={member} colors={colors} />}
               {section === 'profile' && <Profile t={t} tb={tb} isAr={isAr} member={member} />}
@@ -233,11 +235,14 @@ function SectionNav({ t, locale, section, setSection, isPartner }: { t: Tr; loca
   const router = useRouter();
   const items: { id: SectionId; icon: React.ElementType }[] = [
     { id: 'overview', icon: LayoutGrid },
-    ...(isPartner ? [{ id: 'partner' as SectionId, icon: Building2 }] : []),
+    ...(isPartner ? [{ id: 'partner' as SectionId, icon: Building2 }] : [{ id: 'membership' as SectionId, icon: Crown }]),
     { id: 'bookings', icon: CalendarCheck },
     { id: 'garage', icon: Car }, { id: 'profile', icon: UserRound },
   ];
-  const navLabel = (id: SectionId) => id === 'partner' ? (locale === 'ar' ? 'شركتي' : 'My company') : t(`nav.${id}`);
+  const navLabel = (id: SectionId) =>
+    id === 'partner' ? (locale === 'ar' ? 'شركتي' : 'My company')
+    : id === 'membership' ? (locale === 'ar' ? 'عضويتي' : 'Membership')
+    : t(`nav.${id}`);
   return (
     <div className="sticky top-[84px] z-30 border-y border-white/[0.06] bg-obsidian/70 backdrop-blur-xl">
       <div className="container">

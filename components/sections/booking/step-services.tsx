@@ -14,12 +14,14 @@
  *
  * ملاحظة: تعطيل backdrop-filter على كلاس glass الأب يتم في booking-flow عبر
  * media query (لأن glass خارج جذر هذا المكوّن).
+ *
+ * (عروض) أُضيفت تذكرة الكود التلقائي BookingPromoTicket أعلى الكروت.
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import {
-  Check, X, Star, Shield, Layers, Sun, Lock, Sparkles, Truck, Clock, ArrowUpRight,
+  Check, X, Star, Shield, Layers, Sun, Lock, Sparkles, Truck, Clock, ArrowUpRight, Gift,
 } from 'lucide-react';
 
 import {
@@ -31,6 +33,8 @@ import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 import { Heading } from './step-vehicle';
 import { MapPicker } from './map-picker';
+import { BookingPromoTicket } from './promo-ticket';
+import { useBundles, isTriggerService, unlockedBundles, GiftBadge, GiftPicker, type Bundle } from './gift-picker';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const CAT_ICONS: Record<string, React.ElementType> = {
@@ -83,6 +87,14 @@ export function StepServices({
 }) {
   const lite = useLiteFx();
 
+  const bundles = useBundles();
+  const [giftBundle, setGiftBundle] = useState<Bundle | null>(null);
+  const selectedIds = data.services
+    .map((sl) => SERVICES.find((s) => s.slug === sl)?.id)
+    .filter((x): x is number => typeof x === 'number');
+  const openBundles = unlockedBundles(bundles, selectedIds);
+  const gifts = data.gifts ?? [];
+
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
   const list = SERVICES.filter((s) => s.cat === data.activeCat);
@@ -101,6 +113,7 @@ export function StepServices({
   // ── كرت خدمة واحد — على lite يكون button عادي بلا أنيميشن (يمنع الاندفاع) ──
   const renderCard = (sv: DbServiceMeta, i: number) => {
     const on = data.services.includes(sv.slug);
+    const isTrigger = isTriggerService(bundles, sv.id);
     const price = dbPriceFor(sv, data.size);
     const oldPrice = dbOldPriceFor(sv, data.size);
     const off = dbDiscountPct(sv, data.size);
@@ -161,6 +174,7 @@ export function StepServices({
             <Chip icon={<Clock className="h-2.5 w-2.5" strokeWidth={1.8} />}>{sv.dur}</Chip>
           </div>
           <h4 className="font-display text-[1.35rem] uppercase leading-[1.05] text-ivory">{sv.name}</h4>
+          {isTrigger && <div className="mt-0.5"><GiftBadge isAr={isAr} /></div>}
           <p className="text-[0.74rem] leading-[1.5] text-platinum/60 line-clamp-2">{sv.desc}</p>
 
           <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-3.5">
@@ -189,6 +203,9 @@ export function StepServices({
   return (
     <div className={lite ? 'fx-lite' : undefined}>
       <Heading index="02" label={t('steps.services')} title={t('step2.heading')} sub={t('step2.subheading')} />
+
+      {/* (عروض) تذكرة الكود التلقائي العام — تظهر فقط لو فيه كود نشط معلّم auto_show */}
+      <BookingPromoTicket />
 
       {/* ── Dossier · atelier pass ── */}
       <motion.div
@@ -308,6 +325,27 @@ export function StepServices({
             <p className="mt-4 text-[0.7rem] text-steel">{t('step2.selectAtLeast')}</p>
           )}
 
+          {/* (عروض) بانر فتح الهدية — يظهر لما يختار خدمات مؤهِّلة كفاية */}
+          {openBundles.length > 0 && (
+            <button data-cursor="hover" onClick={() => setGiftBundle(openBundles[0])}
+              className="mt-5 flex w-full items-center justify-between gap-3 rounded-2xl border border-[#d9b25f]/40 bg-[#d9b25f]/[0.08] px-5 py-4 text-start transition-colors hover:border-[#d9b25f]/70">
+              <span className="inline-flex items-center gap-3">
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-full border border-[#d9b25f]/40 bg-[#d9b25f]/[0.12] text-[#e8d6a8]">
+                  <Gift className="h-4 w-4" strokeWidth={1.8} />
+                </span>
+                <span>
+                  <span className="block text-sm text-[#e8d6a8]">{isAr ? 'مبروك! فتحت هدية' : 'You unlocked a gift'}</span>
+                  <span className="block text-[0.66rem] text-platinum/55">
+                    {gifts.length > 0 ? (isAr ? 'اضغط لتغيير هديتك' : 'Tap to change your gift') : (isAr ? 'اضغط لاختيار هديتك' : 'Tap to choose your gift')}
+                  </span>
+                </span>
+              </span>
+              <span className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-[#e8d6a8]">
+                {gifts.length > 0 ? (isAr ? 'تغيير' : 'Change') : (isAr ? 'اختر' : 'Choose')}
+              </span>
+            </button>
+          )}
+
           {/* towing */}
           <div className="mt-10 overflow-hidden rounded-[22px] border border-white/[0.08] bg-white/[0.02]">
             <button
@@ -400,6 +438,19 @@ export function StepServices({
                     <span className="w-[22px]" />
                   </motion.div>
                 )}
+                {gifts.map((g) => {
+                  const m = SERVICES.find((s) => s.slug === g.slug);
+                  return (
+                    <motion.div key={`gift-${g.slug}`} {...(lite ? {} : { layout: true })} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5 text-sm">
+                      <span className="flex-1 inline-flex items-center gap-1.5 text-[#e8d6a8]"><Gift className="h-3 w-3" strokeWidth={1.8} />{m?.name ?? g.slug}</span>
+                      <span dir="ltr" className="font-display text-[#e8d6a8] tabular-nums">{g.unit === 0 ? (isAr ? 'هدية' : 'Gift') : currencyFmt(g.unit)}</span>
+                      <button data-cursor="hover" onClick={(e) => { e.stopPropagation(); set({ gifts: gifts.filter((x) => x.slug !== g.slug) }); }}
+                        className="grid h-[22px] w-[22px] flex-none place-items-center rounded-full border border-white/12 text-steel transition-all duration-200 hover:border-[#7c1a1a]/60 hover:text-[#c98a8a]">
+                        <X className="h-3 w-3" strokeWidth={1.8} />
+                      </button>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
             <div className="my-[18px] h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
@@ -426,6 +477,15 @@ export function StepServices({
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {giftBundle && (
+          <GiftPicker bundle={giftBundle} services={SERVICES} size={data.size} isAr={isAr}
+            chosenSlugs={gifts.map((g) => g.slug)}
+            onClose={() => setGiftBundle(null)}
+            onConfirm={(g) => { set({ gifts: g }); setGiftBundle(null); }} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

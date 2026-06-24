@@ -15,7 +15,7 @@ export async function GET() {
               COALESCE(c.label, pc.label) AS occasion
        FROM promo_codes pc
        LEFT JOIN promo_campaigns c ON c.id = pc.campaign_id
-       WHERE pc.recipient_user_id = $1 AND pc.campaign_id IS NOT NULL
+       WHERE pc.recipient_user_id = $1 
        ORDER BY pc.created_at DESC`,
       [user.id]
     );

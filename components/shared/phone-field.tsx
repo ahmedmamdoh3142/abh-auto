@@ -3,45 +3,41 @@
 /**
  * components/shared/phone-field.tsx
  * حقل تليفون موحّد: منتقي كود الدولة (افتراضي السعودية +966) + رقم + فاليديشن.
- * القيمة بتترجع وتتسجّل كنص واحد: "‎+966 5XXXXXXXX" (الكود + الرقم جنب بعض، نفس المكان).
+ * القيمة بتترجع وتتسجّل كنص واحد: "+966 5XXXXXXXX".
  *
- * طريقة الاستخدام:
- *   <PhoneField value={data.phone} onChange={(full) => set({ phone: full })}
- *               error={touched ? phoneError(data.phone) : null} />
- *
- * للفاليديشن من برّه (قبل الإرسال) استخدم phoneError(value) المُصدَّرة هنا.
+ * تحديث: البلاس هولدر للرقم بقى حسب الدولة المختارة (مثال سعودي افتراضيًا)
+ *        بدل أي مثال ثابت. وأُصلحت شفافية قائمة الدول (/97 → /95).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone, ChevronDown, Check, Search } from 'lucide-react';
 
-export type Country = { code: string; dial: string; ar: string; en: string; flag: string; min: number; max: number };
+export type Country = { code: string; dial: string; ar: string; en: string; flag: string; min: number; max: number; ex: string };
 
-/* قائمة مختصرة بالخليج + الأكثر استخدامًا (السعودية أولًا/افتراضية) */
+/* قائمة مختصرة بالخليج + الأكثر استخدامًا (السعودية أولًا/افتراضية). ex = مثال البلاس هولدر المحلّي. */
 export const COUNTRIES: Country[] = [
-  { code: 'SA', dial: '+966', ar: 'السعودية', en: 'Saudi Arabia', flag: '🇸🇦', min: 9, max: 9 },
-  { code: 'AE', dial: '+971', ar: 'الإمارات', en: 'United Arab Emirates', flag: '🇦🇪', min: 9, max: 9 },
-  { code: 'KW', dial: '+965', ar: 'الكويت', en: 'Kuwait', flag: '🇰🇼', min: 8, max: 8 },
-  { code: 'QA', dial: '+974', ar: 'قطر', en: 'Qatar', flag: '🇶🇦', min: 8, max: 8 },
-  { code: 'BH', dial: '+973', ar: 'البحرين', en: 'Bahrain', flag: '🇧🇭', min: 8, max: 8 },
-  { code: 'OM', dial: '+968', ar: 'عُمان', en: 'Oman', flag: '🇴🇲', min: 8, max: 8 },
-  { code: 'EG', dial: '+20', ar: 'مصر', en: 'Egypt', flag: '🇪🇬', min: 10, max: 10 },
-  { code: 'JO', dial: '+962', ar: 'الأردن', en: 'Jordan', flag: '🇯🇴', min: 9, max: 9 },
-  { code: 'LB', dial: '+961', ar: 'لبنان', en: 'Lebanon', flag: '🇱🇧', min: 7, max: 8 },
-  { code: 'IQ', dial: '+964', ar: 'العراق', en: 'Iraq', flag: '🇮🇶', min: 10, max: 10 },
-  { code: 'YE', dial: '+967', ar: 'اليمن', en: 'Yemen', flag: '🇾🇪', min: 9, max: 9 },
-  { code: 'SY', dial: '+963', ar: 'سوريا', en: 'Syria', flag: '🇸🇾', min: 9, max: 9 },
-  { code: 'SD', dial: '+249', ar: 'السودان', en: 'Sudan', flag: '🇸🇩', min: 9, max: 9 },
-  { code: 'MA', dial: '+212', ar: 'المغرب', en: 'Morocco', flag: '🇲🇦', min: 9, max: 9 },
-  { code: 'DZ', dial: '+213', ar: 'الجزائر', en: 'Algeria', flag: '🇩🇿', min: 9, max: 9 },
-  { code: 'TN', dial: '+216', ar: 'تونس', en: 'Tunisia', flag: '🇹🇳', min: 8, max: 8 },
-  { code: 'TR', dial: '+90', ar: 'تركيا', en: 'Turkey', flag: '🇹🇷', min: 10, max: 10 },
-  { code: 'GB', dial: '+44', ar: 'بريطانيا', en: 'United Kingdom', flag: '🇬🇧', min: 10, max: 10 },
-  { code: 'US', dial: '+1', ar: 'أمريكا', en: 'United States', flag: '🇺🇸', min: 10, max: 10 },
+  { code: 'SA', dial: '+966', ar: 'السعودية', en: 'Saudi Arabia', flag: '🇸🇦', min: 9, max: 9, ex: '5XX XXX XXX' },
+  { code: 'AE', dial: '+971', ar: 'الإمارات', en: 'United Arab Emirates', flag: '🇦🇪', min: 9, max: 9, ex: '5X XXX XXXX' },
+  { code: 'KW', dial: '+965', ar: 'الكويت', en: 'Kuwait', flag: '🇰🇼', min: 8, max: 8, ex: 'XXXX XXXX' },
+  { code: 'QA', dial: '+974', ar: 'قطر', en: 'Qatar', flag: '🇶🇦', min: 8, max: 8, ex: 'XXXX XXXX' },
+  { code: 'BH', dial: '+973', ar: 'البحرين', en: 'Bahrain', flag: '🇧🇭', min: 8, max: 8, ex: 'XXXX XXXX' },
+  { code: 'OM', dial: '+968', ar: 'عُمان', en: 'Oman', flag: '🇴🇲', min: 8, max: 8, ex: 'XXXX XXXX' },
+  { code: 'EG', dial: '+20', ar: 'مصر', en: 'Egypt', flag: '🇪🇬', min: 10, max: 10, ex: '1XX XXX XXXX' },
+  { code: 'JO', dial: '+962', ar: 'الأردن', en: 'Jordan', flag: '🇯🇴', min: 9, max: 9, ex: '7X XXX XXXX' },
+  { code: 'LB', dial: '+961', ar: 'لبنان', en: 'Lebanon', flag: '🇱🇧', min: 7, max: 8, ex: 'XX XXX XXX' },
+  { code: 'IQ', dial: '+964', ar: 'العراق', en: 'Iraq', flag: '🇮🇶', min: 10, max: 10, ex: '7XX XXX XXXX' },
+  { code: 'YE', dial: '+967', ar: 'اليمن', en: 'Yemen', flag: '🇾🇪', min: 9, max: 9, ex: 'XXX XXX XXX' },
+  { code: 'SY', dial: '+963', ar: 'سوريا', en: 'Syria', flag: '🇸🇾', min: 9, max: 9, ex: '9XX XXX XXX' },
+  { code: 'SD', dial: '+249', ar: 'السودان', en: 'Sudan', flag: '🇸🇩', min: 9, max: 9, ex: 'XX XXX XXXX' },
+  { code: 'MA', dial: '+212', ar: 'المغرب', en: 'Morocco', flag: '🇲🇦', min: 9, max: 9, ex: '6XX XXX XXX' },
+  { code: 'DZ', dial: '+213', ar: 'الجزائر', en: 'Algeria', flag: '🇩🇿', min: 9, max: 9, ex: '5XX XXX XXX' },
+  { code: 'TN', dial: '+216', ar: 'تونس', en: 'Tunisia', flag: '🇹🇳', min: 8, max: 8, ex: 'XX XXX XXX' },
+  { code: 'TR', dial: '+90', ar: 'تركيا', en: 'Turkey', flag: '🇹🇷', min: 10, max: 10, ex: '5XX XXX XXXX' },
+  { code: 'GB', dial: '+44', ar: 'بريطانيا', en: 'United Kingdom', flag: '🇬🇧', min: 10, max: 10, ex: 'XXXX XXXXXX' },
+  { code: 'US', dial: '+1', ar: 'أمريكا', en: 'United States', flag: '🇺🇸', min: 10, max: 10, ex: 'XXX XXX XXXX' },
 ];
 
-const DEFAULT = COUNTRIES[0];
+const DEFAULT = COUNTRIES[0]; // السعودية
 
-/* يفصل قيمة محفوظة ("+966 512345678") لكود + رقم */
 export function splitPhone(full: string): { country: Country; number: string } {
   const raw = (full || '').trim();
   if (raw) {
@@ -59,7 +55,6 @@ export function joinPhone(country: Country, number: string): string {
   return digits ? `${country.dial} ${digits}` : '';
 }
 
-/* فاليديشن: يرجّع true لو الرقم سليم لطول دولته */
 export function isValidPhone(full: string): boolean {
   const { country, number } = splitPhone(full);
   const len = number.replace(/[^\d]/g, '').length;
@@ -91,6 +86,9 @@ export function PhoneField({
     return !s || c.ar.includes(q) || c.en.toLowerCase().includes(s) || c.dial.includes(s) || c.code.toLowerCase().includes(s);
   });
 
+  // البلاس هولدر حسب الدولة المختارة (مثال محلّي صحيح) — يتجاهل أي مثال ثابت قديم.
+  const numPlaceholder = country.ex || placeholder || (isAr ? 'رقم الجوال' : 'Phone number');
+
   return (
     <div>
       <div dir="ltr" ref={ref} className="relative flex items-stretch gap-2">
@@ -104,7 +102,7 @@ export function PhoneField({
             <ChevronDown className={`h-3.5 w-3.5 text-platinum transition-transform duration-300 ${open ? 'rotate-180' : ''}`} strokeWidth={1.8} />
           </button>
           {open && (
-            <div className="absolute z-40 mt-2 max-h-72 w-[260px] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/97 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+            <div className="absolute z-40 mt-2 max-h-72 w-[260px] overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/95 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl">
               <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2.5">
                 <Search className="h-3.5 w-3.5 text-steel" strokeWidth={1.8} />
                 <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
@@ -135,9 +133,9 @@ export function PhoneField({
         {/* رقم التليفون */}
         <div className="relative flex-1">
           <Phone className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-platinum/60" strokeWidth={1.8} />
-          <input value={number} dir="ltr" inputMode="numeric" placeholder={placeholder || (isAr ? 'رقم الجوال' : 'Phone number')}
+          <input value={number} dir="ltr" inputMode="numeric" placeholder={numPlaceholder}
             onChange={(e) => update(country, e.target.value.replace(/[^\d]/g, '').slice(0, country.max))}
-            className={['w-full rounded-2xl border bg-white/[0.03] px-5 py-4 ps-11 text-sm text-ivory placeholder:text-steel/60 outline-none transition-all duration-300',
+            className={['w-full rounded-2xl border bg-white/[0.03] px-5 py-4 ps-11 text-sm text-ivory placeholder:text-steel/50 placeholder:tracking-[0.12em] outline-none transition-all duration-300',
               error ? 'border-[#7c1a1a]/70 focus:border-[#7c1a1a]' : 'border-white/12 focus:border-platinum/50 focus:bg-white/[0.05] focus:shadow-[0_0_0_3px_rgba(203,205,205,0.07)]'].join(' ')} />
         </div>
       </div>
