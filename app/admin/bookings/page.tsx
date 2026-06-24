@@ -1,7 +1,7 @@
 /**
  * app/admin/bookings/page.tsx — قائمة الحجوزات (SERVER).
- * تجلب الحجوزات + بيانات العميل (مستخدم مسجّل أو زائر) + الدفع + الخدمات بالأسعار
- * + الفروع/الألوان للعرض، وتمرّرها لـ BookingsClient.
+ * تجلب الحجوزات + بيانات العميل (بيانات الحجز لها الأولوية، ثم المستخدم المسجّل)
+ * + الدفع + الخدمات بالأسعار + الفروع/الألوان للعرض، وتمرّرها لـ BookingsClient.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -23,11 +23,12 @@ export default async function BookingsPage() {
             b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
             b.payment_method_code, b.payment_status, b.cancel_reason, b.notes,
             b.created_at,
-            -- بيانات العميل: المستخدم المسجّل له الأولوية، وإلا نستخدم بيانات الزائر المحفوظة
-            COALESCE(u.name,  b.customer_name)  AS customer_name,
-            COALESCE(u.phone, b.customer_phone) AS customer_phone,
-            COALESCE(u.email::text, b.customer_email) AS customer_email,
-            COALESCE(u.city_code, b.customer_city) AS customer_city,
+            -- بيانات العميل المُدخَلة في الحجز لها الأولوية (تدعم «احجز لصاحبك»)،
+            -- ونرجع لبيانات المستخدم المسجّل فقط لو الحجز ما فيهوش بيانات عميل.
+            COALESCE(b.customer_name,  u.name)        AS customer_name,
+            COALESCE(b.customer_phone, u.phone)       AS customer_phone,
+            COALESCE(b.customer_email, u.email::text) AS customer_email,
+            COALESCE(b.customer_city,  u.city_code)   AS customer_city,
             (b.user_id IS NULL) AS is_guest,
             COALESCE((
               SELECT json_agg(json_build_object(

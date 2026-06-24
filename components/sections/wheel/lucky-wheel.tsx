@@ -1,12 +1,10 @@
 'use client';
 
 /**
- * LuckyWheel — عجلة الحظ (نسخة سلفر فاخرة + لمسات أبهر).
- * Path: components/sections/wheel/lucky-wheel.tsx
- *
- * السيرفر هو اللي يحدّد الفائز (POST /api/wheel)؛ الواجهة بتلفّ للقطاع اللي رجع
- * وتكشف الكوبون. منطق اللف لم يتغيّر — التحديث بصري فقط (إطار معدني، نتوءات،
- * توهّج نابض، ومركز لامع) + استبدال الذهبي بالسلفر/البلاتينيوم.
+ * LuckyWheel — عجلة الحظ (سلفر فاخر). Path: components/sections/wheel/lucky-wheel.tsx
+ * إصلاح: الـviewBox كان بيقص الإطار المعدني من الأطراف → وسّعناه بحَشو (PAD)
+ * وخلّينا الـSVG overflow:visible، وحطّينا ظلًّا ثابتًا خلف العجلة (مش بيلفّ معاها).
+ * منطق اللف لم يتغيّر (السيرفر يحدّد الفائز).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -90,7 +88,8 @@ export function LuckyWheel() {
   }
   if (!data.active) return null;
 
-  const SIZE = 360, R = 168, CX = SIZE / 2, CY = SIZE / 2;
+  const SIZE = 360, R = 168, CX = SIZE / 2, CY = SIZE / 2, PAD = 28;
+  const VB = `${-PAD} ${-PAD} ${SIZE + PAD * 2} ${SIZE + PAD * 2}`;
   const nextDate = data.nextAt ? new Date(data.nextAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'long' }) : null;
   const needLogin = data.requireLogin && !data.loggedIn;
   const onCooldown = !needLogin && data.canSpin === false;
@@ -108,14 +107,17 @@ export function LuckyWheel() {
       <h2 className="mt-4 font-display text-[clamp(2rem,5vw,3rem)] font-light uppercase leading-none tracking-tight text-ivory">{title}</h2>
       <p className="mt-3 text-sm text-platinum/65">{subtitle}</p>
 
-      {/* العجلة */}
-      <div className="relative mt-9 grid place-items-center" style={{ width: SIZE, maxWidth: '92vw' }}>
-        {/* توهّج نابض خلف العجلة */}
+      {/* العجلة — حاوية أكبر شوية من الرسم عشان الظل والتوهّج ما يتقصّوش */}
+      <div className="relative mt-9 grid place-items-center" style={{ width: SIZE + 24, maxWidth: '94vw' }}>
+        {/* ظل ثابت خلف العجلة (لا يلفّ) */}
+        <span aria-hidden className="pointer-events-none absolute rounded-full"
+          style={{ inset: 14, boxShadow: '0 38px 80px -22px rgba(0,0,0,0.7)' }} />
+        {/* توهّج نابض */}
         <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 rounded-full"
           style={{ background: 'radial-gradient(closest-side, rgba(203,205,205,0.28), transparent 72%)', filter: 'blur(36px)', animation: idle ? 'abhWheelGlow 3.6s ease-in-out infinite' : 'none', opacity: idle ? undefined : 0.3 }} />
 
         {/* المؤشّر */}
-        <div className="absolute -top-1 z-20" aria-hidden style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,.6))' }}>
+        <div className="absolute z-20" aria-hidden style={{ top: -6, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,.6))' }}>
           <svg width="34" height="40" viewBox="0 0 34 40">
             <path d="M17 38 L3 8 Q17 0 31 8 Z" fill="url(#pg)" stroke="#0c0d0e" strokeWidth="1.5" />
             <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffffff" /><stop offset="1" stopColor="#9fa3a6" /></linearGradient></defs>
@@ -123,7 +125,7 @@ export function LuckyWheel() {
         </div>
 
         <motion.div className="relative aspect-square w-full" animate={{ rotate: rotation }} transition={{ duration: 4.6, ease: [0.12, 0.66, 0.12, 1] }}>
-          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full" style={{ filter: 'drop-shadow(0 30px 70px rgba(0,0,0,.55))' }}>
+          <svg viewBox={VB} className="h-full w-full" style={{ overflow: 'visible' }}>
             <defs>
               <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0" stopColor="#ffffff" /><stop offset="0.35" stopColor="#8a8d90" /><stop offset="0.5" stopColor="#e8e8e8" /><stop offset="0.7" stopColor="#6f7174" /><stop offset="1" stopColor="#ffffff" />
