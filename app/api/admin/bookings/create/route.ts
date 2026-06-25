@@ -3,6 +3,8 @@
  *
  * زي حجز الموقع بالظبط لكن:
  *   • يُنسب الحجز للعميل المختار (userId) لو مسجّل، أو يُحفظ كزائر ببياناته.
+ *   • (جديد) لو زائر ببيانات جديدة → نسجّله كعميل في users (lead capture) ونربط
+ *     الحجز بيه عشان يظهر في «العملاء» ويتاح للاستهداف لاحقًا — نفس منطق الموقع.
  *   • الأسعار تُحسب في الخادم حسب حجم السيارة (size) — لا نثق بأي سعر من الواجهة.
  *   • لو العميل المختار شركة (partner): تُطبّق أسعاره الخاصة وعمولته (تُجمّد).
  *   • هدايا البندلات (خدمة + هدية): تُسعّر وتُتحقّق من الخادم وتُسجّل في
@@ -10,6 +12,7 @@
  *   • الدفع: cash → pending (معلّق)، غيره → paid. والبرومو يتبع نفس قاعدة الدفع.
  */
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
@@ -18,6 +21,7 @@ import { getBundleById, giftChargeFor } from "@/lib/bundles";
 import { enqueueBookingConfirm, enqueueBookingReminder } from "@/lib/whatsapp";
 
 const SIZE_OK = new Set(["small", "medium", "large"]);
+const onlyDigits = (s: string | null | undefined) => (s || "").replace(/[^0-9]/g, "");
 
 export async function POST(request: Request) {
   try {
@@ -46,6 +50,12 @@ export async function POST(request: Request) {
     const towingMode = body.towingMode ? String(body.towingMode) : null;
     const towingAddress = body.towingAddress ? String(body.towingAddress).trim() : null;
     const services: string[] = Array.isArray(body.services) ? body.services : [];
+    // خدمات مؤقتة (يكتبها الأدمن لهذا الحجز فقط) — اسم + سعر، بدون ربط بخدمة دائمة.
+    const customItems: { name: string; price: number }[] = Array.isArray(body.customItems)
+      ? body.customItems
+          .map((c: any) => ({ name: String(c?.name || "").trim(), price: Math.max(0, Math.round(Number(c?.price) || 0)) }))
+          .filter((c: any) => c.name)
+      : [];
     const giftInputs: { slug: string; bundleId: string }[] = Array.isArray(body.gifts)
       ? body.gifts
           .map((g: any) => ({ slug: String(g?.slug || ""), bundleId: String(g?.bundleId || "") }))
@@ -60,8 +70,64 @@ export async function POST(request: Request) {
     const customerCity = body.city ? String(body.city).trim() : null;
     const whatsappOptIn = body.whatsappOptIn === true;
 
-    if (services.length === 0) return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
+    if (services.length === 0 && customItems.length === 0) return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
     if (!customerName && !userId) return NextResponse.json({ ok: false, error: "customer_required" }, { status: 400 });
+
+    // ════════════ التقاط العميل الزائر وتسجيله في users ════════════
+    // لو مفيش userId (زائر) وفيه تليفون/إيميل → نلاقيه أو ننشئه كعميل، ونربط
+    // الحجز بيه (effectiveUserId) عشان يظهر في «العملاء» وحجوزاته تتجمّع.
+    async function captureLeadCustomer(): Promise<string | null> {
+      const digits = onlyDigits(customerPhone);
+      const email = customerEmail ? customerEmail.toLowerCase() : null;
+
+      // موجود بنفس التليفون؟ (نحدّث الاسم لو كان فاضي)
+      if (digits) {
+        const r = await query<{ id: string; name: string | null }>(
+          `SELECT id, name FROM users WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g') = $1 LIMIT 1`,
+          [digits]
+        );
+        if (r[0]) {
+          if (!r[0].name && customerName) await query(`UPDATE users SET name = $2 WHERE id = $1`, [r[0].id, customerName]);
+          return r[0].id;
+        }
+      }
+      // موجود بنفس الإيميل؟
+      if (email) {
+        const r = await query<{ id: string }>(`SELECT id FROM users WHERE lower(email) = $1 LIMIT 1`, [email]);
+        if (r[0]) return r[0].id;
+      }
+      // أنشئه
+      const leadEmail = email || (digits ? `${digits}@lead.abh-auto.com` : null);
+      if (!leadEmail) return null;
+      const noLoginHash = `nologin:${randomBytes(24).toString("hex")}`;
+      try {
+        const ins = await query<{ id: string }>(
+          `INSERT INTO users (name, email, phone, city_code, password_hash, role)
+           VALUES ($1, $2, $3, $4, $5, 'member') RETURNING id`,
+          [customerName || "عميل", leadEmail, customerPhone, customerCity, noLoginHash]
+        );
+        return ins[0]?.id ?? null;
+      } catch (e: any) {
+        if (String(e?.code) !== "23505") throw e; // سباق إدخال → جِب الموجود
+        if (digits) {
+          const r = await query<{ id: string }>(
+            `SELECT id FROM users WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g') = $1 LIMIT 1`,
+            [digits]
+          );
+          if (r[0]) return r[0].id;
+        }
+        const r2 = await query<{ id: string }>(`SELECT id FROM users WHERE lower(email) = $1 LIMIT 1`, [leadEmail]);
+        return r2[0]?.id ?? null;
+      }
+    }
+
+    // userId الفعّال للحجز: المسجّل لو اختير، وإلا العميل الملتقَط (lead).
+    let effectiveUserId: string | null = userId;
+    let customerCaptured = false;
+    if (!userId && (onlyDigits(customerPhone) || customerEmail)) {
+      const leadId = await captureLeadCustomer().catch((e) => { console.error("lead capture failed:", e); return null; });
+      if (leadId) { effectiveUserId = leadId; customerCaptured = true; }
+    }
 
     // تكلفة النقل من القاعدة (لا نثق بقيمة من الواجهة)
     let towingCost = 0;
@@ -104,15 +170,24 @@ export async function POST(request: Request) {
     let promoKind: string | null = null;
     let promoDiscount = 0;
     let promoId: string | null = null;
+    let giftCouponServiceId: number | null = null; // كوبون هدية → خدمة تتضاف مجانًا
     if (promoCodeInput) {
       const promo = await getPromoByCode(promoCodeInput);
       if (promo) {
-        const invalid = await checkPromoValidity(promo, userId);
+        const invalid = await checkPromoValidity(promo, effectiveUserId);
         if (!invalid) {
-          const lines: PromoLine[] = items.filter((it) => it.unit > 0).map((it) => ({ serviceId: it.serviceId, unit: it.unit }));
-          const comp = computePromo(promo, lines, beforePromo);
-          if (!comp.error && comp.discount > 0) {
-            promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = comp.discount;
+          if (promo.kind === "gift_service" && promo.giftServiceId) {
+            // كوبون هدية: لا خصم — الخدمة تتضاف مجانًا (مع مراعاة الحد الأدنى لو موجود).
+            if (!(promo.minOrder > 0 && beforePromo < promo.minOrder)) {
+              promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = 0;
+              giftCouponServiceId = promo.giftServiceId;
+            }
+          } else {
+            const lines: PromoLine[] = items.filter((it) => it.unit > 0).map((it) => ({ serviceId: it.serviceId, unit: it.unit }));
+            const comp = computePromo(promo, lines, beforePromo);
+            if (!comp.error && comp.discount > 0) {
+              promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = comp.discount;
+            }
           }
         }
       }
@@ -149,8 +224,9 @@ export async function POST(request: Request) {
       }
     }
     const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
+    const customTotal = customItems.reduce((s, c) => s + c.price, 0);
 
-    const total = Math.max(0, beforePromo - promoDiscount) + giftsCharge;
+    const total = Math.max(0, beforePromo - promoDiscount) + giftsCharge + customTotal;
     const paidImmediately = paymentMethod !== "cash";
     const paymentStatus = paidImmediately ? "paid" : "pending";
 
@@ -168,7 +244,7 @@ export async function POST(request: Request) {
                $28, CASE WHEN $28 THEN now() ELSE NULL END, $29)
        RETURNING id, reference`,
       [
-        userId, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
+        effectiveUserId, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
         branchCode, date || null, time, subtotal,
         towingMode, towingCost, towingAddress, total, paymentMethod, paymentStatus,
         promoCode, promoDiscount, promoKind,
@@ -205,9 +281,41 @@ export async function POST(request: Request) {
       );
     }
 
+    // الخدمات المؤقتة — تُسجَّل كعناصر حجز بدون service_id (مرتبطة بهذا الحجز فقط).
+    for (const c of customItems) {
+      await query(
+        `INSERT INTO booking_items
+           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
+         VALUES ($1, NULL, 'custom', $2, $3, $4, 1, $4, 0)`,
+        [booking.id, JSON.stringify({ ar: c.name, en: c.name }), sizeCode, c.price]
+      );
+    }
+
+    // هدية كوبون عجلة الحظ — تُضاف كخدمة مجانية فوق الطلب (مش خصم).
+    if (giftCouponServiceId) {
+      const gr = await query<any>(
+        `SELECT id, slug, name FROM services WHERE id = $1 LIMIT 1`,
+        [giftCouponServiceId]
+      );
+      const g = gr[0];
+      if (g) {
+        await query(
+          `INSERT INTO booking_items
+             (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
+           VALUES ($1, $2, $3, $4, $5, 0, 1, 0, 0)`,
+          [booking.id, g.id, g.slug, g.name ? JSON.stringify(g.name) : null, sizeCode]
+        );
+        await query(
+          `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
+           VALUES ($1, NULL, $2, $3)`,
+          [booking.id, g.id, 0]
+        ).catch(() => {}); // لو العمود bundle_id لا يقبل NULL، نتجاهل (البند المجاني اتسجّل بالفعل)
+      }
+    }
+
     if (promoCode) {
       await recordRedemption({
-        promoId, code: promoCode, bookingId: booking.id, userId,
+        promoId, code: promoCode, bookingId: booking.id, userId: effectiveUserId,
         customerName, customerEmail,
         orderSubtotal: beforePromo, discountAmount: promoDiscount, orderTotal: total,
         paidImmediately,
@@ -225,19 +333,19 @@ export async function POST(request: Request) {
       try {
         await enqueueBookingConfirm({
           bookingId: booking.id, reference: booking.reference,
-          phone: customerPhone, name: customerName, userId: userId,
+          phone: customerPhone, name: customerName, userId: effectiveUserId,
         });
         if (date) {
           await enqueueBookingReminder({
             bookingId: booking.id, reference: booking.reference,
             phone: customerPhone, name: customerName,
-            scheduledDate: date, scheduledTime: time, userId: userId,
+            scheduledDate: date, scheduledTime: time, userId: effectiveUserId,
           });
         }
       } catch (e) { console.error("whatsapp enqueue failed:", e); }
     }
 
-    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, commissionTotal });
+    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal, customerCaptured });
   } catch (err) {
     console.error("POST /api/admin/bookings/create failed:", err);
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });

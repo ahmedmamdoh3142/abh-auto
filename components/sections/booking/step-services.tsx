@@ -33,7 +33,6 @@ import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 import { Heading } from './step-vehicle';
 import { MapPicker } from './map-picker';
-import { BookingPromoTicket } from './promo-ticket';
 import { useBundles, isTriggerService, unlockedBundles, GiftBadge, GiftPicker, type Bundle } from './gift-picker';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -203,9 +202,6 @@ export function StepServices({
   return (
     <div className={lite ? 'fx-lite' : undefined}>
       <Heading index="02" label={t('steps.services')} title={t('step2.heading')} sub={t('step2.subheading')} />
-
-      {/* (عروض) تذكرة الكود التلقائي العام — تظهر فقط لو فيه كود نشط معلّم auto_show */}
-      <BookingPromoTicket />
 
       {/* ── Dossier · atelier pass ── */}
       <motion.div

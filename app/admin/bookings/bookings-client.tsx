@@ -1,20 +1,15 @@
 "use client";
 /**
- * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v2
+ * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v3
  *
- * • ثنائية اللغة (ar/en) عبر prop `locale` — زيّ باقي صفحات الأدمن.
- * • عرضان: Grid (كروت سينمائية صورة السيارة خلفية الكرت) + List (صفوف كثيفة).
- * • هوفر على الكرت يكشف "دوسيه" تفاصيل كامل فوق الكرت بانسيابية (بيانات العميل،
- *   الخدمات، المراحل، وأكشنز سريعة) — مستوحى من لوحات Fortress/Bloomberg-terminal.
- *   وعلى الموبايل (لمس) الدوسيه يظهر أصلاً بدون hover: صورة-هيدر فوق + جسم واضح تحت.
- * • بوردر بلون الحالة (رمادي=قادم، برتقالي=قيد التنفيذ، أخضر=مكتمل، أحمر=ملغي).
- * • فرز + بحث + تصدير CSV + اتصال/واتساب سريع.
- * • مودال تفاصيل: بيانات العميل كاملة، خدمات بالأسعار، بايبلاين مراحل متزامن مع
- *   حساب العميل، إعادة جدولة (تقويم+مواعيد)، إلغاء بسبب اجباري، تأكيد دفع.
- * • الخدمات الهدية تظهر معلَّمة «هدية/مجانية» في الكرت والمودال.
+ * • فلتر «بانتظار الدفع» مضاف للتابات (يفلتر حسب حالة الدفع لا حالة الحجز).
+ * • نظام ألوان احترافي موحّد: مدفوع=أخضر، بانتظار الدفع=كهرماني فاقع، مُسترَد=رمادي.
+ * • تصدير فاتورة PDF فاخرة بهوية ABH AUTO (شعار + ألوان الشركة) لكل حجز.
+ * • عرضان: Grid (كروت سينمائية) + List (صفوف كثيفة) + بحث/فرز/CSV + مودال تفاصيل.
  */
 import React, { useMemo, useState } from "react";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
+import { exportBookingPdf } from "@/lib/admin/invoice-pdf";
 
 /* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
 function useMediaQuery(query: string) {
@@ -36,12 +31,14 @@ const STATUS: Record<string, { ar: string; en: string; color: string; soft: stri
   completed: { ar: "مكتمل",       en: "Completed",   color: "#3ecd8e", soft: "rgba(62,205,142,.5)",  glow: "rgba(62,205,142,.40)" },
   cancelled: { ar: "ملغي",        en: "Cancelled",   color: "#ef5a4d", soft: "rgba(239,90,77,.5)",   glow: "rgba(239,90,77,.40)" },
 };
-const PAY: Record<string, { ar: string; en: string; paid: boolean }> = {
-  paid:          { ar: "مدفوع",         en: "Paid",             paid: true },
-  pay_at_branch: { ar: "دفع بالفرع",    en: "Pay at branch",    paid: false },
-  pending:       { ar: "بانتظار الدفع", en: "Awaiting payment", paid: false },
-  refunded:      { ar: "مُسترَد",        en: "Refunded",         paid: false },
+/* ألوان الدفع — موحّدة واحترافية. الكهرماني الفاقع #ffb723 لِما بانتظار الدفع. */
+const PAY: Record<string, { ar: string; en: string; paid: boolean; color: string; soft: string }> = {
+  paid:          { ar: "مدفوع",         en: "Paid",             paid: true,  color: "#3ecd8e", soft: "rgba(62,205,142,.5)" },
+  pay_at_branch: { ar: "دفع بالفرع",    en: "Pay at branch",    paid: false, color: "#ffb723", soft: "rgba(255,183,35,.55)" },
+  pending:       { ar: "بانتظار الدفع", en: "Awaiting payment", paid: false, color: "#ffb723", soft: "rgba(255,183,35,.55)" },
+  refunded:      { ar: "مُسترَد",        en: "Refunded",         paid: false, color: "#9aa0a6", soft: "rgba(154,160,166,.5)" },
 };
+const PAY_FALLBACK = { color: "#ffb723", soft: "rgba(255,183,35,.55)" };
 const STAGES = [
   { ar: "تم الاستلام",   en: "Received" },
   { ar: "قيد العمل",     en: "In service" },
@@ -71,6 +68,7 @@ const I = {
   car: (s = 14) => mini(["M5 17a2 2 0 1 0 0-.01", "M19 17a2 2 0 1 0 0-.01", "M5 17H3v-5l2-4h11l3 4h1a1 1 0 0 1 1 1v4h-2", "M7 17h10"], s),
   tag: (s = 14) => mini(["M20.6 13.4 12 22l-9-9V3h10l8 8a2 2 0 0 1-.4 2.4z", "M7 7h.01"], s),
   gift: (s = 14) => mini(["M20 12v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9", "M2 7h20v5H2z", "M12 22V7", "M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z", "M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"], s),
+  pdf: (s = 14) => mini(["M14 3v4a1 1 0 0 0 1 1h4", "M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z", "M9 13h6", "M9 17h4"], s),
   chevL: (s = 16) => mini("M15 18l-6-6 6-6", s),
   chevR: (s = 16) => mini("M9 18l6-6-6-6", s),
   back: (s = 15) => mini(["M19 12H5", "M12 19l-7-7 7-7"], s),
@@ -189,9 +187,9 @@ function giftChipStyle(): React.CSSProperties {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats, onPdf }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
-  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false };
+  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
   const isCancelled = b.status === "cancelled";
   const [hover, setHover] = useState(false);
@@ -229,7 +227,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
         <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
       </div>
 
-      {/* سبيسر: على اللاب يدفع المحتوى لتحت، وعلى اللمس ارتفاع ثابت كهيدر للصورة */}
+      {/* سبيسر */}
       <div style={{ flex: touch ? "none" : 1, height: touch ? 92 : undefined }} />
 
       {/* أسفل: المحتوى الأساسي (يبهت عند الهوفر) — مخفي على اللمس لمنع التكرار */}
@@ -245,12 +243,12 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
             <div className="abh-num" dir="ltr" style={{ fontSize: 22, color: "#fff", lineHeight: 1.1 }}>{EGP(b.total)} <span style={{ fontSize: 11, color: "rgba(203,205,205,.7)" }}>{ccy}</span></div>
           </div>
           {!isCancelled && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 11px", fontSize: 10, color: pay.paid ? "#3ecd8e" : "#f0c069", background: "rgba(0,0,0,.5)", border: `1px solid ${pay.paid ? "rgba(62,205,142,.5)" : "rgba(240,192,105,.45)"}`, backdropFilter: "blur(8px)" }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}`, backdropFilter: "blur(8px)" }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
           )}
         </div>
       </div>
 
-      {/* ═══ دوسيه الهوفر (overlay على اللاب · in-flow ثابت على اللمس) ═══ */}
+      {/* ═══ دوسيه الهوفر ═══ */}
       <div style={{ position: touch ? "relative" : "absolute", inset: touch ? "auto" : 0, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, background: touch ? "linear-gradient(to top, rgba(6,7,9,.97) 62%, rgba(6,7,9,.78))" : "linear-gradient(to top, rgba(6,7,9,.97) 30%, rgba(6,7,9,.86) 60%, rgba(6,7,9,.55))", backdropFilter: "blur(3px)", opacity: reveal ? 1 : 0, transform: reveal ? "translateY(0)" : "translateY(14px)", pointerEvents: reveal ? "auto" : "none", transition: "opacity .4s var(--abh-ease), transform .45s var(--abh-ease)" }}>
         <h3 className="abh-display" style={{ margin: "0 0 3px", fontSize: 23, lineHeight: 1.05, color: "#fff", textTransform: "uppercase" }}>{b.vehicle}</h3>
         {b.plate && <div dir="ltr" style={{ fontSize: 11, color: "var(--abh-platinum)", marginBottom: 10 }}>{b.plate} · {b.size || "—"}</div>}
@@ -262,7 +260,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Ic.pin s={12} />{b.branch} · {fmtDate(b.date)} · {b.time}</span>
         </div>
 
-        {/* خدمات — العناصر الهدية بشارة ذهبية «هدية/مجانية» */}
+        {/* خدمات — العناصر الهدية بشارة ذهبية */}
         {b.services.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 11 }}>
             {b.services.slice(0, 4).map((s: any, j: number) => (
@@ -294,7 +292,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
         {/* إجمالي + شارة دفع */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div className="abh-num" dir="ltr" style={{ fontSize: 24, color: "#fff" }}>{EGP(b.total)} <span style={{ fontSize: 11, color: "rgba(203,205,205,.7)" }}>{ccy}</span></div>
-          {!isCancelled && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.paid ? "#3ecd8e" : "#f0c069", background: "rgba(0,0,0,.45)", border: `1px solid ${pay.paid ? "rgba(62,205,142,.5)" : "rgba(240,192,105,.45)"}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>}
+          {!isCancelled && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.45)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>}
         </div>
 
         {/* أكشنز سريعة */}
@@ -302,6 +300,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
           {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
           {isActive && <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>{Ic.check({ s: 14 })}{isAr ? "تقدّم" : "Advance"}</button>}
+          <button onClick={(e) => stop(e, () => onPdf(b))} title={isAr ? "فاتورة PDF" : "PDF invoice"} style={qIcon("#caa24f")}>{I.pdf(15)}</button>
           {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
           {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
         </div>
@@ -313,7 +312,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
 /* ═════════════════ صف القائمة (List view) ═════════════════ */
 function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
-  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false };
+  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   return (
     <div onClick={() => onOpen(b.id)} className="abh-lift abh-row" style={{ display: "grid", gridTemplateColumns: "auto 1.4fr 1.2fr 1fr auto auto", alignItems: "center", gap: 14, borderRadius: 16, border: "1px solid rgba(255,255,255,.07)", borderInlineStart: `3px solid ${st.color}`, background: "rgba(255,255,255,.02)", padding: "12px 16px", cursor: "pointer", animation: `abh-fadeUp .45s var(--abh-ease) ${i * 0.03}s both` }}>
       <span style={{ height: 46, width: 64, borderRadius: 10, flexShrink: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 400)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.7)" }} />
@@ -328,7 +327,7 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
       <div style={{ fontSize: 12, color: "var(--abh-platinum)" }}>{fmtDate(b.date)}<div style={{ fontSize: 11, color: "var(--abh-steel)" }}>{b.time} · {b.branch}</div></div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, color: st.color }}><span style={{ height: 7, width: 7, borderRadius: 999, background: st.color }} />{isAr ? st.ar : st.en}</span>
-        <span style={{ fontSize: 9.5, color: pay.paid ? "#3ecd8e" : "#f0c069" }}>{isAr ? pay.ar : pay.en}</span>
+        <span style={{ fontSize: 9.5, color: pay.color }}>{isAr ? pay.ar : pay.en}</span>
       </div>
       <div className="abh-num" dir="ltr" style={{ fontSize: 17, color: "var(--abh-ivory)", textAlign: "end", minWidth: 90 }}>{EGP(b.total)} <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{ccy}</span></div>
     </div>
@@ -336,11 +335,11 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
 }
 
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPdf }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
-  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false };
+  const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const live = b.status === "upcoming" || b.status === "active";
   const [rDate, setRDate] = useState(b.date);
   const [rTime, setRTime] = useState(b.time);
@@ -359,7 +358,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           <div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10.5, fontWeight: 600, color: st.color, background: "rgba(0,0,0,.5)", border: `1px solid ${st.color}` }}><span style={{ height: 7, width: 7, borderRadius: 999, background: st.color }} />{isAr ? st.ar : st.en}</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.paid ? "#3ecd8e" : "#f0c069", background: "rgba(0,0,0,.5)", border: `1px solid ${pay.paid ? "rgba(62,205,142,.5)" : "rgba(240,192,105,.45)"}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
               {b.isGuest && <span style={{ borderRadius: 999, padding: "5px 11px", fontSize: 10, color: "var(--abh-platinum)", background: "rgba(0,0,0,.5)", border: "1px solid rgba(203,205,205,.3)" }}>{T("زائر (بدون حساب)", "Guest (no account)")}</span>}
             </div>
             <div className="abh-display" style={{ fontSize: mobile ? 20 : 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
@@ -437,6 +436,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           )}
 
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
+            <Ghost icon={() => I.pdf(15)} onClick={() => onPdf(b)}>{T("فاتورة PDF", "PDF invoice")}</Ghost>
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onMutate(b.id, { action: "confirm_pay" })}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
             {live && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
             {live && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
@@ -533,10 +533,11 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     return d.toLocaleDateString(isAr ? "ar-EG" : "en-US", { weekday: "short", day: "numeric", month: "long" });
   };
 
-  const tabs: [string, string][] = [["all", T("الكل", "All")], ["upcoming", T("قادمة", "Upcoming")], ["active", T("قيد التنفيذ", "In progress")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
+  const tabs: [string, string][] = [["all", T("الكل", "All")], ["upcoming", T("قادمة", "Upcoming")], ["active", T("قيد التنفيذ", "In progress")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
-    for (const [k] of tabs) if (k !== "all") c[k] = list.filter((b) => b.status === k).length;
+    for (const [k] of tabs) if (k !== "all" && k !== "unpaid") c[k] = list.filter((b) => b.status === k).length;
+    c.unpaid = list.filter((b) => b.payment !== "paid" && b.status !== "cancelled").length;
     return c;
   }, [list]);
 
@@ -544,10 +545,13 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const unpaidCount = useMemo(() => list.filter((b) => b.payment !== "paid" && b.status !== "cancelled").length, [list]);
 
   const filtered = useMemo(() => {
-    let r = list.filter((b) =>
-      (tab === "all" || b.status === tab) &&
-      (q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase()))
-    );
+    let r = list.filter((b) => {
+      const matchTab = tab === "all" ? true
+        : tab === "unpaid" ? (b.payment !== "paid" && b.status !== "cancelled")
+        : b.status === tab;
+      const matchQ = q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase());
+      return matchTab && matchQ;
+    });
     if (sort === "soonest") r = [...r].sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
     else if (sort === "highest") r = [...r].sort((a, b) => (Number(b.total) || 0) - (Number(a.total) || 0));
     return r;
@@ -575,6 +579,13 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const call = (phone: string) => { window.location.href = `tel:${phone}`; };
   const whats = (phone: string) => { const p = String(phone).replace(/[^\d]/g, ""); window.open(`https://wa.me/${p}`, "_blank"); };
 
+  const downloadPdf = async (b: any) => {
+    try {
+      toast(T("بنحضّر الفاتورة…", "Preparing invoice…"));
+      await exportBookingPdf(b, { isAr, ccy });
+    } catch (e) { console.error("pdf failed:", e); toast(T("تعذّر إنشاء الـPDF", "Couldn't generate PDF"), "bad"); }
+  };
+
   const exportCsv = () => {
     const head = ["reference", "vehicle", "plate", "customer", "phone", "email", "city", "branch", "date", "time", "status", "payment", "total"];
     const rows = filtered.map((b) => [b.reference, b.vehicle, b.plate, b.customer, b.phone, b.email, b.city, b.branch, b.date, b.time, b.status, b.payment, b.total]
@@ -587,7 +598,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const stats = [
     { label: T("إجمالي الحجوزات", "Total bookings"), value: String(list.length) },
     { label: T("قيد التنفيذ", "In progress"), value: String(counts.active || 0), accent: "#f5993d" },
-    { label: T("بانتظار الدفع", "Awaiting payment"), value: String(unpaidCount), accent: unpaidCount ? "#f0c069" : undefined },
+    { label: T("بانتظار الدفع", "Awaiting payment"), value: String(unpaidCount), accent: unpaidCount ? "#ffb723" : undefined },
     { label: T("إيرادات محصّلة", "Collected revenue"), value: `${EGP(revenue)} ${ccy}`, accent: "#3ecd8e" },
   ];
 
@@ -613,7 +624,13 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
         <div style={{ display: "flex", gap: 4, borderRadius: 999, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 4, flexWrap: "wrap" }}>
           {tabs.map(([k, l]) => {
             const on = tab === k;
-            return <button key={k} onClick={() => setTab(k)} style={{ borderRadius: 999, padding: "9px 16px", fontSize: 11.5, letterSpacing: ".04em", color: on ? "#000" : "rgba(203,205,205,.7)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", border: "none", cursor: "pointer", transition: "all .25s var(--abh-ease)" }}>{l}<span style={{ marginInlineStart: 6, opacity: .6 }}>{counts[k] ?? 0}</span></button>;
+            const showAmber = k === "unpaid" && (counts.unpaid ?? 0) > 0;
+            return (
+              <button key={k} onClick={() => setTab(k)} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "9px 16px", fontSize: 11.5, letterSpacing: ".04em", color: on ? "#000" : (showAmber ? "#ffb723" : "rgba(203,205,205,.7)"), background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", border: "none", cursor: "pointer", transition: "all .25s var(--abh-ease)" }}>
+                {showAmber && !on && <span style={{ height: 6, width: 6, borderRadius: 999, background: "#ffb723", display: "inline-block" }} />}
+                {l}<span style={{ marginInlineStart: 6, opacity: on ? .6 : 1, color: on ? undefined : (showAmber ? "#ffb723" : "inherit") }}>{counts[k] ?? 0}</span>
+              </button>
+            );
           })}
         </div>
         <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 360 }}>
@@ -645,7 +662,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPdf={downloadPdf} />
           ))}
         </div>
       ) : (
@@ -654,7 +671,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
         </div>
       )}
 
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPdf={downloadPdf} />}
 
       <style>{`
         @media(min-width:680px){.abh-resched-grid{grid-template-columns:1fr 1fr!important}}

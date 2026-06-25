@@ -1,8 +1,11 @@
 "use client";
 /**
  * app/admin/offers/wheel-panel.tsx — إدارة عجلة الحظ (الإعدادات + القطاعات + الاحتمالات).
+ *
+ * (جديد) ترتيب القطاعات بالسحب والإفلات (drag & drop) — بتسحب الكرت وتفلته مكان
+ *   اللي عايزه، والترتيب بيتحفظ تلقائيًا. وفيه أزرار ▲▼ كمان للموبايل/اللمس.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, LocaleField, Selectbox, Chip, Modal, Confirm, useToast, Ic } from "@/components/admin/ui";
 import { emptyLoc, type Loc } from "@/lib/admin/i18n-json";
 import type { AdminSvc } from "./offers-hub";
@@ -28,6 +31,12 @@ export default function WheelPanel({ services, locale }: { services: AdminSvc[];
   const [savingCfg, setSavingCfg] = useState(false);
   const [editing, setEditing] = useState<Seg | null>(null);
   const [confirm, setConfirm] = useState<Seg | null>(null);
+
+  // سحب وإفلات
+  const [dragId, setDragId] = useState<number | "new" | null>(null);
+  const dragIndex = useRef<number | null>(null);
+  const segsRef = useRef<Seg[]>([]);
+  useEffect(() => { segsRef.current = segs; }, [segs]);
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +72,47 @@ export default function WheelPanel({ services, locale }: { services: AdminSvc[];
     } catch { toast(T("خطأ بالشبكة", "Network error"), "bad"); }
   };
 
+  // حفظ الترتيب: نحدّث sort لكل قطاع ونرسله (PUT) — بدون إعادة تحميل عشان السلاسة.
+  const persistOrder = async (list: Seg[]) => {
+    try {
+      await Promise.all(list.filter((s) => s.id).map((s) =>
+        fetch("/api/admin/wheel", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s) })
+      ));
+      toast(T("اتحفظ الترتيب", "Order saved"));
+    } catch { toast(T("فشل حفظ الترتيب", "Failed to save order"), "bad"); }
+  };
+
+  // أزرار ▲▼
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= segs.length) return;
+    const copy = [...segs];
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+    const updated = copy.map((s, k) => ({ ...s, sort: k }));
+    setSegs(updated);
+    persistOrder(updated);
+  };
+
+  // سحب وإفلات
+  const onDragStart = (i: number) => { dragIndex.current = i; setDragId(segs[i].id ?? "new"); };
+  const onDragEnterCard = (i: number) => {
+    const from = dragIndex.current;
+    if (from == null || from === i) return;
+    setSegs((prev) => {
+      const copy = [...prev];
+      const [m] = copy.splice(from, 1);
+      copy.splice(i, 0, m);
+      return copy;
+    });
+    dragIndex.current = i;
+  };
+  const onDragEndCard = () => {
+    dragIndex.current = null; setDragId(null);
+    const updated = segsRef.current.map((s, k) => ({ ...s, sort: k }));
+    setSegs(updated);
+    persistOrder(updated);
+  };
+
   if (loading || !cfg) return <Loading />;
   const cset = (p: Partial<Cfg>) => setCfg({ ...cfg, ...p });
   const kindLabel = (k: Seg["kind"]) => k === "promo_percent" ? T("خصم %", "% off") : k === "promo_fixed" ? T("مبلغ", "Fixed") : k === "gift_service" ? T("هدية", "Gift") : T("لا شيء", "Nothing");
@@ -93,7 +143,7 @@ export default function WheelPanel({ services, locale }: { services: AdminSvc[];
       {/* القطاعات */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <p style={{ color: "rgba(203,205,205,.65)", fontSize: 13, margin: 0 }}>
-          {T("الوزن = ثقل احتمال القطاع. النسبة المعروضة محسوبة من مجموع أوزان القطاعات المفعّلة.", "Weight = relative odds. Shown % is out of total active weight.")}
+          {T("اسحب الكروت لإعادة ترتيب القطاعات على العجلة. الوزن = ثقل احتمال القطاع.", "Drag cards to reorder wheel segments. Weight = relative odds.")}
         </p>
         <Pill icon={Ic.plus} onClick={() => setEditing(emptySeg())}>{T("قطاع جديد", "New segment")}</Pill>
       </div>
@@ -101,16 +151,42 @@ export default function WheelPanel({ services, locale }: { services: AdminSvc[];
       {segs.length === 0 && <Empty text={T("مفيش قطاعات. ضيف واحد.", "No segments. Add one.")} />}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
-        {segs.map((s) => {
+        {segs.map((s, idx) => {
           const pct = totalWeight > 0 && s.isActive ? Math.round((Math.max(0, s.weight) / totalWeight) * 100) : 0;
+          const dragging = dragId != null && (s.id ?? "new") === dragId;
           return (
-            <div key={s.id} style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,.09)", background: "rgba(255,255,255,.02)", padding: 16, opacity: s.isActive ? 1 : 0.55 }}>
+            <div key={s.id ?? `new-${idx}`}
+              draggable
+              onDragStart={() => onDragStart(idx)}
+              onDragEnter={() => onDragEnterCard(idx)}
+              onDragOver={(e) => e.preventDefault()}
+              onDragEnd={onDragEndCard}
+              style={{
+                borderRadius: 18, border: `1px solid ${dragging ? "rgba(217,178,95,.5)" : "rgba(255,255,255,.09)"}`,
+                background: dragging ? "rgba(217,178,95,.06)" : "rgba(255,255,255,.02)", padding: 16,
+                opacity: dragging ? 0.65 : (s.isActive ? 1 : 0.55), cursor: "grab", transition: "border-color .15s, background .15s",
+              }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  {/* مقبض السحب */}
+                  <span title={T("اسحب لإعادة الترتيب", "Drag to reorder")} style={{ display: "grid", placeItems: "center", color: "rgba(203,205,205,.5)", flex: "none", cursor: "grab" }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+                  </span>
                   <span style={{ height: 22, width: 22, borderRadius: 6, background: s.hex, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.25)", flex: "none" }} />
-                  <span style={{ fontSize: 15, color: "#f5f5f0" }}>{(isAr ? s.label?.ar : s.label?.en) || kindLabel(s.kind)}</span>
+                  <span style={{ fontSize: 15, color: "#f5f5f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(isAr ? s.label?.ar : s.label?.en) || kindLabel(s.kind)}</span>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  {/* ▲▼ للموبايل/اللمس */}
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <button onClick={() => move(idx, -1)} disabled={idx === 0} aria-label={T("لأعلى", "Up")}
+                      style={{ display: "grid", placeItems: "center", height: 17, width: 24, borderRadius: 6, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: idx === 0 ? "rgba(203,205,205,.25)" : "rgba(203,205,205,.8)", cursor: idx === 0 ? "default" : "pointer" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="m6 15 6-6 6 6"/></svg>
+                    </button>
+                    <button onClick={() => move(idx, 1)} disabled={idx === segs.length - 1} aria-label={T("لأسفل", "Down")}
+                      style={{ display: "grid", placeItems: "center", height: 17, width: 24, borderRadius: 6, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: idx === segs.length - 1 ? "rgba(203,205,205,.25)" : "rgba(203,205,205,.8)", cursor: idx === segs.length - 1 ? "default" : "pointer" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
                   <IconBtn icon={Ic.pencil} label={T("تعديل", "Edit")} solid onClick={() => setEditing({ ...s })} />
                   <IconBtn icon={Ic.trash} label={T("حذف", "Delete")} solid danger onClick={() => setConfirm(s)} />
                 </div>

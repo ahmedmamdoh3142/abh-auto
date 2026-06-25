@@ -5,8 +5,8 @@ import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
 
 // إعدادات المكافأة (عدّلها بحرية)
-export const REFERRER_PCT = 10; // خصم المُحيل
-export const REFERRED_PCT = 10; // خصم الصاحب
+export const REFERRER_PCT = 7; // خصم المُحيل
+export const REFERRED_PCT = 7; // خصم الصاحب
 export const REWARD_DAYS = 30;  // صلاحية الكوبون
 
 function rand(n = 3) { return randomBytes(n).toString("hex").toUpperCase(); }

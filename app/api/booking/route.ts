@@ -2,6 +2,8 @@
 // (+ partner pricing & commission + promo v2 + loyalty discount + pending-on-unpaid
 //  + التقاط العميل: لو بيانات العميل مختلفة عنك يتسجّل كعميل lead للاستهداف،
 //    لكن الحجز يفضل مربوطًا بحسابك أنت/الشريك كما هو.)
+//  + (جديد) كوبون هدية عجلة الحظ (kind=gift_service): يضيف الخدمة المُهداة
+//    مجانًا فوق الطلب بدل أي خصم.
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
@@ -57,8 +59,6 @@ export async function POST(request: Request) {
     }
 
     // ════════════ التقاط العميل للاستهداف (لا يغيّر ملكية الحجز) ════════════
-    // الحجز يفضل مربوطًا بحسابك/الشريك. لكن لو بيانات العميل مختلفة عنك (تليفون
-    // مختلف أساسًا) نسجّله كعميل lead في users عشان يكون متاح للاستهداف لاحقًا.
     const digits = onlyDigits(customerPhone);
     const selfDigits = onlyDigits(user?.phone);
     const usableEmail =
@@ -67,15 +67,14 @@ export async function POST(request: Request) {
         : null;
 
     const isDifferentPerson = (() => {
-      if (!user) return !!(digits || usableEmail);            // زائر بمعلومات تواصل
-      if (digits && selfDigits) return digits !== selfDigits;  // تليفون مختلف عنك
-      if (usableEmail && user.email) return true;              // إيميل مختلف عنك
+      if (!user) return !!(digits || usableEmail);
+      if (digits && selfDigits) return digits !== selfDigits;
+      if (usableEmail && user.email) return true;
       if (customerName && user.name) return customerName !== user.name.trim();
       return false;
     })();
 
     async function captureLeadCustomer(): Promise<void> {
-      // موجود بنفس التليفون؟ (تحديث الاسم لو كان فاضي) — وإلا أنشئه.
       if (digits) {
         const r = await query<{ id: string; name: string | null }>(
           `SELECT id, name FROM users WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g') = $1 LIMIT 1`,
@@ -100,7 +99,7 @@ export async function POST(request: Request) {
           [customerName || "عميل", leadEmail, customerPhone, customerCity, noLoginHash]
         );
       } catch (e: any) {
-        if (String(e?.code) !== "23505") throw e; // موجود مسبقًا (سباق) → تجاهل
+        if (String(e?.code) !== "23505") throw e;
       }
     }
 
@@ -159,21 +158,30 @@ export async function POST(request: Request) {
     let promoKind: string | null = null;
     let promoDiscount = 0;
     let promoId: string | null = null;
+    let giftCouponServiceId: number | null = null; // كوبون هدية → خدمة تتضاف مجانًا
 
     if (promoCodeInput) {
       const promo = await getPromoByCode(promoCodeInput);
       if (promo) {
         const invalid = await checkPromoValidity(promo, user?.id);
         if (!invalid) {
-          const lines: PromoLine[] = items
-            .filter((it) => it.unit > 0)
-            .map((it) => ({ serviceId: it.serviceId, unit: it.unit }));
-          const comp = computePromo(promo, lines, beforePromo);
-          if (!comp.error && comp.discount > 0) {
-            promoId = promo.id;
-            promoCode = promo.code;
-            promoKind = promo.kind;
-            promoDiscount = comp.discount;
+          if (promo.kind === "gift_service" && promo.giftServiceId) {
+            // كوبون هدية: لا خصم — الخدمة تتضاف مجانًا (مع مراعاة الحد الأدنى لو موجود).
+            if (!(promo.minOrder > 0 && beforePromo < promo.minOrder)) {
+              promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = 0;
+              giftCouponServiceId = promo.giftServiceId;
+            }
+          } else {
+            const lines: PromoLine[] = items
+              .filter((it) => it.unit > 0)
+              .map((it) => ({ serviceId: it.serviceId, unit: it.unit }));
+            const comp = computePromo(promo, lines, beforePromo);
+            if (!comp.error && comp.discount > 0) {
+              promoId = promo.id;
+              promoCode = promo.code;
+              promoKind = promo.kind;
+              promoDiscount = comp.discount;
+            }
           }
         }
       }
@@ -271,6 +279,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // ── هدية كوبون عجلة الحظ — خدمة مجانية فوق الطلب (مش خصم) ──
+    if (giftCouponServiceId) {
+      const gr = await query<any>(
+        `SELECT id, slug, name FROM services WHERE id = $1 LIMIT 1`,
+        [giftCouponServiceId]
+      );
+      const g = gr[0];
+      if (g) {
+        await query(
+          `INSERT INTO booking_items
+             (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
+           VALUES ($1, $2, $3, $4, $5, 0, 1, 0, 0)`,
+          [booking.id, g.id, g.slug, g.name ? JSON.stringify(g.name) : null, sizeCode]
+        );
+        await query(
+          `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
+           VALUES ($1, NULL, $2, $3)`,
+          [booking.id, g.id, 0]
+        ).catch(() => {}); // لو bundle_id لا يقبل NULL، يتجاهل — البند المجاني اتسجّل بالفعل
+      }
+    }
+
     if (promoCode) {
       await recordRedemption({
         promoId,
@@ -313,7 +343,7 @@ export async function POST(request: Request) {
       giftsCharge,
       isPartner: !!partner,
       commissionTotal,
-      customerCaptured, // ← اتسجّل العميل عندنا للاستهداف؟
+      customerCaptured,
     });
   } catch (err) {
     console.error("POST /api/booking failed:", err);

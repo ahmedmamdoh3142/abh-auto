@@ -1,7 +1,7 @@
 // lib/promo.ts — منطق أكواد الخصم (server-side). يُستخدم في API التحقق والحجز.
 import { query } from "@/lib/db";
 
-export type PromoKind = "percentage" | "fixed" | "service_percent" | "service_each";
+export type PromoKind = "percentage" | "fixed" | "service_percent" | "service_each" | "gift_service";
 
 export interface PromoServiceRule {
   serviceId: number;
@@ -25,6 +25,7 @@ export interface PromoCode {
   startsAt: string | null;
   expiresAt: string | null;
   services: PromoServiceRule[]; // للنوعين service_*
+  giftServiceId: number | null; // للنوع gift_service — الخدمة اللي تتضاف مجانًا
 }
 
 export type PromoError =
@@ -45,7 +46,7 @@ export async function getPromoByCode(codeInput: string): Promise<PromoCode | nul
     `SELECT id, code, kind, label, description,
             COALESCE(discount_percent,0) AS discount_percent,
             fixed_amount, min_order, max_uses, used_count,
-            per_user_limit, is_active, starts_at, expires_at
+            per_user_limit, is_active, starts_at, expires_at, gift_service_id
      FROM promo_codes WHERE lower(code) = lower($1) LIMIT 1`,
     [code]
   );
@@ -78,6 +79,7 @@ export async function getPromoByCode(codeInput: string): Promise<PromoCode | nul
       amountMode: s.amount_mode as "percent" | "fixed",
       value: Number(s.value) || 0,
     })),
+    giftServiceId: p.gift_service_id != null ? Number(p.gift_service_id) : null,
   };
 }
 
@@ -129,6 +131,11 @@ export function computePromo(
     return { ...empty, error: "min_order" };
   }
 
+  // ── كوبون هدية: لا يُحسب كخصم — الخدمة تُضاف كبند مجاني في راوت الحجز ──
+  if (p.kind === "gift_service") {
+    return { ...empty };
+  }
+
   const round = (n: number) => Math.max(0, Math.round(n));
 
   // ── نسبة على الإجمالي ──
@@ -170,8 +177,8 @@ export function computePromo(
       const rule = ruleMap.get(l.serviceId);
       if (!rule) continue;
       const cut = rule.amountMode === "fixed"
-        ? round(Math.min(rule.value, l.unit))
-        : round((l.unit * rule.value) / 100);
+        ? Math.max(0, Math.round(Math.min(rule.value, l.unit)))
+        : Math.max(0, Math.round((l.unit * rule.value) / 100));
       if (cut <= 0) continue;
       perService[l.serviceId] = (perService[l.serviceId] ?? 0) + cut;
       discount += cut;

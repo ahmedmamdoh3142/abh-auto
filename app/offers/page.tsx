@@ -1,28 +1,29 @@
 'use client';
 
 /**
- * OffersPage — صفحة العروض /offers (سلفر + أداء + تصميم باقات احترافي)
+ * OffersPage — صفحة العروض /offers
  * Path: app/[locale]/offers/page.tsx  (أو app/offers/page.tsx)
  *
- * تحديثات:
- *  • مسافات أقل بين الأقسام (إيقاع رأسي مضغوط).
- *  • سكشن الباقات أُعيد تصميمه: خطوتان واضحتان (١ اختر خدمة أساسية مطلوبة →
- *    ٢ استلم هديتك) + جريد كروت هدايا صغيرة احترافية (٣–٤ بالصف على اللاب).
- *  • أداء: العجلة/الإحالة بـ next/dynamic، صورة الهيرو priority، لا أنيميشن لانهائي ثقيل.
+ * الهيرو هنا مطابق تمامًا لهيرو صفحة الخدمات (ServicesHero) عشان كل الصفحات
+ * تبقى بنفس الشكل: نفس صورة الخلفية بـ priority، نفس الجزيئات (CSS keyframes)،
+ * نفس الـbadge، نفس مؤشّر «استكشف» — والكلام كلام العروض.
+ *
+ * باقي الصفحة محسّنة للأداء: لا parallax (يمنع forced reflow)، صورة الـCTA lazy،
+ * بلور زخرفي أصغر، والعجلة/الإحالة بـ next/dynamic.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLocale } from 'next-intl';
-import { Sparkles, Gift, Crown, ArrowUpRight, Check, Phone, Plus, Lock } from 'lucide-react';
+import { Sparkles, Gift, Crown, ArrowUpRight, Check, Phone, Plus } from 'lucide-react';
 
 import { currencyFmt } from '@/lib/booking-data';
 import { BookingPromoTicket } from '@/components/sections/booking/promo-ticket';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const HERO = '/images/cta-bg.webp';
+const HERO_IMAGE = '/images/hero-bg.webp'; // نفس صورة هيرو الخدمات
 const CTA_BG = '/images/cta-service.webp';
 
 const LuckyWheel = dynamic(
@@ -63,37 +64,8 @@ export default function OffersPage() {
 
   return (
     <main className="relative">
-      {/* ── Hero ── */}
-      <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pt-44">
-        <div aria-hidden className="absolute inset-0 -z-20">
-          <Image src={HERO} alt="" fill priority sizes="100vw" quality={45}
-            className="object-cover opacity-[0.14]" style={{ filter: 'grayscale(0.7) brightness(0.5) contrast(1.1)' }} />
-        </div>
-        <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/65 via-obsidian/35 to-obsidian" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[24rem] w-[24rem] -translate-x-1/2 rounded-full bg-platinum/[0.06] blur-[120px]" />
-        <div className="container">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE }}
-            className="mb-6 flex items-center justify-center gap-3 text-[0.6rem] uppercase tracking-[0.42em] text-platinum/70">
-            <span className="h-px w-10 bg-gradient-to-r from-transparent to-platinum/60" />
-            {T('نادي ABH للمكافآت', 'ABH Rewards')}
-            <span className="h-px w-10 bg-gradient-to-l from-transparent to-platinum/60" />
-          </motion.div>
-          <h1 className="font-display text-[clamp(2.6rem,7vw,5.5rem)] font-light uppercase leading-[0.95] tracking-tight">
-            <span className="block overflow-hidden">
-              <motion.span initial={{ y: '110%' }} animate={{ y: 0 }} transition={{ duration: 1, ease: EASE }} className="inline-block text-metallic">
-                {T('عناية تستحقها سيارتك', 'Rewards worthy of your car')}
-              </motion.span>
-            </span>
-          </h1>
-          <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.35, ease: EASE }}
-            className="mx-auto mt-5 max-w-[50ch] text-base leading-[1.9] text-platinum/70 md:text-lg">
-            {T('عجلة حظ أسبوعية، هدية مع كل باقة، وكوبونات خاصة — كلها في مكان واحد، ومصمَّمة تكافئ ولاءك وتدلّل سيارتك.',
-               'A weekly lucky wheel, a gift with every package, and private coupons — all in one place, crafted to reward your loyalty.')}
-          </motion.p>
-          <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 1.4, delay: 0.5, ease: EASE }}
-            className="mx-auto mt-8 h-px w-[min(420px,70%)] origin-center bg-gradient-to-r from-transparent via-platinum/40 to-transparent" />
-        </div>
-      </section>
+      {/* ── Hero (مطابق لهيرو الخدمات) ── */}
+      <OffersHero isAr={isAr} />
 
       {/* ── عجلة الحظ ── */}
       <section className="relative pb-12 pt-6 md:pb-16">
@@ -135,9 +107,141 @@ export default function OffersPage() {
         <div className="container"><ReferralPanel /></div>
       </section>
 
-      {/* ── CTA سينمائي ── */}
+      {/* ── CTA سينمائي (بدون parallax) ── */}
       <OffersCta T={T} />
     </main>
+  );
+}
+
+/* ════════════ الهيرو — نسخة طبق الأصل من ServicesHero ════════════ */
+function OffersHero({ isAr }: { isAr: boolean }) {
+  const particles = Array.from({ length: 20 }, (_, i) => ({
+    id: i,
+    left: (i * 53) % 100,
+    top: ((i * 37) % 80) + 10,
+    delay: (i % 7) * 0.5,
+    duration: 5 + (i % 5),
+  }));
+
+  return (
+    <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
+      <style>{`
+        .shero-particle{animation-name:sheroFloat;animation-timing-function:ease-out;animation-iteration-count:infinite;}
+        @keyframes sheroFloat{0%{opacity:0;transform:translateY(10px)}50%{opacity:.8}100%{opacity:0;transform:translateY(-100px)}}
+        .shero-scroll{animation:sheroScroll 2s ease-in-out infinite;}
+        @keyframes sheroScroll{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+        @media (prefers-reduced-motion: reduce){
+          .shero-particle{animation:none;opacity:.4}
+          .shero-scroll{animation:none}
+        }
+      `}</style>
+
+      {/* faint cinematic plate — عنصر الـLCP: priority بدل lazy */}
+      <div aria-hidden className="absolute inset-0 -z-20">
+        <Image
+          src={HERO_IMAGE}
+          alt=""
+          fill
+          priority
+          quality={40}
+          sizes="100vw"
+          className="object-cover opacity-[0.18]"
+          style={{ filter: 'grayscale(0.5) brightness(0.5) contrast(1.1)' }}
+        />
+      </div>
+      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-b from-obsidian/60 via-obsidian/30 to-obsidian" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        {particles.map((p) => (
+          <span
+            key={p.id}
+            className="shero-particle absolute h-0.5 w-0.5 rounded-full bg-platinum/50"
+            style={{
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="container">
+        {/* Eyebrow with badge — نفس شكل الخدمات، نص العروض */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: EASE }}
+          className="mb-7 flex items-center justify-center gap-3 text-[0.6rem] uppercase tracking-[0.42em] text-platinum/70"
+        >
+          <span className="h-px w-10 bg-gradient-to-r from-transparent to-platinum/60" />
+          <span className="inline-flex items-center gap-3 rounded-full border border-white/[0.08] bg-white/[0.025] px-5 py-2.5 backdrop-blur-md">
+            <Sparkles className="h-4 w-4 text-platinum/80" />
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.4em] text-platinum/80">
+              {isAr ? 'نادي ABH للمكافآت' : 'ABH Rewards'}
+            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          </span>
+          <span className="h-px w-10 bg-gradient-to-l from-transparent to-platinum/60" />
+        </motion.div>
+
+        {/* Main heading — سطرين بنفس معالجة الخدمات (نفس كلمات العروض) */}
+        <h1 className="font-display text-[clamp(2.8rem,8vw,6.5rem)] font-light leading-[0.95] tracking-tight">
+          <span className="block overflow-hidden">
+            <motion.span
+              initial={{ y: '110%' }}
+              animate={{ y: 0 }}
+              transition={{ duration: 1, ease: EASE }}
+              className="inline-block bg-gradient-to-b from-ivory via-platinum/90 to-ivory/60 bg-clip-text text-transparent"
+            >
+              {isAr ? 'عناية تستحقها' : 'Rewards worthy'}
+            </motion.span>
+          </span>
+          <span className="block overflow-hidden mt-1 md:mt-2">
+            <motion.span
+              initial={{ y: '110%' }}
+              animate={{ y: 0 }}
+              transition={{ duration: 1, delay: 0.2, ease: EASE }}
+              className="inline-block font-editorial italic text-platinum/85"
+            >
+              {isAr ? 'سيارتك.' : 'of your car.'}
+            </motion.span>
+          </span>
+        </h1>
+
+        {/* Subtitle — نص العروض */}
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.4, ease: EASE }}
+          className="pretty mx-auto mt-6 max-w-[50ch] text-base leading-[1.85] text-platinum/70 md:text-lg"
+        >
+          {isAr
+            ? 'عجلة حظ أسبوعية، هدية مع كل باقة، وكوبونات خاصة — كلها في مكان واحد، ومصمَّمة تكافئ ولاءك وتدلّل سيارتك.'
+            : 'A weekly lucky wheel, a gift with every package, and private coupons — all in one place, crafted to reward your loyalty.'}
+        </motion.p>
+
+        {/* Drawn baseline */}
+        <motion.div
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 1.4, delay: 0.55, ease: EASE }}
+          className="mx-auto mt-10 h-px w-[min(420px,70%)] origin-center bg-gradient-to-r from-transparent via-platinum/40 to-transparent"
+        />
+
+        {/* Scroll indicator — CSS bob */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2 }}
+          className="mt-16 flex flex-col items-center gap-3"
+        >
+          <span className="shero-scroll block h-12 w-px bg-gradient-to-b from-transparent via-platinum/50 to-transparent" />
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.5em] text-platinum/40">
+            {isAr ? 'استكشف' : 'Explore'}
+          </span>
+        </motion.div>
+      </div>
+    </section>
   );
 }
 
@@ -155,7 +259,7 @@ function SectionHead({ icon: Icon, eyebrow, title }: { icon: React.ElementType; 
   );
 }
 
-/* ════════════ بلوك الباقة: خطوة ١ (أساسي مطلوب) → خطوة ٢ (الهدايا جريد) ════════════ */
+/* ════════════ بلوك الباقة ════════════ */
 function BundleBlock({ b, i, isAr, T, nm }: {
   b: OBundle; i: number; isAr: boolean; T: (a: string, e: string) => string; nm: (s: Svc) => string;
 }) {
@@ -167,10 +271,9 @@ function BundleBlock({ b, i, isAr, T, nm }: {
 
   return (
     <motion.div initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: 0.55, delay: i * 0.06, ease: EASE }}
+      transition={{ duration: 0.55, delay: Math.min(i, 4) * 0.06, ease: EASE }}
       className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-white/[0.1] bg-gradient-to-br from-white/[0.055] via-white/[0.02] to-transparent p-6 md:p-8">
       <span aria-hidden className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-platinum/55 to-transparent" />
-      <span aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-platinum/[0.05] blur-3xl" />
 
       {/* رأس */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -181,7 +284,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
           <div>
             <h3 className="font-display text-2xl uppercase leading-none text-ivory">{title}</h3>
             <p className="mt-1.5 text-[0.72rem] text-platinum/60">
-              {T('اشترِ خدمة مؤهِّلة، والهدية عليناً.', 'Buy a qualifying service — the gift is on us.')}
+              {T('اشترِ خدمة مؤهِّلة، والهدية علينا.', 'Buy a qualifying service — the gift is on us.')}
             </p>
           </div>
         </div>
@@ -193,7 +296,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
       {/* خطوة ١ — خدمة أساسية مطلوبة */}
       <div className="mt-7 rounded-2xl border border-white/[0.08] bg-white/[0.015] p-4 md:p-5">
         <StepLabel n="1" text={T('اختر خدمتك الأساسية', 'Pick your base service')}
-          hint={T('مطلوبة لتفعيل الهدية', 'Required to unlock the gift')} req />
+          hint={T('مطلوبة لتفعيل الهدية', 'Required to unlock the gift')} req isAr={isAr} />
         <div className="mt-3.5 flex flex-wrap gap-2">
           {b.triggers.map((s) => (
             <span key={s.id} className="inline-flex items-center gap-2 rounded-xl border border-platinum/25 bg-platinum/[0.05] px-3 py-2 text-[0.78rem] text-ivory/90">
@@ -217,7 +320,7 @@ function BundleBlock({ b, i, isAr, T, nm }: {
       {/* خطوة ٢ — الهدايا (جريد) */}
       <div>
         <StepLabel n="2" text={T('استلم هديتك', 'Get your gift')}
-          hint={isFree ? T('مجانًا بالكامل', 'Completely free') : T(`بخصم ${b.giftPercent}%`, `${b.giftPercent}% off`)} />
+          hint={isFree ? T('مجانًا بالكامل', 'Completely free') : T(`بخصم ${b.giftPercent}%`, `${b.giftPercent}% off`)} isAr={isAr} />
         <div className="mt-3.5 grid grid-cols-2 gap-3">
           {b.gifts.map((g) => <GiftCard key={g.id} g={g} T={T} nm={nm} />)}
         </div>
@@ -241,12 +344,12 @@ function BundleBlock({ b, i, isAr, T, nm }: {
   );
 }
 
-function StepLabel({ n, text, hint, req }: { n: string; text: string; hint?: string; req?: boolean }) {
+function StepLabel({ n, text, hint, req, isAr }: { n: string; text: string; hint?: string; req?: boolean; isAr: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <span className="grid h-6 w-6 flex-none place-items-center rounded-full border border-platinum/45 bg-platinum/[0.1] font-display text-[0.7rem] text-platinum">{n}</span>
       <span className="text-[0.64rem] font-semibold uppercase tracking-[0.18em] text-ivory/90">{text}</span>
-      {req && <span className="rounded-full border border-platinum/30 bg-platinum/[0.06] px-2 py-0.5 text-[0.5rem] uppercase tracking-[0.14em] text-platinum/80">{'مطلوب'}</span>}
+      {req && <span className="rounded-full border border-platinum/30 bg-platinum/[0.06] px-2 py-0.5 text-[0.5rem] uppercase tracking-[0.14em] text-platinum/80">{isAr ? 'مطلوب' : 'Required'}</span>}
       {hint && <span className="text-[0.62rem] text-platinum/50">· {hint}</span>}
     </div>
   );
@@ -257,10 +360,10 @@ function GiftCard({ g, T, nm }: { g: Svc; T: (a: string, e: string) => string; n
   const free = (g.charge ?? 0) === 0;
   const off = g.price > 0 ? Math.round((1 - (g.charge ?? 0) / g.price) * 100) : 0;
   return (
-    <div className="group/g relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] transition-all duration-400 hover:-translate-y-1 hover:border-platinum/35 hover:bg-white/[0.03]">
+    <div className="group/g relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] transition-colors duration-300 hover:border-platinum/35 hover:bg-white/[0.03]">
       <div className="relative h-24 overflow-hidden md:h-28">
         {g.image
-          ? <span className="absolute inset-0 bg-cover bg-center grayscale-[0.15] transition-transform duration-700 group-hover/g:scale-110" style={{ backgroundImage: `url('${g.image}')` }} />
+          ? <span className="absolute inset-0 bg-cover bg-center grayscale-[0.15]" style={{ backgroundImage: `url('${g.image}')` }} />
           : <span className="absolute inset-0 grid place-items-center bg-white/[0.04] text-platinum/40"><Gift className="h-6 w-6" /></span>}
         <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#0a0b0c] via-[#0a0b0c]/30 to-transparent" />
         <span className="absolute end-2 top-2 rounded-full border border-platinum/40 bg-obsidian/70 px-2 py-0.5 text-[0.52rem] font-semibold uppercase tracking-[0.12em] text-platinum backdrop-blur-sm">
@@ -278,25 +381,19 @@ function GiftCard({ g, T, nm }: { g: Svc; T: (a: string, e: string) => string; n
   );
 }
 
-/* ════════════ CTA سينمائي ════════════ */
+/* ════════════ CTA (خلفية ثابتة، lazy، بدون parallax) ════════════ */
 function OffersCta({ T }: { T: (a: string, e: string) => string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const bgY = useTransform(scrollYProgress, [0, 1], ['-8%', '8%']);
-  const bgScale = useTransform(scrollYProgress, [0, 0.5, 1], [1.06, 1, 1.06]);
-
   return (
-    <section ref={ref} className="relative isolate mt-4 flex min-h-[62svh] items-center overflow-hidden">
-      <motion.div className="absolute inset-0 -z-30" style={{ y: bgY, scale: bgScale }}>
-        <Image src={CTA_BG} alt="" fill sizes="100vw" quality={50} className="object-cover object-center" style={{ filter: 'grayscale(0.4) brightness(0.5)' }} />
-      </motion.div>
-      <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_center,transparent_0%,#000_85%)]" />
-      <div className="absolute inset-0 -z-20 bg-gradient-to-b from-obsidian/70 via-obsidian/45 to-obsidian/95" />
-      <div className="grid-lines absolute inset-0 -z-10 opacity-25" />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.05] blur-[130px]" />
+    <section className="relative isolate mt-4 flex min-h-[62svh] items-center overflow-hidden">
+      <div className="absolute inset-0 -z-30">
+        <Image src={CTA_BG} alt="" fill loading="lazy" sizes="100vw" quality={40} className="object-cover object-center" style={{ filter: 'grayscale(0.4) brightness(0.5)' }} />
+      </div>
+      <div aria-hidden className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_center,transparent_0%,#000_85%)]" />
+      <div aria-hidden className="absolute inset-0 -z-20 bg-gradient-to-b from-obsidian/70 via-obsidian/45 to-obsidian/95" />
+      <div aria-hidden className="grid-lines absolute inset-0 -z-10 opacity-25" />
 
       <div className="container relative z-10 py-16 text-center md:py-20">
-        <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-80px' }} transition={{ duration: 0.8, ease: EASE }}
+        <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-80px' }} transition={{ duration: 0.7, ease: EASE }}
           className="flex items-center justify-center gap-3 text-[0.6rem] uppercase tracking-[0.45em] text-platinum/70">
           <span className="h-px w-12 bg-gradient-to-r from-transparent to-platinum/60" />
           <Crown className="h-3.5 w-3.5 text-platinum" strokeWidth={1.7} />{T('عضوية بمستويات', 'Tiered membership')}
@@ -312,14 +409,13 @@ function OffersCta({ T }: { T: (a: string, e: string) => string }) {
              'Each membership tier unlocks a standing discount and exclusive perks. See your tier, rewards, and coupons in one place.')}
         </p>
 
-        <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-80px' }} transition={{ duration: 0.9, delay: 0.2, ease: EASE }}
-          className="mt-9 flex flex-wrap items-center justify-center gap-5">
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-5">
           <ChromeButton href="/account">{T('شوف عضويتي', 'View my membership')}</ChromeButton>
           <GlassButton href="/booking"><Phone className="h-3.5 w-3.5" strokeWidth={1.6} />{T('احجز الآن', 'Book now')}</GlassButton>
-        </motion.div>
+        </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-10 h-32 bg-gradient-to-b from-transparent to-obsidian" />
+      <div aria-hidden className="absolute inset-x-0 bottom-0 z-10 h-32 bg-gradient-to-b from-transparent to-obsidian" />
     </section>
   );
 }
@@ -327,14 +423,10 @@ function OffersCta({ T }: { T: (a: string, e: string) => string }) {
 function ChromeButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link href={href} data-cursor="hover" className="group relative inline-block">
-      <span aria-hidden className="absolute -inset-3 rounded-full bg-gradient-to-r from-platinum/50 via-ivory/40 to-platinum/50 opacity-0 blur-2xl transition-opacity duration-700 group-hover:opacity-100" />
       <span aria-hidden className="absolute -inset-px rounded-full bg-gradient-to-br from-ivory/80 via-platinum/40 to-ivory/50" />
-      <span className="relative inline-flex items-center gap-3 rounded-full bg-gradient-to-br from-ivory via-platinum to-ivory/95 px-10 py-5 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-obsidian shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_22px_70px_-15px_rgba(203,205,205,0.65)] transition-all duration-500 group-hover:-translate-y-0.5">
+      <span className="relative inline-flex items-center gap-3 rounded-full bg-gradient-to-br from-ivory via-platinum to-ivory/95 px-10 py-5 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-obsidian shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_22px_70px_-15px_rgba(203,205,205,0.65)] transition-transform duration-500 group-hover:-translate-y-0.5">
         {children}
         <ArrowUpRight className="h-4 w-4 transition-transform duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={2.2} />
-      </span>
-      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
-        <span className="absolute -inset-y-2 -left-3/4 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-0 transition-all duration-1000 group-hover:left-[120%] group-hover:opacity-100" />
       </span>
     </Link>
   );
@@ -366,11 +458,8 @@ function BundleSkeleton() {
   return (
     <div className="space-y-6">
       <div className="mx-auto h-7 w-64 animate-pulse rounded-full bg-white/[0.06]" />
-      <div className="rounded-[28px] border border-white/[0.06] bg-white/[0.02] p-8">
-        <div className="h-6 w-48 animate-pulse rounded-full bg-white/[0.06]" />
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-white/[0.04]" />)}
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-80 animate-pulse rounded-[28px] bg-white/[0.04]" />)}
       </div>
     </div>
   );

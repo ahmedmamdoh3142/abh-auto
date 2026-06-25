@@ -2,6 +2,10 @@
 // السيرفر هو اللي يختار القطاع (weighted) ويصدّر كوبونًا فريدًا للفائز ويسجّل اللفّة.
 // الكوبون يتسجّل في promo_codes كـ recipient_user_id (شخصي، مرة واحدة) فيتحقّق
 // تلقائيًا عبر منطق البرومو الموجود، ويظهر في «أكوادي» في البروفايل.
+//
+// (إصلاح) قطاع الهدية gift_service: يُصدر كوبونًا نوعه 'gift_service' مربوطًا
+//   بالخدمة المُهداة (gift_service_id) — فيُضيف الخدمة مجانًا فوق الطلب، بدل
+//   الخصم الثابت الخاطئ اللي كان بيطلّع «خصم 10 ريال».
 import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
 
@@ -111,12 +115,24 @@ async function issueCoupon(seg: WheelSegment, userId: string): Promise<{ code: s
 
   const expires = new Date(Date.now() + seg.couponDays * 86400 * 1000);
   const label = seg.label?.ar || seg.label?.en || "عجلة الحظ";
+
   let kind = "fixed";
   let discountPercent = 0;
   let fixedAmount = 0;
+  let giftServiceId: number | null = null;
 
-  if (seg.kind === "promo_percent") { kind = "percentage"; discountPercent = seg.value; }
-  else { kind = "fixed"; fixedAmount = seg.value; } // promo_fixed أو gift_service → خصم بقيمة الهدية
+  if (seg.kind === "promo_percent") {
+    kind = "percentage";
+    discountPercent = seg.value;
+  } else if (seg.kind === "promo_fixed") {
+    kind = "fixed";
+    fixedAmount = seg.value;
+  } else if (seg.kind === "gift_service") {
+    // هدية خدمة: كوبون يضيف الخدمة مجانًا (مش خصم). لازم خدمة محدّدة.
+    if (!seg.giftServiceId) return null; // قطاع هدية بدون خدمة → لا كوبون (نصيب أوفر)
+    kind = "gift_service";
+    giftServiceId = seg.giftServiceId;
+  }
 
   // كود فريد (مع إعادة محاولة بسيطة عند التصادم النادر).
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -125,9 +141,9 @@ async function issueCoupon(seg: WheelSegment, userId: string): Promise<{ code: s
       await query(
         `INSERT INTO promo_codes
            (code, kind, discount_percent, fixed_amount, min_order,
-            max_uses, per_user_limit, recipient_user_id, label, is_active, expires_at)
-         VALUES ($1,$2,$3,$4,$5, 1, 1, $6, $7, true, $8)`,
-        [code, kind, discountPercent, fixedAmount, seg.minOrder, userId, label, expires.toISOString()]
+            max_uses, per_user_limit, recipient_user_id, label, is_active, expires_at, gift_service_id)
+         VALUES ($1,$2,$3,$4,$5, 1, 1, $6, $7, true, $8, $9)`,
+        [code, kind, discountPercent, fixedAmount, seg.minOrder, userId, label, expires.toISOString(), giftServiceId]
       );
       return { code, expiresAt: expires.toISOString() };
     } catch (e: any) {

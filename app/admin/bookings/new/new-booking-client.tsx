@@ -6,11 +6,14 @@
  *   • عمود رئيسي: العميل → السيارة → الخدمات → الموعد والدفع.
  *   • عمود جانبي ثابت (sticky): ملخّص الحجز الحيّ + زر الإنشاء.
  *
+ * (بحث) الماركة والموديل بقوا combobox بسيرش (AdminSearchSelect) زي الموقع —
+ *   تكتب حرف فيتفلتر، والقائمة بـ Portal عشان ما تتقصّش جوّه الكرت.
+ *
  * (عروض) نفس فكرة الموقع: الخدمات المؤهِّلة لهدية تتعلّم بشارة، ولمّا تختار
  *   ما يكفي منها يظهر بانر «فتحت هدية» تفتح منه مودال اختيار الهدية. الهدية
  *   تتضاف للملخّص والإجمالي وتترسل للسيرفر اللي بيسجّلها.
  */
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { card, Pill, Ic, EGP, useToast, PageHeader, Field } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
@@ -127,6 +130,19 @@ export default function NewBookingClient({
     const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n;
   });
 
+  // ── خدمات مؤقتة (تُكتب يدويًا، لهذا الحجز فقط — لا تُحفظ كخدمة دائمة) ──
+  const [customItems, setCustomItems] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [cName, setCName] = useState("");
+  const [cPrice, setCPrice] = useState("");
+  const addCustom = () => {
+    const nm = cName.trim();
+    const pr = Math.max(0, Math.round(Number(cPrice) || 0));
+    if (!nm) return;
+    setCustomItems((prev) => [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: nm, price: pr }]);
+    setCName(""); setCPrice("");
+  };
+  const removeCustom = (id: string) => setCustomItems((prev) => prev.filter((c) => c.id !== id));
+
   // ── (عروض) البندلات والهدايا ──
   const bundles = useBundles();
   const [gifts, setGifts] = useState<ChosenGift[]>([]);
@@ -165,12 +181,13 @@ export default function NewBookingClient({
     }
     const tow = towMode ? (towing.find((t) => t.code === towMode)?.cost ?? 0) : 0;
     const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
-    return { svc, tow, giftsCharge, grand: svc + tow + giftsCharge, onReq };
-  }, [chosenServices, size, towMode, towing, gifts]);
+    const customTotal = customItems.reduce((s, c) => s + (c.price || 0), 0);
+    return { svc, tow, giftsCharge, customTotal, grand: svc + tow + giftsCharge + customTotal, onReq };
+  }, [chosenServices, size, towMode, towing, gifts, customItems]);
 
   const phoneOk = !phone.trim() || isValidPhone(phone);
   const customerOk = mode === "registered" ? !!userId : (!!name.trim() && !!phone.trim() && phoneOk);
-  const canSubmit = customerOk && !!brandId && !!model && chosen.size > 0
+  const canSubmit = customerOk && !!brandId && !!model && (chosen.size > 0 || customItems.length > 0)
     && !!branch && !!date && !!time && !!payment
     && (!towMode || towAddress.trim().length > 2) && !busy;
 
@@ -188,6 +205,7 @@ export default function NewBookingClient({
           branch, date, time, payment,
           towingMode: towMode || null, towingAddress: towMode ? towAddress : null,
           services: Array.from(chosen),
+          customItems: customItems.map((c) => ({ name: c.name, price: c.price })),
           gifts: gifts.map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
           promoCode: promo.trim() || null,
           whatsappOptIn: waOptIn,
@@ -196,7 +214,7 @@ export default function NewBookingClient({
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "fail");
       toast(T(`تم إنشاء الحجز ${j.reference}`, `Booking ${j.reference} created`));
-      setChosen(new Set()); setGifts([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
+      setChosen(new Set()); setGifts([]); setCustomItems([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
       setDate(""); setTime(""); setPromo(""); setTowMode(""); setTowAddress("");
       if (mode === "guest") { setName(""); setPhone(""); setEmail(""); setCity(""); }
       setUserId(""); setTouched(false);
@@ -241,28 +259,38 @@ export default function NewBookingClient({
             </div>
 
             {mode === "registered" && (
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ position: "relative", marginBottom: 8 }}>
-                  <span style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)" }}><Ic.search s={14} /></span>
-                  <input value={q} onChange={(e) => { setQ(e.target.value); setUserId(""); }} placeholder={T("ابحث بالاسم أو الإيميل…", "Search name or email…")} style={{ ...inp, paddingInlineStart: 36 }} />
+              userId ? (
+                // عميل مختار — القائمة اتقفلت ونعرض كرت مختصر مع زر «تغيير»
+                <div style={{ marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 12, border: "1px solid rgba(203,205,205,.4)", background: "rgba(203,205,205,.07)", padding: "12px 14px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <span style={{ display: "grid", placeItems: "center", height: 34, width: 34, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(203,205,205,.4)", background: "rgba(203,205,205,.1)", color: "var(--abh-ivory)" }}><Ic.users s={16} /></span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13.5, color: "var(--abh-ivory)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name || "—"}</span>
+                      <span dir="ltr" style={{ display: "block", fontSize: 11, color: "var(--abh-steel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[phone, email].filter(Boolean).join("  ·  ") || "—"}</span>
+                    </span>
+                  </span>
+                  <button onClick={() => setUserId("")} style={{ flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "var(--abh-platinum)", padding: "7px 14px", fontSize: 12, cursor: "pointer" }}>{T("تغيير", "Change")}</button>
                 </div>
-                <div style={{ maxHeight: 200, overflowY: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.15)" }}>
-                  {searching ? <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: "var(--abh-steel)" }}>{T("جارٍ البحث…", "Searching…")}</div>
-                    : users.length === 0 ? <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: "var(--abh-steel)" }}>{T("لا نتائج", "No results")}</div>
-                    : users.map((u) => {
-                      const on = userId === u.id;
-                      return (
-                        <button key={u.id} onClick={() => pickUser(u)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 12px", border: "none", borderBottom: "1px solid rgba(255,255,255,.04)", background: on ? "rgba(203,205,205,.1)" : "transparent", cursor: "pointer", textAlign: isAr ? "right" : "left" }}>
+              ) : (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ position: "relative", marginBottom: 8 }}>
+                    <span style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)" }}><Ic.search s={14} /></span>
+                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالاسم أو الإيميل أو التليفون…", "Search name, email or phone…")} style={{ ...inp, paddingInlineStart: 36 }} />
+                  </div>
+                  <div style={{ maxHeight: 200, overflowY: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.15)" }}>
+                    {searching ? <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: "var(--abh-steel)" }}>{T("جارٍ البحث…", "Searching…")}</div>
+                      : users.length === 0 ? <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: "var(--abh-steel)" }}>{T("لا نتائج", "No results")}</div>
+                      : users.map((u) => (
+                        <button key={u.id} onClick={() => pickUser(u)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 12px", border: "none", borderBottom: "1px solid rgba(255,255,255,.04)", background: "transparent", cursor: "pointer", textAlign: isAr ? "right" : "left" }}>
                           <span style={{ minWidth: 0 }}>
                             <span style={{ display: "block", fontSize: 13, color: "var(--abh-ivory)" }}>{u.name}</span>
-                            <span dir="ltr" style={{ display: "block", fontSize: 10.5, color: "var(--abh-steel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
+                            <span dir="ltr" style={{ display: "block", fontSize: 10.5, color: "var(--abh-steel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[u.phone, u.email].filter(Boolean).join("  ·  ")}</span>
                           </span>
-                          {on && <Ic.check s={15} />}
                         </button>
-                      );
-                    })}
+                      ))}
+                  </div>
                 </div>
-              </div>
+              )
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 14 }}>
@@ -302,18 +330,20 @@ export default function NewBookingClient({
             <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 14, marginBottom: 14 }}>
               <div style={{ minWidth: 0 }}>
                 <Field label={T("الماركة", "Brand")}>
-                  <select value={brandId} onChange={(e) => { setBrandId(e.target.value); setModel(""); }} style={{ ...inp, cursor: "pointer" }}>
-                    <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الماركة", "Select brand")}</option>
-                    {brands.map((b) => <option key={b.id} value={b.id} style={{ background: "#0c0d0e" }}>{b.name}</option>)}
-                  </select>
+                  <AdminSearchSelect isAr={isAr} inp={inp} value={brandId}
+                    placeholder={T("اختر الماركة", "Select brand")}
+                    searchPlaceholder={T("ابحث عن ماركة…", "Search brand…")}
+                    options={brands.map((b) => ({ value: b.id, label: b.name }))}
+                    onChange={(v) => { setBrandId(v); setModel(""); }} />
                 </Field>
               </div>
               <div style={{ minWidth: 0 }}>
                 <Field label={T("الموديل", "Model")}>
-                  <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!brand} style={{ ...inp, cursor: brand ? "pointer" : "not-allowed", opacity: brand ? 1 : .5 }}>
-                    <option value="" style={{ background: "#0c0d0e" }}>{T("اختر الموديل", "Select model")}</option>
-                    {(brand?.models ?? []).map((m) => <option key={m.name} value={m.name} style={{ background: "#0c0d0e" }}>{m.name}</option>)}
-                  </select>
+                  <AdminSearchSelect isAr={isAr} inp={inp} value={model} disabled={!brand}
+                    placeholder={T("اختر الموديل", "Select model")}
+                    searchPlaceholder={T("ابحث عن موديل…", "Search model…")}
+                    options={(brand?.models ?? []).map((m) => ({ value: m.name, label: m.name }))}
+                    onChange={(v) => setModel(v)} />
                 </Field>
               </div>
             </div>
@@ -392,7 +422,7 @@ export default function NewBookingClient({
                 </div>
               ))}
             </div>
-            {touched && chosen.size === 0 && <Err>{T("اختر خدمة واحدة على الأقل", "Select at least one service")}</Err>}
+            {touched && chosen.size === 0 && customItems.length === 0 && <Err>{T("اختر خدمة واحدة على الأقل أو أضف خدمة مؤقتة", "Select at least one service or add a custom one")}</Err>}
 
             {/* (عروض) بانر فتح الهدية */}
             {openBundles.length > 0 && (
@@ -408,6 +438,37 @@ export default function NewBookingClient({
                 <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", color: GIFT_GOLD }}>{gifts.length > 0 ? T("تغيير", "Change") : T("اختر", "Choose")}</span>
               </button>
             )}
+
+            {/* خدمة مؤقتة — تُكتب يدويًا لهذا الحجز فقط (لا تُحفظ كخدمة دائمة) */}
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
+              <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 4 }}>{T("خدمة مؤقتة (اختياري)", "Custom service (optional)")}</div>
+              <div style={{ fontSize: 11, color: "var(--abh-steel)", marginBottom: 10 }}>{T("تنضاف لهذا الحجز فقط — مش هتتسجّل كخدمة دائمة.", "Added to this booking only — won’t be saved as a permanent service.")}</div>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "minmax(0,1fr) 130px auto", gap: 8 }}>
+                <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder={T("اسم الخدمة", "Service name")}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} style={inp} />
+                <input value={cPrice} onChange={(e) => setCPrice(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder={T("السعر", "Price")} dir="ltr"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} style={{ ...inp, textAlign: "center" }} />
+                <button onClick={addCustom} disabled={!cName.trim()} style={{ borderRadius: 12, border: "1px solid rgba(203,205,205,.4)", background: cName.trim() ? "rgba(203,205,205,.1)" : "rgba(255,255,255,.02)", color: cName.trim() ? "var(--abh-ivory)" : "var(--abh-steel)", padding: "11px 16px", fontSize: 13, fontWeight: 600, cursor: cName.trim() ? "pointer" : "not-allowed", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  {Ic.plus({ s: 15 })}{T("إضافة", "Add")}
+                </button>
+              </div>
+
+              {customItems.length > 0 && (
+                <div className="abh-col" style={{ gap: 8, marginTop: 12 }}>
+                  {customItems.map((c) => (
+                    <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: "10px 13px" }}>
+                      <span style={{ minWidth: 0, fontSize: 13.5, color: "var(--abh-ivory)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                        <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: "var(--abh-ivory)" }}>{EGP(c.price)} <span style={{ fontSize: 11, color: "var(--abh-steel)" }}>{ccy}</span></span>
+                        <button onClick={() => removeCustom(c.id)} aria-label="remove" style={{ display: "grid", placeItems: "center", height: 28, width: 28, borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "transparent", color: "var(--abh-steel)", cursor: "pointer" }}>
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
               <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("النقل / السطحة (اختياري)", "Towing (optional)")}</div>
@@ -482,8 +543,8 @@ export default function NewBookingClient({
             {(date || time) && <SummaryRow label={T("الموعد", "When")} value={`${date || "—"} ${time || ""}`.trim()} isAr={isAr} ltr />}
 
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.07)" }}>
-              <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 10 }}>{T("الخدمات", "Services")} ({chosen.size})</div>
-              {chosenServices.length === 0 ? (
+              <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 10 }}>{T("الخدمات", "Services")} ({chosen.size + customItems.length})</div>
+              {chosenServices.length === 0 && customItems.length === 0 ? (
                 <div style={{ fontSize: 12, color: "var(--abh-steel)" }}>{T("لم تُختر خدمات بعد", "No services selected")}</div>
               ) : (
                 <div className="abh-col" style={{ gap: 7 }}>
@@ -507,6 +568,16 @@ export default function NewBookingClient({
                       </div>
                     );
                   })}
+                  {/* خدمات مؤقتة */}
+                  {customItems.map((c) => (
+                    <div key={`c-${c.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {c.name}
+                        <span style={{ flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", padding: "1px 6px", fontSize: 9, color: "var(--abh-steel)" }}>{T("مؤقتة", "Custom")}</span>
+                      </span>
+                      <span dir="ltr" className="abh-num" style={{ color: "var(--abh-ivory)", flexShrink: 0 }}>{EGP(c.price)}</span>
+                    </div>
+                  ))}
                   {/* سطور الهدايا */}
                   {gifts.map((g) => {
                     const svc = services.find((x) => x.slug === g.slug);
@@ -556,6 +627,84 @@ export default function NewBookingClient({
 
       <style>{NB_CSS}</style>
     </div>
+  );
+}
+
+/* ─── Combobox بسيرش (Portal، ما يتقصّش جوّه الكرت) ─── */
+function AdminSearchSelect({ value, options, placeholder, searchPlaceholder, onChange, disabled, isAr, inp }: {
+  value: string;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  searchPlaceholder?: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  isAr: boolean;
+  inp: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const selected = options.find((o) => o.value === value);
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return term ? options.filter((o) => o.label.toLowerCase().includes(term)) : options;
+  }, [q, options]);
+
+  const updateRect = () => { const r = btnRef.current?.getBoundingClientRect(); if (r) setRect(r); };
+  useEffect(() => {
+    if (!open) return;
+    setQ("");
+    updateRect();
+    const h = () => updateRect();
+    window.addEventListener("scroll", h, true);
+    window.addEventListener("resize", h);
+    return () => { window.removeEventListener("scroll", h, true); window.removeEventListener("resize", h); };
+  }, [open]);
+
+  const choose = (v: string) => { onChange(v); setOpen(false); };
+
+  return (
+    <>
+      <button ref={btnRef} type="button" disabled={disabled} onClick={() => !disabled && setOpen((o) => !o)}
+        style={{ ...inp, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .5 : 1 }}>
+        <span style={{ color: selected ? "var(--abh-ivory)" : "var(--abh-steel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected?.label ?? placeholder}</span>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} style={{ flexShrink: 0, color: "var(--abh-platinum)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+
+      {open && !disabled && rect && createPortal(
+        <>
+          <div onMouseDown={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
+          <div style={{ position: "fixed", zIndex: 201, top: rect.bottom + 6, insetInlineStart: rect.left, width: rect.width, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "#0c0d0e", boxShadow: "0 30px 80px -30px rgba(0,0,0,.9)", overflow: "hidden" }}>
+            {/* خانة البحث */}
+            <div style={{ padding: 8, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", insetInlineStart: 10, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)" }}><Ic.search s={14} /></span>
+                <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder ?? placeholder}
+                  style={{ ...inp, padding: "9px 12px", paddingInlineStart: 34 }} />
+              </div>
+            </div>
+            {/* القائمة */}
+            <div style={{ maxHeight: 240, overflowY: "auto", padding: 6 }}>
+              {filtered.length === 0 ? (
+                <div style={{ padding: 14, textAlign: "center", fontSize: 12, color: "var(--abh-steel)" }}>{isAr ? "لا نتائج" : "No results"}</div>
+              ) : filtered.map((o) => {
+                const on = o.value === value;
+                return (
+                  <button key={o.value} onMouseDown={(e) => { e.preventDefault(); choose(o.value); }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "9px 12px", borderRadius: 9, border: "none", background: on ? "rgba(203,205,205,.1)" : "transparent", color: on ? "var(--abh-ivory)" : "var(--abh-platinum)", cursor: "pointer", textAlign: isAr ? "right" : "left", fontSize: 13.5 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
+                    {on && <Ic.check s={14} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
 }
 

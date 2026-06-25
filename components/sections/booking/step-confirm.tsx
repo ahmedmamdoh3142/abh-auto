@@ -6,11 +6,13 @@
  * حسب نوع الكود (إجمالي/مبلغ/خدمات محددة) ويرجّع الخصم لكل خدمة.
  *
  * (عروض) أُضيف عرض الهدايا في الدوسيه وفي التفصيل (breakdown) — مجانًا أو بخصم.
+ * (جديد) كوبون هدية عجلة الحظ (gift_service): يضيف خدمة مجانًا — يظهر في صندوق
+ *   الكود كـ«هديتك … مجانًا»، والخدمة نفسها تتسجّل في الخادم وقت تأكيد الحجز.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift } from 'lucide-react';
+import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift, Sparkles } from 'lucide-react';
 
 import {
   BRANDS, PAYMENT_METHODS, PAYMENT_DISABLED, branchLabel, currencyFmt,
@@ -224,6 +226,17 @@ export function StepConfirm({
                 </div>
               )}
 
+              {/* سطر هدية الكوبون (مجانًا) */}
+              {data.promoCode && data.promoKind === 'gift_service' && (
+                <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
+                  <span className="inline-flex items-center gap-1.5 text-[#e8d6a8]">
+                    <Gift className="h-3 w-3" strokeWidth={2} />
+                    {isAr ? 'هدية الكود' : 'Code gift'}
+                  </span>
+                  <span dir="ltr" className="font-display tabular-nums text-[#e8d6a8]">{isAr ? 'مجانًا' : 'Free'}</span>
+                </div>
+              )}
+
               <div className="flex items-end justify-between">
                 <span className="text-[0.6rem] uppercase tracking-[0.26em] text-steel">{total.onReq && total.grand === 0 ? t('step4.estimate') : t('step4.total')}</span>
                 <span className="flex items-baseline gap-1.5">
@@ -271,15 +284,42 @@ function promoLabel(isAr: boolean, data: BookingState): string {
   return isAr ? `خصم الكود (${code}) على خدمات محددة` : `Promo (${code}) — selected services`;
 }
 
-/* ── كود الخصم: إدخال + تحقق يحسب الخصم الفعلي على بنود الطلب ── */
+/* ── كود الخصم: تذكرة عرض تلقائية فاخرة + إدخال + تحقق ── */
+const promoFmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n));
+
+type AutoPromo = {
+  code: string;
+  kind: 'percentage' | 'fixed';
+  discountPercent: number;
+  fixedAmount: number;
+  minOrder: number;
+  label: string | null;
+};
+
 function PromoField({ isAr, data, set, services, t }: {
   isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void;
   services: DbServiceMeta[]; t: ReturnType<typeof useTranslations>;
 }) {
+  const ccy = t('currency');
   const [code, setCode] = useState(data.promoCode ?? '');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const applied = !!data.promoCode && data.promoDiscount > 0;
+  const [giftName, setGiftName] = useState<string | null>(null); // اسم خدمة الهدية (للنوع gift_service)
+  const [autoPromo, setAutoPromo] = useState<AutoPromo | null>(null); // العرض التلقائي (تذكرة)
+  // الكوبون «مُطبَّق» لو فيه خصم > 0 أو كان كوبون هدية (الخصم صفر لكنه مفعّل).
+  const applied = !!data.promoCode && (data.promoDiscount > 0 || data.promoKind === 'gift_service');
+
+  // تذكرة العرض التلقائي (كود نشط معلّم auto_show لسطح الحجز)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const j = await fetch('/api/promo/auto?surface=booking').then((r) => r.json());
+        if (alive && j?.ok && j.promo) setAutoPromo(j.promo);
+      } catch { /* صامت */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const errMsg = (e: string) => {
     if (isAr) return e === 'not_found' ? 'كود غير صحيح'
@@ -309,8 +349,8 @@ function PromoField({ isAr, data, set, services, t }: {
     })
     .filter(Boolean) as { serviceId: number; unit: number }[];
 
-  const check = async () => {
-    const c = code.trim();
+  const run = async (raw: string) => {
+    const c = raw.trim();
     if (!c) return;
     setChecking(true); setError(null);
     try {
@@ -322,29 +362,53 @@ function PromoField({ isAr, data, set, services, t }: {
       });
       const j = await res.json();
       if (j?.ok) {
-        set({
-          promoCode: j.code,
-          promoKind: j.kind,
-          promoPercent: Number(j.discountPercent) || 0,
-          promoDiscount: Number(j.discount) || 0,
-          promoServiceIds: j.matchedServiceIds ?? [],
-          promoPerService: j.perService ?? {},
-        });
+        if (j.kind === 'gift_service') {
+          // كوبون هدية: لا خصم — الخدمة تتضاف مجانًا (تتسجّل في الخادم وقت الحجز).
+          const gn = j.giftService
+            ? ((isAr ? j.giftService.name?.ar : j.giftService.name?.en) || j.giftService.name?.ar || j.giftService.name?.en || (isAr ? 'هدية' : 'Gift'))
+            : (isAr ? 'هدية' : 'Gift');
+          setGiftName(gn);
+          set({
+            promoCode: j.code, promoKind: j.kind,
+            promoPercent: 0, promoDiscount: 0,
+            promoServiceIds: [], promoPerService: {},
+          });
+        } else {
+          setGiftName(null);
+          set({
+            promoCode: j.code,
+            promoKind: j.kind,
+            promoPercent: Number(j.discountPercent) || 0,
+            promoDiscount: Number(j.discount) || 0,
+            promoServiceIds: j.matchedServiceIds ?? [],
+            promoPerService: j.perService ?? {},
+          });
+        }
         setError(null);
       } else {
+        setGiftName(null);
         set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
         setError(errMsg(j?.error ?? 'server_error'));
       }
     } catch {
+      setGiftName(null);
       set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
       setError(errMsg('server_error'));
     } finally { setChecking(false); }
   };
 
+  const check = () => run(code);
+  const applyTicket = () => { if (!autoPromo) return; setCode(autoPromo.code); run(autoPromo.code); };
+
   const clear = () => {
     set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {} });
-    setCode(''); setError(null);
+    setCode(''); setError(null); setGiftName(null);
   };
+
+  const isGift = data.promoKind === 'gift_service';
+  const autoValue = autoPromo
+    ? (autoPromo.kind === 'fixed' ? `${promoFmt(autoPromo.fixedAmount)} ${ccy}` : `${autoPromo.discountPercent}%`)
+    : '';
 
   return (
     <div className="mt-5">
@@ -353,12 +417,66 @@ function PromoField({ isAr, data, set, services, t }: {
         {isAr ? 'كود خصم' : 'Promo code'}
       </div>
 
+      {/* تذكرة العرض التلقائي — تُطبَّق بضغطة، وتختفي بعد التطبيق */}
+      <AnimatePresence>
+        {autoPromo && !applied && (
+          <motion.button
+            type="button" onClick={applyTicket} disabled={checking} data-cursor="hover"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.5, ease: EASE }}
+            className="promo-ticket group/tk relative mb-3 flex w-full items-stretch overflow-hidden rounded-2xl border border-platinum/30 bg-gradient-to-br from-platinum/[0.1] via-platinum/[0.03] to-transparent text-start transition-all duration-300 hover:-translate-y-0.5 hover:border-platinum/60">
+            <span aria-hidden className="promo-ticket-shimmer pointer-events-none absolute inset-0" />
+            <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-platinum/50 to-transparent" />
+            {/* قصّتا التذكرة */}
+            <span aria-hidden className="absolute -start-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-obsidian" />
+            <span aria-hidden className="absolute -end-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-obsidian" />
+
+            {/* اليسار: العرض */}
+            <span className="relative flex flex-1 items-center gap-3.5 p-4">
+              <span className="grid h-12 w-12 flex-none place-items-center rounded-xl border border-platinum/30 bg-platinum/[0.1]">
+                <Sparkles className="h-5 w-5 text-platinum" strokeWidth={1.5} />
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-[0.5rem] uppercase tracking-[0.2em] text-platinum/65">
+                  <Tag className="h-2.5 w-2.5" strokeWidth={1.8} />{autoPromo.label || (isAr ? 'عرض حصري لحجز الموقع' : 'Exclusive online offer')}
+                </span>
+                <span className="mt-1 flex items-baseline gap-1.5">
+                  <span dir="ltr" className="font-display text-[1.7rem] leading-none text-ivory tabular-nums">{autoValue}</span>
+                  <span className="text-[0.55rem] uppercase tracking-[0.14em] text-platinum/55">{isAr ? 'خصم' : 'off'}</span>
+                </span>
+                {autoPromo.minOrder > 0 && (
+                  <span className="mt-1 block text-[0.6rem] text-platinum/45">
+                    {isAr ? `بحد أدنى ${promoFmt(autoPromo.minOrder)} ${ccy}` : `Min ${promoFmt(autoPromo.minOrder)} ${ccy}`}
+                  </span>
+                )}
+              </span>
+            </span>
+
+            {/* فاصل منقّط */}
+            <span aria-hidden className="relative my-3.5 border-s border-dashed border-platinum/30" />
+
+            {/* اليمين: الكود + زر التطبيق */}
+            <span className="relative flex flex-none flex-col items-center justify-center gap-2 px-5">
+              <span dir="ltr" className="font-display text-sm tracking-[0.18em] text-ivory">{autoPromo.code}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-white to-platinum px-3.5 py-1.5 text-[0.56rem] font-semibold uppercase tracking-[0.12em] text-obsidian transition-transform duration-300 group-hover/tk:scale-[1.04]">
+                {checking ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} /> : <Check className="h-3 w-3" strokeWidth={2.6} />}
+                {isAr ? 'طبّق العرض' : 'Apply'}
+              </span>
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {applied ? (
-        <div className="flex items-center justify-between rounded-2xl border border-platinum/40 bg-platinum/[0.07] px-4 py-3">
+        <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${isGift ? 'border-[#d9b25f]/40 bg-[#d9b25f]/[0.07]' : 'border-platinum/40 bg-platinum/[0.07]'}`}>
           <span className="inline-flex items-center gap-2 text-sm text-ivory">
-            <Check className="h-4 w-4 text-platinum" strokeWidth={2.4} />
+            {isGift ? <Gift className="h-4 w-4 text-[#e8d6a8]" strokeWidth={2} /> : <Check className="h-4 w-4 text-platinum" strokeWidth={2.4} />}
             <span className="font-display tracking-[0.12em]">{data.promoCode}</span>
-            <span className="text-platinum/80">· −{currencyFmt(data.promoDiscount)} {t('currency')}</span>
+            <span className={isGift ? 'text-[#e8d6a8]' : 'text-platinum/80'}>
+              {isGift
+                ? (isAr ? `· هديتك: ${giftName ?? 'خدمة'} مجانًا` : `· Gift: ${giftName ?? 'service'} free`)
+                : `· −${currencyFmt(data.promoDiscount)} ${t('currency')}`}
+            </span>
           </span>
           <button data-cursor="hover" onClick={clear} aria-label="remove"
             className="grid h-7 w-7 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
@@ -385,6 +503,11 @@ function PromoField({ isAr, data, set, services, t }: {
         </div>
       )}
       {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
+      <style>{`
+        .promo-ticket-shimmer{background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,0.07) 50%,transparent 58%);background-size:280% 100%;animation:promoSweep 6s ease-in-out infinite;}
+        @keyframes promoSweep{0%{background-position:140% 0}100%{background-position:-140% 0}}
+        @media (prefers-reduced-motion: reduce){ .promo-ticket-shimmer{ animation:none; } }
+      `}</style>
     </div>
   );
 }

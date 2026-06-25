@@ -1,6 +1,10 @@
 // app/api/promo/validate/route.ts — تحقق من كود الخصم + حساب مبدئي للخصم.
 // يستقبل بنود الطلب (services + أسعارها) ويرجّع الخصم المتوقّع لكل خدمة.
+//
+// (جديد) لو الكود نوعه gift_service: مفيش خصم — بنرجّع بيانات الخدمة المُهداة
+//   (slug + name) عشان الواجهة تعرضها وتضيفها مجانًا للملخّص.
 import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPromoByCode, checkPromoValidity, computePromo, type PromoLine } from "@/lib/promo";
 
@@ -27,6 +31,23 @@ export async function POST(request: Request) {
     const comp = lines.length ? computePromo(promo, lines, subtotalForMin) : null;
     if (comp?.error) return NextResponse.json({ ok: false, error: comp.error });
 
+    // ── كوبون هدية: جِب بيانات الخدمة المُهداة للعرض ──
+    let giftService: { id: number; slug: string; name: any; onRequest: boolean } | null = null;
+    if (promo.kind === "gift_service" && promo.giftServiceId) {
+      const gs = await query<any>(
+        `SELECT id, slug, name, is_on_request FROM services WHERE id = $1 LIMIT 1`,
+        [promo.giftServiceId]
+      );
+      if (gs[0]) {
+        giftService = {
+          id: Number(gs[0].id),
+          slug: gs[0].slug,
+          name: gs[0].name,
+          onRequest: !!gs[0].is_on_request,
+        };
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       code: promo.code,
@@ -40,6 +61,8 @@ export async function POST(request: Request) {
       discount: comp?.discount ?? 0,
       perService: comp?.perService ?? {},
       matchedServiceIds: comp?.matchedServiceIds ?? [],
+      giftServiceId: promo.giftServiceId,  // ← للنوع gift_service
+      giftService,                          // ← { id, slug, name, onRequest } أو null
     });
   } catch (err) {
     console.error("POST /api/promo/validate failed:", err);
