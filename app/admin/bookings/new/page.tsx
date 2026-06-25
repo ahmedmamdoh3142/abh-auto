@@ -4,6 +4,10 @@
  * كل حجم، الفروع، الألوان، طرق الدفع، المواعيد — ويمرّرها للكلاينت.
  *
  * مبدأ مهم (طلب 6): حجم السيارة (المشتق من الموديل) هو ما يحدّد سعر كل خدمة.
+ *
+ * (تعديل) الداشبورد الداخلي يعرض كل خدمات الكتالوج — حتى المعطّلة (المخفية من
+ * الموقع is_active=false) — عشان الموظّف يقدر يحجزها للعميل الحاضر. الخدمة
+ * المخفية بتتعلّم بشارة في الواجهة، وروت الإنشاء بيسعّرها ويحجزها عادي.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -43,16 +47,18 @@ export default async function AdminNewBookingPage() {
   }));
 
   // ── الخدمات + الأسعار لكل حجم + التصنيف ──
+  // ملاحظة: الداشبورد الداخلي يعرض كل خدمات الكتالوج (بما فيها المعطّلة/المخفية من
+  // الموقع). نرجّع is_active عشان الواجهة تعلّم المخفية بشارة. النشطة تظهر أولًا.
   const svcRows = await query<any>(
     `SELECT s.id, s.slug, c.slug AS category, c.name AS cat_name, s.name AS name_raw,
-            s.is_on_request,
+            s.is_on_request, s.is_active,
             COALESCE((SELECT jsonb_object_agg(sp.size_code,
                         jsonb_build_object('price', sp.price, 'old', sp.old_price))
                       FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices_raw
      FROM services s
      JOIN service_categories c ON c.id = s.category_id
-     WHERE s.surface='catalog' AND s.is_active=true
-     ORDER BY c.sort, s.sort`
+     WHERE s.surface='catalog'
+     ORDER BY c.sort, s.is_active DESC, s.sort`
   );
 
   const SIZES: SizeCode[] = ["small", "medium", "large"];
@@ -71,6 +77,7 @@ export default async function AdminNewBookingPage() {
       category: pick(r.cat_name, locale),
       categorySlug: r.category,
       onRequest: !!r.is_on_request,
+      active: !!r.is_active, // false = مخفية من الموقع (تظهر بالداشبورد بشارة)
       prices,
       oldPrices,
     };

@@ -35,7 +35,7 @@ function useMediaQuery(query: string) {
 type SizeCode = "small" | "medium" | "large";
 type Model = { name: string; size: SizeCode };
 type Brand = { id: string; name: string; models: Model[] };
-type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number> };
+type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; active?: boolean; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number> };
 type Opt = { code: string; label: string };
 type ColorOpt = { key: string; hex: string; light: boolean; name: string };
 type TowOpt = { code: string; label: string; cost: number };
@@ -403,6 +403,15 @@ export default function NewBookingClient({
                               {giftIco(11)}{T("خدها وخد هدية", "Get a gift")}
                             </span>
                           )}
+                          {/* شارة: الخدمة مخفية من الموقع (معطّلة) لكنها متاحة بالداشبورد */}
+                          {s.active === false && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, alignSelf: isAr ? "flex-end" : "flex-start", width: "fit-content", borderRadius: 999, border: "1px solid rgba(245,153,61,.45)", background: "rgba(245,153,61,.12)", padding: "2px 8px", fontSize: 9.5, color: "#f5993d" }}>
+                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                <path d="M9.9 4.2A9.1 9.1 0 0 1 12 4c5 0 9 5 9 8a12 12 0 0 1-2 2.8M6.6 6.6A12.6 12.6 0 0 0 3 12c0 3 4 8 9 8a9 9 0 0 0 4.5-1.2" /><path d="M3 3l18 18" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                              </svg>
+                              {T("مخفية من الموقع", "Hidden on site")}
+                            </span>
+                          )}
                           {/* السعر تحت الاسم */}
                           <span dir="ltr" className="abh-num" style={{ display: "inline-flex", alignItems: "baseline", gap: 7, justifyContent: isAr ? "flex-end" : "flex-start", flexWrap: "wrap" }}>
                             {s.onRequest ? (
@@ -676,7 +685,7 @@ function AdminSearchSelect({ value, options, placeholder, searchPlaceholder, onC
       {open && !disabled && rect && createPortal(
         <>
           <div onMouseDown={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
-          <div style={{ position: "fixed", zIndex: 201, top: rect.bottom + 6, insetInlineStart: rect.left, width: rect.width, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "#0c0d0e", boxShadow: "0 30px 80px -30px rgba(0,0,0,.9)", overflow: "hidden" }}>
+          <div style={{ position: "fixed", zIndex: 201, top: rect.bottom + 6, left: rect.left, width: rect.width, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "#0c0d0e", boxShadow: "0 30px 80px -30px rgba(0,0,0,.9)", overflow: "hidden" }}>
             {/* خانة البحث */}
             <div style={{ padding: 8, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
               <div style={{ position: "relative" }}>
