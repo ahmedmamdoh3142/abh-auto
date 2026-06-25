@@ -9,7 +9,7 @@
  */
 import React, { useMemo, useState } from "react";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
-import { exportBookingPdf } from "@/lib/admin/invoice-pdf";
+import { printBookingInvoice } from "@/lib/admin/invoice-print";
 
 /* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
 function useMediaQuery(query: string) {
@@ -69,6 +69,8 @@ const I = {
   tag: (s = 14) => mini(["M20.6 13.4 12 22l-9-9V3h10l8 8a2 2 0 0 1-.4 2.4z", "M7 7h.01"], s),
   gift: (s = 14) => mini(["M20 12v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9", "M2 7h20v5H2z", "M12 22V7", "M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z", "M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"], s),
   pdf: (s = 14) => mini(["M14 3v4a1 1 0 0 0 1 1h4", "M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z", "M9 13h6", "M9 17h4"], s),
+  print: (s = 14) => mini(["M6 9V3h12v6", "M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"], s),
+  receipt: (s = 14) => mini(["M4 2v20l2-1.5L8 22l2-1.5L12 22l2-1.5L16 22l2-1.5L20 22V2l-2 1.5L16 2l-2 1.5L12 2l-2 1.5L8 2 6 3.5 4 2z", "M8 7h8", "M8 11h8", "M8 15h5"], s),
   chevL: (s = 16) => mini("M15 18l-6-6 6-6", s),
   chevR: (s = 16) => mini("M9 18l6-6-6-6", s),
   back: (s = 15) => mini(["M19 12H5", "M12 19l-7-7 7-7"], s),
@@ -187,7 +189,7 @@ function giftChipStyle(): React.CSSProperties {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats, onPdf }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats, onPrint }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
@@ -300,7 +302,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
           {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
           {isActive && <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>{Ic.check({ s: 14 })}{isAr ? "تقدّم" : "Advance"}</button>}
-          <button onClick={(e) => stop(e, () => onPdf(b))} title={isAr ? "فاتورة PDF" : "PDF invoice"} style={qIcon("#caa24f")}>{I.pdf(15)}</button>
+          <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
           {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
           {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
         </div>
@@ -335,7 +337,7 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
 }
 
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPdf }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -436,7 +438,8 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           )}
 
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
-            <Ghost icon={() => I.pdf(15)} onClick={() => onPdf(b)}>{T("فاتورة PDF", "PDF invoice")}</Ghost>
+            <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
+            <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onMutate(b.id, { action: "confirm_pay" })}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
             {live && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
             {live && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
@@ -579,11 +582,10 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const call = (phone: string) => { window.location.href = `tel:${phone}`; };
   const whats = (phone: string) => { const p = String(phone).replace(/[^\d]/g, ""); window.open(`https://wa.me/${p}`, "_blank"); };
 
-  const downloadPdf = async (b: any) => {
+  const printInvoice = (b: any, size: "a4" | "receipt" = "a4") => {
     try {
-      toast(T("بنحضّر الفاتورة…", "Preparing invoice…"));
-      await exportBookingPdf(b, { isAr, ccy });
-    } catch (e) { console.error("pdf failed:", e); toast(T("تعذّر إنشاء الـPDF", "Couldn't generate PDF"), "bad"); }
+      printBookingInvoice(b, { isAr, ccy, size });
+    } catch (e) { console.error("print failed:", e); toast(T("تعذّر فتح الطباعة", "Couldn't open print"), "bad"); }
   };
 
   const exportCsv = () => {
@@ -662,7 +664,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPdf={downloadPdf} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} />
           ))}
         </div>
       ) : (
@@ -671,7 +673,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
         </div>
       )}
 
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPdf={downloadPdf} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} />}
 
       <style>{`
         @media(min-width:680px){.abh-resched-grid{grid-template-columns:1fr 1fr!important}}

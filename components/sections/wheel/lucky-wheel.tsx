@@ -263,28 +263,34 @@ export function LuckyWheel() {
               return <line key={`sep-${i}`} x1={CX} y1={CY} x2={p.x} y2={p.y} stroke="rgba(255,255,255,0.14)" strokeWidth="0.6" />;
             })}
 
-            {/* النصوص (متعدّدة الأسطر) + الأيقونات */}
+            {/* النصوص — HTML داخل foreignObject عشان العربي يتشكّل صح على iOS Safari
+                (الـSVG <text> بيبوّظ تواصل الحروف على الأيفون). يلف ويتسكيل مع العجلة عادي. */}
             {segments.map((s, i) => {
               const mid = i * seg + seg / 2;
               const lines = wrapLabel(segLabel(s));
-              const fs = lines.length >= 3 ? 11 : 12.5;
-              const lh = fs + 1.5;
-              const lc = polar(CX, CY, R * 0.62, mid);
+              const fs = lines.length >= 3 ? 10.5 : lines.length === 2 ? 11.5 : 12.5;
+              const lc = polar(CX, CY, R * 0.6, mid);
               const tc = textColor(s.hex);
               let rot = mid; if (mid > 90 && mid < 270) rot += 180;
-              const half = ((lines.length - 1) * lh) / 2;
-              const iconY = lc.y + half + fs * 0.5 + 11;
+              const W = 108, H = 84;
               return (
                 <g key={`t-${s.id}`} transform={`rotate(${rot} ${lc.x} ${lc.y})`}>
-                  <text x={lc.x} y={lc.y} fill={tc} fontSize={fs} fontWeight={700} textAnchor="middle" dominantBaseline="middle"
-                    style={{ letterSpacing: '0.01em' }}>
-                    {lines.map((ln, k) => (
-                      <tspan key={k} x={lc.x} dy={k === 0 ? -half : lh}>{ln}</tspan>
-                    ))}
-                  </text>
-                  <g transform={`translate(${lc.x} ${iconY}) scale(0.82)`}>
-                    <SegIcon kind={s.kind} color={tc} />
-                  </g>
+                  <foreignObject x={lc.x - W / 2} y={lc.y - H / 2} width={W} height={H} style={{ overflow: 'visible' }}>
+                    <div
+                      style={{
+                        width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: 5, textAlign: 'center',
+                        direction: isAr ? 'rtl' : 'ltr', color: tc, fontFamily: 'inherit', fontWeight: 700,
+                        lineHeight: 1.12, WebkitFontSmoothing: 'antialiased',
+                      }}>
+                      <div style={{ fontSize: fs, letterSpacing: '0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.22)' }}>
+                        {lines.map((ln, k) => <div key={k}>{ln}</div>)}
+                      </div>
+                      <svg width={17} height={17} viewBox="-10 -10 20 20" style={{ display: 'block', flexShrink: 0 }}>
+                        <SegIcon kind={s.kind} color={tc} />
+                      </svg>
+                    </div>
+                  </foreignObject>
                 </g>
               );
             })}
