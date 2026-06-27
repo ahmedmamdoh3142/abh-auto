@@ -74,7 +74,7 @@ export interface BookingState {
   promoDiscount: number;
   promoServiceIds: number[];
   promoPerService: Record<number, number>;
-  whatsappOptIn: boolean;
+  whatsappOptIn: boolean | undefined;
   gifts: { slug: string; bundleId: string; unit: number }[];
 }
 
@@ -86,7 +86,7 @@ const INITIAL: BookingState = {
   payment: null, showBreakdown: false, calMonth: null,
   promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
   promoServiceIds: [], promoPerService: {},
-  whatsappOptIn: false,
+  whatsappOptIn: undefined,
   gifts: [],
 };
 
@@ -256,7 +256,7 @@ export function BookingFlow({
           phone: data.phone,
           email: data.email,
           city: data.city,
-          whatsappOptIn: data.whatsappOptIn,
+          whatsappOptIn: !!data.whatsappOptIn,
           whatsappOptInText: data.whatsappOptIn
             ? (isAr ? 'وافق على التواصل عبر واتساب عند الحجز من الموقع' : 'Consented to WhatsApp contact at website booking')
             : null,

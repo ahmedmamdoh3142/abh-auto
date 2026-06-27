@@ -1,9 +1,10 @@
 /**
- * app/admin/page.tsx — نظرة عامة (SERVER) · v4
+ * app/admin/page.tsx — نظرة عامة (SERVER) · v5
  * ──────────────────────────────────────────────────────────────────────
- * فلتر فترة حقيقي من السيرفر (يوم / أسبوع / شهر / سنة) عبر ?range=.
- * استعلامات: KPIs + تريند، سلسلة زمنية، توزيع الحالات، طرق الدفع،
- * أكثر الخدمات، وأقرب الحجوزات.
+ * • شارت «التحصيل» بدل قيمة الحجوزات: نوزّع المبلغ المُحصَّل (payment_status='paid')
+ *   على وقت التحصيل الفعلي — من booking_status_history (سطر «تأكيد الدفع»)،
+ *   ولو مفيش (مدفوع أونلاين وقت الحجز) بنرجع لـ created_at.
+ * • تريند الإيراد المحصّل بقى على أساس وقت التحصيل كمان (متّسق مع الشارت).
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -17,37 +18,42 @@ export const dynamic = "force-dynamic";
 type RangeKey = "day" | "week" | "month" | "year";
 
 const RANGES: Record<RangeKey, {
-  bucket: string; step: string; spanStart: string; prevStart: string; prevEnd: string;
+  grain: string; step: string; spanStart: string; prevStart: string; prevEnd: string;
 }> = {
   day: {
-    bucket: "date_trunc('hour', b.created_at)",
+    grain: "hour",
     step: "1 hour",
     spanStart: "date_trunc('day', now())",
     prevStart: "date_trunc('day', now()) - interval '1 day'",
     prevEnd: "date_trunc('day', now())",
   },
   week: {
-    bucket: "date_trunc('day', b.created_at)",
+    grain: "day",
     step: "1 day",
     spanStart: "date_trunc('day', now()) - interval '6 days'",
     prevStart: "date_trunc('day', now()) - interval '13 days'",
     prevEnd: "date_trunc('day', now()) - interval '6 days'",
   },
   month: {
-    bucket: "date_trunc('day', b.created_at)",
+    grain: "day",
     step: "1 day",
     spanStart: "date_trunc('day', now()) - interval '29 days'",
     prevStart: "date_trunc('day', now()) - interval '59 days'",
     prevEnd: "date_trunc('day', now()) - interval '29 days'",
   },
   year: {
-    bucket: "date_trunc('month', b.created_at)",
+    grain: "month",
     step: "1 month",
     spanStart: "date_trunc('month', now()) - interval '11 months'",
     prevStart: "date_trunc('month', now()) - interval '23 months'",
     prevEnd: "date_trunc('month', now()) - interval '11 months'",
   },
 };
+
+/* وقت التحصيل الفعلي لكل حجز: آخر سطر «تأكيد الدفع» في السجل، وإلا created_at. */
+const collectedAt = (a: string) =>
+  `COALESCE((SELECT max(h.created_at) FROM booking_status_history h
+             WHERE h.booking_id = ${a}.id AND h.note LIKE '%تأكيد الدفع%'), ${a}.created_at)`;
 
 export default async function AdminOverviewPage({
   searchParams,
@@ -62,15 +68,18 @@ export default async function AdminOverviewPage({
     : "month") as RangeKey;
   const R = RANGES[range];
 
-  /* ═══════════ KPIs ضمن الفترة + الفترة السابقة ═══════════ */
+  /* ═══════════ KPIs — الإيراد المحصّل بالفترة على أساس وقت التحصيل ═══════════ */
   const [counts] = await query<any>(
     `SELECT
        COALESCE((SELECT sum(total) FROM bookings WHERE payment_status='paid'),0)                                   AS collected_all,
        COALESCE((SELECT sum(total) FROM bookings WHERE status<>'cancelled'),0)                                      AS expected_all,
-       COALESCE((SELECT sum(total) FROM bookings
-                 WHERE payment_status='paid' AND created_at >= ${R.spanStart}),0)                                   AS rev_cur,
-       COALESCE((SELECT sum(total) FROM bookings
-                 WHERE payment_status='paid' AND created_at >= ${R.prevStart} AND created_at < ${R.prevEnd}),0)     AS rev_prev,
+       COALESCE((SELECT sum(b.total) FROM bookings b
+                 WHERE b.payment_status='paid'
+                   AND ${collectedAt("b")} >= ${R.spanStart}),0)                                                    AS rev_cur,
+       COALESCE((SELECT sum(b.total) FROM bookings b
+                 WHERE b.payment_status='paid'
+                   AND ${collectedAt("b")} >= ${R.prevStart}
+                   AND ${collectedAt("b")} <  ${R.prevEnd}),0)                                                      AS rev_prev,
        (SELECT count(*) FROM bookings WHERE created_at >= ${R.spanStart})                                           AS cnt_cur,
        (SELECT count(*) FROM bookings WHERE created_at >= ${R.prevStart} AND created_at < ${R.prevEnd})             AS cnt_prev,
        (SELECT count(*) FROM bookings WHERE status='upcoming')                                                      AS upcoming,
@@ -83,17 +92,22 @@ export default async function AdminOverviewPage({
        (SELECT count(*) FROM users WHERE role='member' AND member_since >= ${R.spanStart})                          AS new_members`
   );
 
-  /* ═══════════ السلسلة الزمنية حسب الفترة (قيمة + عدد) ═══════════ */
+  /* ═══════════ سلسلة التحصيل الزمنية (مبلغ مُحصَّل + عدد عمليات التحصيل) ═══════════ */
   const series = await query<any>(
     `WITH buckets AS (
         SELECT generate_series(${R.spanStart}, now(), interval '${R.step}') AS bk
+     ),
+     collected AS (
+        SELECT date_trunc('${R.grain}', ${collectedAt("b")}) AS bk, b.total AS amount
+        FROM bookings b
+        WHERE b.payment_status = 'paid'
+          AND ${collectedAt("b")} >= ${R.spanStart}
      )
      SELECT to_char(buckets.bk, 'YYYY-MM-DD"T"HH24:MI:SS') AS bucket,
-            COALESCE(sum(b.total) FILTER (WHERE b.status<>'cancelled'), 0) AS value,
-            count(b.id) FILTER (WHERE b.status<>'cancelled')               AS cnt
+            COALESCE(sum(c.amount), 0) AS value,
+            count(c.amount)            AS cnt
      FROM buckets
-     LEFT JOIN bookings b
-       ON ${R.bucket} = buckets.bk
+     LEFT JOIN collected c ON c.bk = buckets.bk
      GROUP BY buckets.bk
      ORDER BY buckets.bk`
   );

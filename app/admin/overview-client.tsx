@@ -1,16 +1,10 @@
 "use client";
 /**
- * app/admin/overview-client.tsx — نظرة عامة (CLIENT) · v4
+ * app/admin/overview-client.tsx — نظرة عامة (CLIENT) · v5
  * ──────────────────────────────────────────────────────────────────────
- * Layout:
- *   KPIs (4)
- *   شارت قيمة الحجوزات (عريض)  |  حالة التحصيل
- *   توزيع الحجوزات (باي كبير)   |  طرق الدفع (باي كبير)
- *   أقرب الحجوزات              |  أكثر الخدمات طلبًا
- *
- * • فلتر فترة (يوم/أسبوع/شهر/سنة) — بيانات حقيقية من السيرفر.
- * • شارت إيراد + تبديل قيمة/عدد + إصلاح اتجاه الهوفر RTL.
- * • الباي شارتس كبيرة مالية الكونتينر + الـlegend تحتها.
+ * • الشارت بقى على «التحصيل» (المبلغ المُحصَّل حسب وقت التحصيل) — مش قيمة الحجوزات.
+ * • حالة التحصيل بقت Ring دائري احترافي مالي الكونتينر.
+ * • auto-refresh كل 60s (يتوقّف في التابات المخفية) لمتابعة الحجوزات لحظيًا.
  */
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -117,7 +111,7 @@ function PeriodTabs({ range, isAr, pending, onPick }: { range: RangeKey; isAr: b
   );
 }
 
-/* ═════════════ شارت الإيراد (SVG تفاعلي + تبديل قيمة/عدد) ═════════════ */
+/* ═════════════ شارت التحصيل (SVG تفاعلي + تبديل قيمة/عدد) ═════════════ */
 function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: RangeKey; isAr: boolean; ccy: string }) {
   const [active, setActive] = useState<number | null>(null);
   const [metric, setMetric] = useState<"value" | "cnt">("value");
@@ -148,7 +142,7 @@ function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: Rang
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
-            {metric === "value" ? (isAr ? "قيمة الحجوزات" : "Booking value") : (isAr ? "عدد الحجوزات" : "Bookings count")} · {rangeLabel}
+            {metric === "value" ? (isAr ? "المبلغ المُحصَّل" : "Collected") : (isAr ? "عدد عمليات التحصيل" : "Collections")} · {rangeLabel}
           </div>
           <div className="abh-num" dir="ltr" style={{ marginTop: 8, fontSize: 30, color: "var(--abh-ivory)", textAlign: isAr ? "right" : "left" }}>
             {EGP(total)} {metric === "value" && <span style={{ fontSize: 14, color: "var(--abh-steel)" }}>{ccy}</span>}
@@ -157,7 +151,7 @@ function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: Rang
         <div style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)" }}>
           {(["value", "cnt"] as const).map((m) => (
             <button key={m} onClick={() => setMetric(m)} style={{ borderRadius: 999, padding: "6px 13px", fontSize: 10.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer", border: "none", color: metric === m ? "#000" : "var(--abh-platinum)", background: metric === m ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent" }}>
-              {m === "value" ? (isAr ? "قيمة" : "Value") : (isAr ? "عدد" : "Count")}
+              {m === "value" ? (isAr ? "مبلغ" : "Amount") : (isAr ? "عدد" : "Count")}
             </button>
           ))}
         </div>
@@ -167,8 +161,8 @@ function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: Rang
       <div style={{ position: "relative", direction: "ltr", flex: 1, minHeight: 220 }}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block", overflow: "visible" }}>
           <defs>
-            <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#cbcdcd" stopOpacity="0.22" /><stop offset="100%" stopColor="#cbcdcd" stopOpacity="0" /></linearGradient>
-            <linearGradient id="rev-stroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f5993d" /><stop offset="100%" stopColor="#3ecd8e" /></linearGradient>
+            <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3ecd8e" stopOpacity="0.22" /><stop offset="100%" stopColor="#3ecd8e" stopOpacity="0" /></linearGradient>
+            <linearGradient id="rev-stroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#3ecd8e" /><stop offset="100%" stopColor="#9fd4b0" /></linearGradient>
           </defs>
           {ticks.map((t, i) => (
             <g key={i}>
@@ -196,7 +190,7 @@ function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: Rang
           <div style={{ position: "absolute", top: 0, left: `${(active / Math.max(1, n - 1)) * 100}%`, transform: "translateX(-50%)", pointerEvents: "none", background: "rgba(12,13,14,.96)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 12, padding: "8px 12px", minWidth: 120, boxShadow: "0 20px 50px -20px rgba(0,0,0,.9)", direction: isAr ? "rtl" : "ltr" }}>
             <div style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{fmtBucket(series[active].bucket)}</div>
             <div className="abh-num" dir="ltr" style={{ fontSize: 16, color: "var(--abh-ivory)", marginTop: 2 }}>{EGP(series[active].value)} <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{ccy}</span></div>
-            <div style={{ fontSize: 10, color: "var(--abh-steel)", marginTop: 1 }}>{series[active].cnt} {isAr ? "حجز" : "bookings"}</div>
+            <div style={{ fontSize: 10, color: "var(--abh-steel)", marginTop: 1 }}>{series[active].cnt} {isAr ? "عملية تحصيل" : "payments"}</div>
           </div>
         )}
       </div>
@@ -210,6 +204,59 @@ function RevenueChart({ series, range, isAr, ccy }: { series: any[]; range: Rang
   );
 }
 
+/* ═════════════ Ring دائري لحالة التحصيل (احترافي مالي الكونتينر) ═════════════ */
+function CollectionRing({ paidPct, collected, expected, paidCount, unpaidCount, ccy, isAr, T }: {
+  paidPct: number; collected: number; expected: number; paidCount: number; unpaidCount: number;
+  ccy: string; isAr: boolean; T: (ar: string, en: string) => string;
+}) {
+  const SIZE = 232, R = 96, SW = 18, C = 2 * Math.PI * R;
+  const pct = Math.max(0, Math.min(100, paidPct));
+  const dash = (pct / 100) * C;
+
+  const Tile = ({ dot, label, value }: { dot: string; label: string; value: number }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 14px", borderRadius: 14, background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.06)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "rgba(203,205,205,.85)" }}>
+        <span style={{ height: 8, width: 8, borderRadius: 2, background: dot }} />{label}
+      </div>
+      <div className="abh-num" style={{ fontSize: 22, color: "var(--abh-ivory)", lineHeight: 1 }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "10px 0 22px", minHeight: 250 }}>
+        <div style={{ position: "relative", width: SIZE, height: SIZE }}>
+          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: "rotate(-90deg)" }}>
+            <defs>
+              <linearGradient id="coll-ring" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#3ecd8e" />
+                <stop offset="100%" stopColor="#9fd4b0" />
+              </linearGradient>
+            </defs>
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(255,255,255,.06)" strokeWidth={SW} />
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="url(#coll-ring)" strokeWidth={SW}
+              strokeLinecap="round" strokeDasharray={`${dash} ${C - dash}`}
+              style={{ transition: "stroke-dasharray 1.1s var(--abh-ease)", filter: "drop-shadow(0 0 7px rgba(62,205,142,.45))" }} />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>
+            <div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 54, lineHeight: 1, color: "var(--abh-ivory)" }}>{pct}<span style={{ fontSize: 22, color: "var(--abh-steel)" }}>%</span></div>
+              <div style={{ fontSize: 9.5, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--abh-steel)", marginTop: 8 }}>{T("نسبة التحصيل", "Collection rate")}</div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 13, color: "var(--abh-platinum)", marginTop: 9 }}>
+                {EGP(collected)} <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>/ {EGP(expected)} {ccy}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Tile dot="#3ecd8e" label={T("مدفوعة", "Paid")} value={paidCount} />
+        <Tile dot="#f0c069" label={T("بانتظار الدفع", "Awaiting")} value={unpaidCount} />
+      </div>
+    </div>
+  );
+}
+
 /* ═════════════ باي/دونات كبير مالي الكونتينر + legend تحته ═════════════ */
 function BigPie({ title, segments, isAr, centerLabel, ccy, showRevenue }: {
   title: string;
@@ -218,7 +265,6 @@ function BigPie({ title, segments, isAr, centerLabel, ccy, showRevenue }: {
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const total = segments.reduce((a, s) => a + s.value, 0) || 1;
-  // دونات كبير
   const SIZE = 230, R = 92, SW = 30, C = 2 * Math.PI * R;
   const GAP = segments.length > 1 ? 4 : 0;
   let offset = 0;
@@ -233,7 +279,6 @@ function BigPie({ title, segments, isAr, centerLabel, ccy, showRevenue }: {
         </div>
       ) : (
         <>
-          {/* الدونات الكبير في النص */}
           <div style={{ display: "grid", placeItems: "center", padding: "8px 0 22px" }}>
             <div style={{ position: "relative", width: SIZE, height: SIZE }}>
               <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: "rotate(-90deg)" }}>
@@ -272,7 +317,6 @@ function BigPie({ title, segments, isAr, centerLabel, ccy, showRevenue }: {
             </div>
           </div>
 
-          {/* legend تحت الباي */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: "auto" }}>
             {segments.map((s) => (
               <div key={s.key} onMouseEnter={() => setHover(s.key)} onMouseLeave={() => setHover(null)}
@@ -311,6 +355,14 @@ export default function OverviewClient({ counts, series, topServices, byPayment,
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
+  /* auto-refresh كل 60 ثانية لمتابعة الحجوزات لحظيًا — يقف في التابات المخفية */
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) router.refresh();
+    }, 60000);
+    return () => clearInterval(id);
+  }, [router]);
+
   const fmtDate = (iso: string) => { if (!iso) return "—"; const d = new Date(iso); if (isNaN(+d)) return iso; return d.toLocaleDateString(loc, { weekday: "short", day: "numeric", month: "short" }); };
   const sparkData = series.map((s) => s.value);
   const payTotal = (counts.paidCount || 0) + (counts.unpaidCount || 0) || 1;
@@ -320,12 +372,10 @@ export default function OverviewClient({ counts, series, topServices, byPayment,
   const periodNote = { day: T("عن أمس", "vs yesterday"), week: T("عن الأسبوع السابق", "vs last week"), month: T("عن الشهر السابق", "vs last month"), year: T("عن السنة السابقة", "vs last year") }[range];
   const countLabel = { day: T("حجوزات اليوم", "Bookings today"), week: T("حجوزات الأسبوع", "Bookings this week"), month: T("حجوزات الشهر", "Bookings this month"), year: T("حجوزات السنة", "Bookings this year") }[range];
 
-  // مقاطع باي توزيع الحجوزات
   const statusSegments = (["completed", "active", "upcoming", "cancelled"] as const)
     .map((k) => ({ key: k, label: isAr ? STATUS[k].ar : STATUS[k].en, value: counts[k] || 0, color: STATUS[k].color }))
     .filter((s) => s.value > 0);
 
-  // مقاطع باي طرق الدفع
   const paymentSegments = byPayment.map((p, i) => ({
     key: p.code || `p${i}`, label: p.name, value: p.cnt, revenue: p.revenue, color: PALETTE[i % PALETTE.length],
   }));
@@ -345,7 +395,7 @@ export default function OverviewClient({ counts, series, topServices, byPayment,
 
       <PageHeader
         title={T("نظرة عامة", "Overview")}
-        subtitle={T("ملخّص حيّ لأداء الورشة — الإيراد، الحجوزات، الدفع وأكثر الخدمات طلبًا.", "A live snapshot of the studio — revenue, bookings, payments and top services.")}
+        subtitle={T("ملخّص حيّ لأداء الورشة — التحصيل، الحجوزات، الدفع وأكثر الخدمات طلبًا.", "A live snapshot of the studio — collections, bookings, payments and top services.")}
         seed="overview-hero"
         action={<PeriodTabs range={range} isAr={isAr} pending={pending} onPick={pickRange} />}
       />
@@ -359,29 +409,26 @@ export default function OverviewClient({ counts, series, topServices, byPayment,
           <KPI label={T("عملاء مسجّلون", "Members")} value={counts.members} suffix={counts.newMembers ? `+${counts.newMembers} ${T("جديد", "new")}` : undefined} icon={Ic.users} delay={0.15} />
         </div>
 
-        {/* ── قيمة الحجوزات + حالة التحصيل ── */}
+        {/* ── شارت التحصيل + Ring حالة التحصيل ── */}
         <div className="abh-grid-2-1">
           <RevenueChart series={series} range={range} isAr={isAr} ccy={ccy} />
 
           <div style={{ ...card, padding: 26, display: "flex", flexDirection: "column" }}>
             <SubHead>{T("حالة التحصيل", "Collection status")}</SubHead>
-            <div className="abh-num" dir="ltr" style={{ fontSize: 30, color: "var(--abh-ivory)", textAlign: isAr ? "right" : "left" }}>{EGP(counts.collected)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></div>
-            <div style={{ fontSize: 11, color: "var(--abh-steel)", marginTop: 4, marginBottom: 16 }}>{T("من إجمالي متوقّع", "of expected")} <span dir="ltr" className="abh-num">{EGP(counts.expected)} {ccy}</span></div>
-            <div style={{ height: 9, borderRadius: 999, background: "rgba(255,255,255,.06)", overflow: "hidden", display: "flex" }}>
-              <span style={{ width: `${paidPct}%`, background: "linear-gradient(90deg,#3ecd8e,#9fd4b0)", transformOrigin: isAr ? "right" : "left", animation: "abh-growX .9s var(--abh-ease) both" }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-              <div><div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "rgba(203,205,205,.85)" }}><span style={{ height: 8, width: 8, borderRadius: 2, background: "#3ecd8e" }} />{T("مدفوعة", "Paid")}</div><div className="abh-num" style={{ fontSize: 18, color: "var(--abh-ivory)", marginTop: 3 }}>{counts.paidCount}</div></div>
-              <div style={{ textAlign: "end" }}><div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "rgba(203,205,205,.85)" }}><span style={{ height: 8, width: 8, borderRadius: 2, background: "#f0c069" }} />{T("بانتظار الدفع", "Awaiting")}</div><div className="abh-num" style={{ fontSize: 18, color: "var(--abh-ivory)", marginTop: 3 }}>{counts.unpaidCount}</div></div>
-            </div>
-            <div style={{ marginTop: "auto", paddingTop: 18, borderTop: "1px solid rgba(255,255,255,.06)", display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "var(--abh-steel)" }}>{T("نسبة التحصيل", "Collection rate")}</span>
-              <span className="abh-num" style={{ color: "var(--abh-ivory)" }}>{paidPct}%</span>
-            </div>
+            <CollectionRing
+              paidPct={paidPct}
+              collected={counts.collected}
+              expected={counts.expected}
+              paidCount={counts.paidCount}
+              unpaidCount={counts.unpaidCount}
+              ccy={ccy}
+              isAr={isAr}
+              T={T}
+            />
           </div>
         </div>
 
-        {/* ── توزيع الحجوزات + طرق الدفع (باي شارتس كبيرة) ── */}
+        {/* ── توزيع الحجوزات + طرق الدفع ── */}
         <div className="ov-grid-2">
           <BigPie title={T("توزيع الحجوزات", "Bookings distribution")} segments={statusSegments} isAr={isAr} centerLabel={T("إجمالي", "Total")} ccy={ccy} />
           <BigPie title={T("طرق الدفع", "Payment methods")} segments={paymentSegments} isAr={isAr} centerLabel={T("حجز", "orders")} ccy={ccy} showRevenue />

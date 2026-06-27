@@ -7,7 +7,8 @@
  * • تصدير فاتورة PDF فاخرة بهوية ABH AUTO (شعار + ألوان الشركة) لكل حجز.
  * • عرضان: Grid (كروت سينمائية) + List (صفوف كثيفة) + بحث/فرز/CSV + مودال تفاصيل.
  */
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
 import { printBookingInvoice } from "@/lib/admin/invoice-print";
 
@@ -522,6 +523,11 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const toast = useToast();
   const [list, setList] = useState(initial);
+  const router = useRouter();
+  // أول ما الصفحة تفتح: هات أحدث الحجوزات من السيرفر (يتخطّى كاش الراوتر)
+  useEffect(() => { router.refresh(); }, [router]);
+  // زامن القائمة مع بيانات السيرفر كل ما توصل نسخة جديدة
+  useEffect(() => { setList(initial); }, [initial]);
   const [tab, setTab] = useState("all");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("recent");

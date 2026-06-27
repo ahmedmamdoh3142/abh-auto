@@ -65,6 +65,11 @@ export function StepDetails({
 }) {
   const [touched, setTouched] = useState(false);
   const cityOptions = useCityOptions(isAr);
+  // علّم موافقة الواتساب تلقائيًا أول مرة فقط — إلا لو العميل شالها بنفسه.
+  useEffect(() => {
+    if (data.whatsappOptIn === undefined) set({ whatsappOptIn: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const errors: Record<string, string | null> = {
     name: data.name.trim() ? null : t('step3.validation.nameRequired'),

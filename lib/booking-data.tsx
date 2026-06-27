@@ -219,7 +219,7 @@ export type PaymentMethod = 'tabby' | 'tamara' | 'applePay' | 'cash';
 // كل طرق الدفع ظاهرة، لكن المعطّلة منها (PAYMENT_DISABLED) معروضة كـ "قريبًا"
 // وغير قابلة للاختيار لحد ما نفعّل بوابات الدفع. المتاح حاليًا: الدفع بالفرع (cash).
 export const PAYMENT_METHODS: PaymentMethod[] = ['tabby', 'tamara', 'applePay', 'cash'];
-export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby', 'tamara', 'applePay']);
+export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby', 'applePay']);
 
 /** Time slots grouped by part of day; BOOKED simulates taken slots. */
 export const TIME_GROUPS: [string, string[]][] = [
