@@ -22,10 +22,12 @@ function updateGoogleConsent(granted: boolean) {
   window.dataLayer = window.dataLayer || [];
   // مهم: لازم ندفع كائن arguments الحقيقي (مش array) — ده الشكل الوحيد اللي
   // GTM بيتعرّف عليه كإشارة gtag. لو دفعناه كـ array، GTM بيتجاهلها وتفضل
-  // الموافقة "denied" فمفيش بيانات بتتجمّع.
-  function gtag() {
+  // الموافقة "denied" فمفيش بيانات بتتجمّع. النوع بيقبل أي arguments،
+  // والتنفيذ دالة عادية بتقرأ arguments الأصلي.
+  const gtag: (...args: any[]) => void = function () {
+    // eslint-disable-next-line prefer-rest-params
     (window.dataLayer as any[]).push(arguments);
-  }
+  };
   const value = granted ? "granted" : "denied";
   gtag("consent", "update", {
     ad_storage: value,
