@@ -10,6 +10,12 @@
  *  2) media query تعطّل backdrop-filter (السبب الرئيسي لاسوداد الشاشة على iOS)
  *     على كلاس glass الأب وكل عناصر backdrop-blur، وتُخفي البلور الثقيل
  *     (blur-3xl/2xl) على الموبايل — يمنع طرد طبقات GPU أثناء السكرول.
+ *
+ * ── تتبّع Google Analytics (قمع الحجز) ──────────────────────────────────────
+ *  • trackBookingView عند فتح الصفحة.
+ *  • أحداث كل خطوة عند الانتقال (go): vehicle → services → details.
+ *  • trackBookingSubmit عند الضغط على تأكيد، ثم trackBookingSuccess عند نجاح
+ *    الخادم (purchase) أو trackBookingError عند الفشل.
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -25,6 +31,10 @@ import {
 import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
 import type { DbColor } from '@/lib/booking-data-db';
 import { useAuth } from '@/components/shared/auth-provider';
+import {
+  trackBookingView, trackBeginCheckout, trackVehicleInfo, trackSelectServices,
+  trackCustomerInfo, trackSchedule, trackBookingSubmit, trackBookingSuccess, trackBookingError,
+} from '@/lib/analytics';
 
 import { StepVehicle } from './step-vehicle';
 import { StepServices } from './step-services';
@@ -106,6 +116,9 @@ export function BookingFlow({
   const [done, setDone] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
+
+  // تتبّع: دخل صفحة الحجز (بداية القمع)
+  useEffect(() => { trackBookingView(); }, []);
 
   const set = useCallback(
     (patch: Partial<BookingState>) => setData((d) => ({ ...d, ...patch })),
@@ -196,15 +209,27 @@ export function BookingFlow({
     return { services, tow, beforePromo, promoCut, grand, onReq, saved };
   }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, SERVICES]);
 
+  // قائمة الخدمات المختارة بصيغة التتبّع (اسم + سعر)
+  const trackedServices = useCallback(() => data.services.map((slug) => {
+    const m = SERVICES.find((s) => s.slug === slug);
+    return { name: m?.name ?? slug, price: m && !m.onRequest ? dbPriceFor(m, data.size) : 0 };
+  }), [data.services, data.size, SERVICES]);
+
   const go = useCallback((to: number) => {
+    // تتبّع قمع الحجز حسب الخطوة اللي رايحين لها
+    if (to === 1) { trackVehicleInfo({ brand: data.brandId, model: data.model, size: data.size }); trackBeginCheckout(); }
+    else if (to === 2) { trackSelectServices(trackedServices(), total.grand); }
+    else if (to === 3) { trackCustomerInfo(); trackSchedule({ branch: data.branch, date: data.date, time: data.time }); }
     setStep(to);
     setMaxReached((m) => Math.max(m, to));
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, []);
+  }, [data.brandId, data.model, data.size, data.branch, data.date, data.time, total.grand, trackedServices]);
 
   const confirmBooking = useCallback(async () => {
     const brand = effectiveBrands.find((b) => b.id === data.brandId);
     const vehicleLabel = `${brand?.name ?? ''} ${data.model}`.trim();
+
+    trackBookingSubmit(); // ضغط «تأكيد» (محاولة)
 
     try {
       const res = await fetch('/api/booking', {
@@ -238,9 +263,21 @@ export function BookingFlow({
         }),
       });
       const json = await res.json();
-      if (json?.ok && json.reference) setReference(json.reference);
+      if (json?.ok && json.reference) {
+        setReference(json.reference);
+        // تتبّع: حجز ناجح (purchase) — يظهر في تقارير التحويل
+        trackBookingSuccess({
+          reference: json.reference,
+          value: total.grand,
+          services: trackedServices(),
+          paymentMethod: data.payment ?? undefined,
+        });
+      } else {
+        trackBookingError(json?.error ?? 'no_reference');
+      }
     } catch (e) {
       console.error('booking save failed:', e);
+      trackBookingError('network_error');
     }
 
     if (member) {
@@ -260,7 +297,7 @@ export function BookingFlow({
 
     setDone(true);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [member, addBooking, data, total.grand, total.tow, effectiveBrands]);
+  }, [member, addBooking, data, total.grand, total.tow, effectiveBrands, isAr, trackedServices]);
 
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });

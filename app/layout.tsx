@@ -9,8 +9,10 @@
  *    progress / intro) تُحمَّل بعد أول رسم عبر DeferredChrome و DeferredIntro
  *    لتقليل الـ Script Evaluation الأولي وتحسين الـ LCP.
  *  - Define site metadata, OpenGraph and Twitter card defaults.
+ *  - Google Analytics (GTM/GA4) + بانر موافقة الكوكيز.
  */
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import {
   Cormorant_Garamond,
   Playfair_Display,
@@ -28,6 +30,8 @@ import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/shared/whatsapp-fab";
 import HideOnAdmin from "@/components/shared/hide-on-admin";
+import GoogleAnalytics, { GoogleAnalyticsNoScript } from "@/components/analytics/google-analytics";
+import CookieConsent from "@/components/analytics/cookie-consent";
 import { localeDirection } from "@/lib/i18n";
 import { siteConfig } from "@/lib/site-config";
 
@@ -140,6 +144,13 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="cursor-luxury overflow-x-hidden bg-obsidian font-sans antialiased">
+        {/* Google Tag Manager — fallback بدون جافاسكربت */}
+        <GoogleAnalyticsNoScript />
+        {/* تحميل GTM/GA4 + تتبّع تغيير الصفحات (Suspense لأجل useSearchParams) */}
+        <Suspense fallback={null}>
+          <GoogleAnalytics />
+        </Suspense>
+
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AuthProvider>
             {/* عناصر بصرية غير أساسية — تُحمَّل بعد أول رسم */}
@@ -155,6 +166,9 @@ export default async function RootLayout({
             <HideOnAdmin><WhatsAppFab /></HideOnAdmin>
           </AuthProvider>
         </NextIntlClientProvider>
+
+        {/* بانر موافقة الكوكيز */}
+        <CookieConsent locale={locale} />
       </body>
     </html>
   );

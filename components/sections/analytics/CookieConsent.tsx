@@ -1,0 +1,100 @@
+"use client";
+/**
+ * components/analytics/cookie-consent.tsx — بانر موافقة الكوكيز (عربي/RTL، بهوية ABH).
+ *
+ * • يظهر مرة واحدة لحد ما المستخدم يختار «موافق» أو «رفض».
+ * • عند الموافقة: يحدّث Google Consent Mode إلى granted ويخزّن الاختيار،
+ *   فتبدأ GA4 تجمع البيانات. عند الرفض: يفضل denied ولا تُجمع أي بيانات.
+ *
+ * ضع <CookieConsent /> داخل <body> في app/layout.tsx (بعد GoogleAnalytics).
+ */
+import { useEffect, useState } from "react";
+import { CONSENT_KEY } from "@/lib/analytics";
+
+declare global {
+  interface Window {
+    gtag?: (...args: any[]) => void;
+  }
+}
+
+function updateGoogleConsent(granted: boolean) {
+  if (typeof window === "undefined") return;
+  window.dataLayer = window.dataLayer || [];
+  // نستخدم نفس دالة gtag المعرّفة في GoogleAnalytics
+  function gtag(...args: any[]) { window.dataLayer!.push(args); }
+  gtag("consent", "update", {
+    ad_storage: granted ? "granted" : "denied",
+    ad_user_data: granted ? "granted" : "denied",
+    ad_personalization: granted ? "granted" : "denied",
+    analytics_storage: granted ? "granted" : "denied",
+  });
+}
+
+export default function CookieConsent({ locale }: { locale?: string }) {
+  const isAr = locale !== "en";
+  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(CONSENT_KEY);
+      if (!saved) setShow(true);                 // ماقررش لسه
+      else if (saved === "granted") updateGoogleConsent(true); // وافق قبل كده
+    } catch { setShow(true); }
+  }, []);
+
+  const decide = (granted: boolean) => {
+    try { localStorage.setItem(CONSENT_KEY, granted ? "granted" : "denied"); } catch { /* */ }
+    updateGoogleConsent(granted);
+    setShow(false);
+  };
+
+  if (!show) return null;
+
+  return (
+    <div
+      dir={isAr ? "rtl" : "ltr"}
+      style={{
+        position: "fixed", insetInlineStart: 16, insetInlineEnd: 16, bottom: 16, zIndex: 9999,
+        maxWidth: 560, marginInline: "auto",
+        borderRadius: 18, border: "1px solid rgba(255,255,255,.12)",
+        background: "rgba(12,13,14,.96)", backdropFilter: "blur(14px)",
+        boxShadow: "0 30px 80px -30px rgba(0,0,0,.85)",
+        padding: "18px 20px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+        <span style={{ display: "grid", placeItems: "center", height: 38, width: 38, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(203,205,205,.3)", background: "rgba(203,205,205,.08)", color: "#cbcdcd" }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5z" /><circle cx="9.5" cy="9.5" r="1" fill="currentColor" /><circle cx="14" cy="14" r="1" fill="currentColor" /><circle cx="9" cy="15" r="1" fill="currentColor" />
+          </svg>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, color: "#fff", fontWeight: 600, marginBottom: 5 }}>
+            {T("نحترم خصوصيتك", "We value your privacy")}
+          </div>
+          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7, color: "rgba(203,205,205,.8)" }}>
+            {T(
+              "بنستخدم الكوكيز لتحليل أداء الموقع وتحسين تجربتك. تقدر توافق أو ترفض، واختيارك بيتحفظ.",
+              "We use cookies to analyze site performance and improve your experience. You can accept or decline."
+            )}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+            <button
+              onClick={() => decide(true)}
+              style={{ borderRadius: 999, border: "none", padding: "10px 22px", fontSize: 12.5, fontWeight: 600, letterSpacing: ".04em", cursor: "pointer", color: "#0c0d0e", background: "linear-gradient(135deg,#fff,#cbcdcd)" }}
+            >
+              {T("موافق", "Accept")}
+            </button>
+            <button
+              onClick={() => decide(false)}
+              style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.2)", padding: "10px 22px", fontSize: 12.5, cursor: "pointer", color: "var(--abh-platinum, #cbcdcd)", background: "transparent" }}
+            >
+              {T("رفض", "Decline")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
