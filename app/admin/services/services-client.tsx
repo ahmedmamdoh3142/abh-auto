@@ -1,25 +1,23 @@
 "use client";
 /**
- * app/admin/services/services-client.tsx — الخدمات والأسعار (CLIENT) · v4
+ * app/admin/services/services-client.tsx — الخدمات والأسعار (CLIENT) · v5
  *
- * الجديد في v4 — أزرار «دفتر الأسعار المعتمد» داخل وضع الشركة:
- *  • زرّان: «أسعار الشركاء · 20%» و«أسعار المناديب · 10%».
- *  • الضغط على أيّهما يملأ — تلقائيًا — «سعر الشركة» + «عمولة الشركة» لكل خدمة/حجم
- *    من دفتر الأسعار المعتمد (lib/admin/partner-price-book.ts):
- *       السعر  = السعر بعد الخصم (موحّد للشركاء والمناديب).
- *       العمولة = round(السعر × النسبة)  →  الشركاء 20% ، المناديب 10%.
- *  • القيم تتحط في المسودة (partnerDraft) القابلة للتعديل — تقدر تعدّل أي خانة يدوي،
- *    وبعدين تحفظ بزر «حفظ أسعار الشركة» الموجود. ولو غيّرت رأيك «تراجع» يرجّع آخر محفوظ.
- *  • شريط الأزرار بيعرض عدّاد «مطابق X/الكل» قبل ما تضغط.
+ * الجديد في v5 — دفتر الأسعار المعتمد قابل للتعديل من اللوحة (بدل الملف الثابت):
+ *  • الكومبو بقى فيه أوضاع: «الأسعار العامة» + «📋 دفتر الشركاء» + «📋 دفتر المناديب»
+ *    + الشركات الفعلية.
+ *  • في وضع «دفتر الشركاء/المناديب»: بتظهر كل الخدمات بحقول (سعر + عمولة) تعدّلها
+ *    بإيدك زي أسعار الموقع بالظبط — من غير أي نسب ثابتة — وتحفظ. بتتخزّن في
+ *    جدول price_templates عبر /api/admin/price-templates.
+ *  • في وضع شركة فعلية: زرّا «طبّق دفتر الشركاء/المناديب» بيقرأوا آخر دفتر محفوظ
+ *    من الـAPI ويملأوا السعر+العمولة (مش نسب، القيم المحفوظة كما هي)، تعدّل لو حابب
+ *    ثم «حفظ أسعار الشركة».
  *
- *  ملاحظة v3 (وضع أسعار شركة): كومبو فوق فيه الشركات؛ الافتراضي «الأسعار العامة».
- *  لكل خدمة صورتان: image (عرضية) + cardImage (طولية للكروت).
+ *  ملاحظات سابقة: لكل خدمة صورتان image (عرضية) + cardImage (طولية للكروت).
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, LocaleField, Selectbox, Chip, Modal, Confirm, useToast, Ic, EGP, PageHeader, ImageCard } from "@/components/admin/ui";
 import { emptyLoc, type Loc } from "@/lib/admin/i18n-json";
 import ImageUpload from "@/components/admin/image-upload";
-import { PRESET_RATES, matchPreset, type PresetKind } from "@/lib/admin/partner-price-book";
 
 type SizeKey = "small" | "medium" | "large";
 type SizePrice = { price: number; old: number };
@@ -34,13 +32,16 @@ type Svc = {
 };
 
 type Partner = { id: string; name: string };
-// سعر الشركة لكل (خدمة، حجم): "serviceId:size" → { price, commission }
 type PartnerPriceMap = Record<string, { price: number; commission: number }>;
 
 const SIZE_ORDER: SizeKey[] = ["small", "medium", "large"];
 const emptyPrices = (): Record<SizeKey, SizePrice> => ({ small: { price: 0, old: 0 }, medium: { price: 0, old: 0 }, large: { price: 0, old: 0 } });
 const startPrice = (s: Svc) => { const ps = SIZE_ORDER.map((k) => s.prices[k]?.price || 0).filter((n) => n > 0); return ps.length ? Math.min(...ps) : 0; };
 const startOld = (s: Svc) => { for (const k of SIZE_ORDER) { const p = s.prices[k]; if (p?.price > 0) return p.old > p.price ? p.old : 0; } return 0; };
+
+// قيم خاصة لوضع الدفتر داخل نفس كومبو وضع التسعير
+const TPL_PARTNER = "tpl:partner";
+const TPL_REP = "tpl:rep";
 
 export default function ServicesClient({ initial, categories, sizes, partners, locale }: {
   initial: Svc[]; categories: { id: number; label: string }[]; sizes: { code: string; label: string }[];
@@ -56,15 +57,19 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   const [confirm, setConfirm] = useState<Svc | null>(null);
   const [cat, setCat] = useState<number>(0);
 
-  // ── وضع الشركة ──
-  const [partnerId, setPartnerId] = useState<string>("");      // "" = الأسعار العامة
+  // ── وضع التسعير: "" عام | "tpl:partner"/"tpl:rep" دفتر | <uuid> شركة ──
+  const [mode, setMode] = useState<string>("");
   const [partnerPrices, setPartnerPrices] = useState<PartnerPriceMap>({});
-  const [partnerDraft, setPartnerDraft] = useState<PartnerPriceMap>({}); // المسودة القابلة للتعديل
+  const [partnerDraft, setPartnerDraft] = useState<PartnerPriceMap>({});
   const [loadingPartner, setLoadingPartner] = useState(false);
   const [savingPartner, setSavingPartner] = useState(false);
-  const [appliedKind, setAppliedKind] = useState<PresetKind | null>(null); // الزر المُطبَّق حاليًا (للتمييز اللوني)
-  const isPartnerMode = partnerId !== "";
-  const activePartner = partners.find((p) => p.id === partnerId);
+  const [applying, setApplying] = useState<"partner" | "rep" | null>(null);
+
+  const isTemplateMode = mode === TPL_PARTNER || mode === TPL_REP;
+  const templateKind: "partner" | "rep" | null = mode === TPL_PARTNER ? "partner" : mode === TPL_REP ? "rep" : null;
+  const isPartnerMode = mode !== "" && !isTemplateMode; // شركة فعلية
+  const isEditorMode = isPartnerMode || isTemplateMode;  // أي وضع فيه حقول سعر/عمولة
+  const activePartner = partners.find((p) => p.id === mode);
 
   const catName = (id: number | null) => categories.find((c) => c.id === id)?.label || "";
   const txt = (l: Loc) => (isAr ? l.ar || l.en : l.en || l.ar) || "";
@@ -77,35 +82,30 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     featured: list.filter((s) => s.featured).length,
   }), [list]);
 
-  // تغطية الدفتر: كام خدمة قابلة للتسعير (مش حسب الطلب) ليها صف في الدفتر
-  const pricable = useMemo(() => list.filter((s) => !s.onRequest), [list]);
-  const presetCoverage = useMemo(
-    () => pricable.filter((s) => matchPreset({ id: s.id, name: s.name })).length,
-    [pricable]
-  );
-
-  // جلب أسعار الشركة عند اختيارها
+  // جلب أسعار الوضع الحالي (شركة فعلية أو دفتر)
   useEffect(() => {
-    setAppliedKind(null);
-    if (!partnerId) { setPartnerPrices({}); setPartnerDraft({}); return; }
+    if (mode === "") { setPartnerPrices({}); setPartnerDraft({}); return; }
     let alive = true;
     setLoadingPartner(true);
     (async () => {
       try {
-        const res = await fetch(`/api/admin/partner-prices?partnerId=${encodeURIComponent(partnerId)}`);
+        const url = isTemplateMode
+          ? `/api/admin/price-templates?kind=${templateKind}`
+          : `/api/admin/partner-prices?partnerId=${encodeURIComponent(mode)}`;
+        const res = await fetch(url);
         const data = await res.json();
         if (!alive) return;
         const map: PartnerPriceMap = data?.ok ? data.prices : {};
         setPartnerPrices(map);
         setPartnerDraft(map);
       } catch {
-        if (alive) toast(T("فشل تحميل أسعار الشركة", "Failed to load partner prices"), "bad");
+        if (alive) toast(T("فشل تحميل الأسعار", "Failed to load prices"), "bad");
       } finally {
         if (alive) setLoadingPartner(false);
       }
     })();
     return () => { alive = false; };
-  }, [partnerId]); // eslint-disable-line
+  }, [mode]); // eslint-disable-line
 
   const setPartnerCell = useCallback((serviceId: number, size: SizeKey, field: "price" | "commission", val: number) => {
     setPartnerDraft((d) => {
@@ -115,41 +115,35 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     });
   }, []);
 
-  // ── تطبيق دفتر الأسعار المعتمد (شركاء 20% / مناديب 10%) على المسودة ──
-  const runApply = useCallback((kind: PresetKind) => {
-    const rate = PRESET_RATES[kind];
-    const patch: PartnerPriceMap = {};
-    let matched = 0; const missed: string[] = [];
-    // نحسب القيم والعدّاد الآن (مش داخل setState) عشان الرسالة تطلع صح
-    for (const s of list) {
-      if (!s.id || s.onRequest) continue;
-      const e = matchPreset({ id: s.id, name: s.name });
-      if (!e) { missed.push(txt(s.name) || s.slug || String(s.id)); continue; }
-      matched++;
-      for (const size of SIZE_ORDER) {
-        const price = e.prices[size];
-        if (!(price > 0)) continue;
-        patch[`${s.id}:${size}`] = { price, commission: Math.round(price * rate) };
+  // ── تطبيق دفتر محفوظ (شركاء/مناديب) على مسودة شركة فعلية — يقرأ من الـAPI ──
+  const runApply = useCallback(async (kind: "partner" | "rep") => {
+    setApplying(kind);
+    try {
+      const res = await fetch(`/api/admin/price-templates?kind=${kind}`);
+      const data = await res.json();
+      if (!data?.ok) throw new Error();
+      const tpl: PartnerPriceMap = data.prices || {};
+      if (Object.keys(tpl).length === 0) {
+        const book = kind === "partner" ? T("دفتر الشركاء", "Partners book") : T("دفتر المناديب", "Reps book");
+        toast(T(`${book} فاضي — افتحه من الكومبو واملأه أولًا.`, `${book} is empty — open it from the dropdown and fill it first.`), "bad");
+        return;
       }
+      // ندمج الدفتر فوق المسودة الحالية (الدفتر بياخد الأولوية للخدمات اللي فيه)
+      setPartnerDraft((prev) => ({ ...prev, ...tpl }));
+      const head = kind === "partner" ? T("أسعار الشركاء", "Partner prices") : T("أسعار المناديب", "Rep prices");
+      toast(T(`تم تطبيق ${head}. راجِع ثم اضغط «حفظ أسعار الشركة».`, `${head} applied. Review, then click “Save partner prices”.`));
+    } catch {
+      toast(T("فشل تطبيق الدفتر", "Failed to apply book"), "bad");
+    } finally {
+      setApplying(null);
     }
-    setPartnerDraft((prev) => ({ ...prev, ...patch }));
-    setAppliedKind(kind);
-    const head = kind === "partner" ? T("أسعار الشركاء (20%)", "Partners (20%)") : T("أسعار المناديب (10%)", "Reps (10%)");
-    if (matched === 0) {
-      toast(T("مفيش خدمات مطابقة في الدفتر — راجِع الربط.", "No matching services in the book — check the mapping."), "bad");
-    } else {
-      const tail = missed.length ? T(` — لم يُطابَق ${missed.length}`, ` — ${missed.length} unmatched`) : "";
-      toast(T(`تم تطبيق ${head} على ${matched} خدمة. راجِع ثم اضغط «حفظ أسعار الشركة».`, `${head} applied to ${matched} services. Review, then click “Save partner prices”.`) + tail);
-    }
-  }, [list]); // eslint-disable-line
+  }, []); // eslint-disable-line
 
-  // هل في تغييرات غير محفوظة؟
   const partnerDirty = useMemo(() => JSON.stringify(partnerPrices) !== JSON.stringify(partnerDraft), [partnerPrices, partnerDraft]);
 
-  async function savePartnerPrices() {
-    if (!partnerId) return;
+  // حفظ — يفرّق بين دفتر (price-templates) وشركة فعلية (partner-prices)
+  async function savePrices() {
     setSavingPartner(true);
-    // نبني المصفوفة من المسودة (نرسل فقط اللي ليه سعر أو كان موجود قبل كده)
     const keys = new Set([...Object.keys(partnerDraft), ...Object.keys(partnerPrices)]);
     const prices = Array.from(keys).map((k) => {
       const [sid, size] = k.split(":");
@@ -157,21 +151,19 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
       return { serviceId: Number(sid), sizeCode: size, price: Number(cell.price) || 0, commission: Number(cell.commission) || 0 };
     });
     try {
-      const res = await fetch("/api/admin/partner-prices", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnerId, prices }),
-      });
+      const body = isTemplateMode ? { kind: templateKind, prices } : { partnerId: mode, prices };
+      const url = isTemplateMode ? "/api/admin/price-templates" : "/api/admin/partner-prices";
+      const res = await fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!data.ok) throw new Error();
-      // ثبّت المسودة (احذف الصفرية من النسخة المثبتة)
+      // ثبّت المسودة (نشيل الصفري بالكامل)
       const cleaned: PartnerPriceMap = {};
-      for (const [k, v] of Object.entries(partnerDraft)) if ((v.price || 0) > 0) cleaned[k] = v;
+      for (const [k, v] of Object.entries(partnerDraft)) if ((v.price || 0) > 0 || (v.commission || 0) > 0) cleaned[k] = v;
       setPartnerPrices(cleaned);
       setPartnerDraft(cleaned);
-      toast(T("تم حفظ أسعار الشركة", "Partner prices saved"));
+      toast(isTemplateMode ? T("تم حفظ الدفتر", "Book saved") : T("تم حفظ أسعار الشركة", "Partner prices saved"));
     } catch {
-      toast(T("فشل حفظ أسعار الشركة", "Failed to save partner prices"), "bad");
+      toast(T("فشل الحفظ", "Save failed"), "bad");
     } finally {
       setSavingPartner(false);
     }
@@ -205,30 +197,40 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   }
   const cats = [{ id: 0, label: T("الكل", "All") }, ...categories];
 
-  // إجمالي عمولة الشركة المتوقّعة من دفتر الشركة الحالي (لكل الأحجام المملوءة)
   const draftCommissionSum = useMemo(() => {
     return Object.values(partnerDraft).reduce((sum, c) => sum + ((c.price || 0) > 0 ? (c.commission || 0) : 0), 0);
   }, [partnerDraft]);
 
+  // عنوان/وصف الوضع الحالي
+  const modeTitle = isTemplateMode
+    ? (templateKind === "partner" ? T("دفتر أسعار الشركاء", "Partners price book") : T("دفتر أسعار المناديب", "Reps price book"))
+    : isPartnerMode
+    ? T(`أسعار شركة «${activePartner?.name ?? ""}»`, `“${activePartner?.name ?? ""}” prices`)
+    : T("الخدمات والأسعار", "Services & pricing");
+
   return (
     <div className="abh-fade-up">
       <PageHeader
-        title={T("الخدمات والأسعار", "Services & pricing")}
-        subtitle={isPartnerMode
-          ? T(`أنت تعدّل أسعار وعمولات شركة «${activePartner?.name ?? ""}». العمولة من حقّ الشركة، والأسعار العامة لا تتأثر.`, `Editing prices & commissions for “${activePartner?.name ?? ""}”. The commission is owed to the partner; public prices are untouched.`)
+        title={modeTitle}
+        subtitle={isTemplateMode
+          ? T("عدّل أسعار وعمولات الدفتر لكل الخدمات كأصل واحد. أي شركة/مندوب تستدعي الدفتر هياخد آخر قيم محفوظة هنا.", "Edit the book's prices & commissions for every service as a single source. Any partner/rep applying this book gets the latest values saved here.")
+          : isPartnerMode
+          ? T(`تعدّل أسعار وعمولات «${activePartner?.name ?? ""}». تقدر تطبّق دفتر الشركاء/المناديب كنقطة بداية ثم تعدّل.`, `Editing prices & commissions for “${activePartner?.name ?? ""}”. You can apply the partners/reps book as a starting point then tweak.`)
           : T("أضف وعدّل خدمات الكتالوج بالعربي والإنجليزي، مع سعر لكل حجم سيارة وقائمة مشمولات.", "Create and edit catalogue services in Arabic & English, with a price per vehicle size and an includes list.")}
         seed="services-hero"
-        action={!isPartnerMode ? <Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("خدمة جديدة", "New service")}</Pill> : undefined} />
+        action={!isEditorMode ? <Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("خدمة جديدة", "New service")}</Pill> : undefined} />
 
-      {/* ════ شريط اختيار الشركة ════ */}
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 22, padding: 18, borderRadius: 20, border: `1px solid ${isPartnerMode ? "rgba(203,205,205,.35)" : "rgba(255,255,255,.08)"}`, background: isPartnerMode ? "rgba(203,205,205,.05)" : "rgba(255,255,255,.02)" }}>
+      {/* ════ شريط اختيار وضع التسعير ════ */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 22, padding: 18, borderRadius: 20, border: `1px solid ${isEditorMode ? "rgba(203,205,205,.35)" : "rgba(255,255,255,.08)"}`, background: isEditorMode ? "rgba(203,205,205,.05)" : "rgba(255,255,255,.02)" }}>
         <div style={{ flex: "1 1 280px", minWidth: 240 }}>
-          <Field label={T("وضع التسعير", "Pricing mode")} hint={T("اختر شركة لعرض/تعديل أسعارها الخاصة.", "Pick a company to view/edit its private prices.")}>
+          <Field label={T("وضع التسعير", "Pricing mode")} hint={T("اختر دفترًا معتمدًا أو شركة لعرض/تعديل أسعارها.", "Pick an approved book or a company to view/edit its prices.")}>
             <Selectbox
-              value={partnerId}
-              onChange={(v: string) => setPartnerId(v)}
+              value={mode}
+              onChange={(v: string) => setMode(v)}
               options={[
                 { value: "", label: T("الأسعار العامة (الموقع)", "Public prices (website)") },
+                { value: TPL_PARTNER, label: T("📋 دفتر أسعار الشركاء", "📋 Partners price book") },
+                { value: TPL_REP, label: T("📋 دفتر أسعار المناديب", "📋 Reps price book") },
                 ...partners.map((p) => ({ value: p.id, label: p.name })),
               ]}
               placeholder={T("اختر", "Select")}
@@ -236,50 +238,46 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           </Field>
         </div>
 
-        {isPartnerMode && (
+        {isEditorMode && (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{T("إجمالي عمولة الشركة (للأسعار المُدخلة)", "Partner's commission (entered)")}</span>
+              <span style={{ fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{T("إجمالي العمولة (للأسعار المُدخلة)", "Total commission (entered)")}</span>
               <span className="abh-num" dir="ltr" style={{ fontSize: 22, color: "var(--abh-ivory)" }}>{EGP(draftCommissionSum)} <span style={{ fontSize: 12, color: "var(--abh-steel)" }}>{ccy}</span></span>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <Ghost onClick={() => setPartnerDraft(partnerPrices)} >{T("تراجع", "Reset")}</Ghost>
-              <Pill icon={Ic.check} onClick={savePartnerPrices}>{savingPartner ? T("جارٍ الحفظ…", "Saving…") : T("حفظ أسعار الشركة", "Save partner prices")}</Pill>
+              <Ghost onClick={() => setPartnerDraft(partnerPrices)}>{T("تراجع", "Reset")}</Ghost>
+              <Pill icon={Ic.check} onClick={savePrices}>{savingPartner ? T("جارٍ الحفظ…", "Saving…") : isTemplateMode ? T("حفظ الدفتر", "Save book") : T("حفظ أسعار الشركة", "Save partner prices")}</Pill>
             </div>
           </>
         )}
       </div>
 
-      {/* ════ شريط دفتر الأسعار المعتمد (الزرّان) — في وضع الشركة فقط ════ */}
+      {/* ════ شريط «طبّق دفتر» — في وضع شركة فعلية فقط ════ */}
       {isPartnerMode && (
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 16, padding: "14px 18px", borderRadius: 16, border: "1px solid rgba(203,205,205,.18)", background: "linear-gradient(180deg, rgba(203,205,205,.06), rgba(255,255,255,.02))" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginInlineEnd: "auto" }}>
             <span style={{ fontSize: 13, color: "var(--abh-ivory)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <Ic.sparkle s={14} />{T("تطبيق دفتر الأسعار المعتمد", "Apply approved price book")}
+              <Ic.sparkle s={14} />{T("تطبيق دفتر معتمد كنقطة بداية", "Apply an approved book as a starting point")}
             </span>
             <span style={{ fontSize: 10.5, color: "var(--abh-steel)", lineHeight: 1.6 }}>
-              {T(`يملأ «سعر الشركة» و«العمولة» لكل الخدمات المطابقة دفعة واحدة، وتقدر تعدّل بعدها. مطابق ${presetCoverage}/${pricable.length} خدمة.`,
-                 `Fills “partner price” + “commission” for all matched services at once; editable after. Matched ${presetCoverage}/${pricable.length}.`)}
+              {T("بيملأ «سعر الشركة» و«العمولة» من آخر دفتر محفوظ، وتقدر تعدّل بعدها ثم تحفظ.", "Fills “partner price” + “commission” from the latest saved book; editable then save.")}
             </span>
           </div>
-          {(["partner", "rep"] as PresetKind[]).map((k) => {
-            const active = appliedKind === k;
-            const Btn = active ? Pill : Ghost;        // العادي Ghost، والمتفعّل ياخد شكل Pill
-            const label = k === "partner" ? T("أسعار الشركاء · 20%", "Partners · 20%") : T("أسعار المناديب · 10%", "Reps · 10%");
-            return <Btn key={k} icon={Ic.sparkle} onClick={() => runApply(k)}>{label}</Btn>;
+          {(["partner", "rep"] as const).map((k) => {
+            const label = k === "partner" ? T("طبّق دفتر الشركاء", "Apply partners book") : T("طبّق دفتر المناديب", "Apply reps book");
+            return <Ghost key={k} icon={Ic.sparkle} onClick={() => runApply(k)}>{applying === k ? T("جارٍ…", "…") : label}</Ghost>;
           })}
         </div>
       )}
 
-      {isPartnerMode && partnerDirty && (
+      {isEditorMode && partnerDirty && (
         <div style={{ marginBottom: 16, padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(232,207,154,.3)", background: "rgba(232,207,154,.07)", color: "var(--abh-warn)", fontSize: 12.5 }}>
-          {T("لديك تغييرات غير محفوظة — اضغط «حفظ أسعار الشركة».", "You have unsaved changes — click “Save partner prices”.")}
+          {T("لديك تغييرات غير محفوظة — اضغط «حفظ».", "You have unsaved changes — click “Save”.")}
         </div>
       )}
 
       <div className="abh-col" style={{ gap: 22 }}>
-        {/* إحصائيات سريعة (تظهر في الوضع العام فقط) */}
-        {!isPartnerMode && (
+        {!isEditorMode && (
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             {[[T("إجمالي الخدمات", "Total"), stats.total], [T("ظاهرة", "Active"), stats.active], [T("مميّزة", "Featured"), stats.featured]].map(([l, v], i) => (
               <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
@@ -290,7 +288,6 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           </div>
         )}
 
-        {/* فلاتر التصنيف */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {cats.map((c) => {
             const on = cat === c.id;
@@ -299,7 +296,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
         </div>
 
         {loadingPartner ? (
-          <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("جارٍ تحميل أسعار الشركة…", "Loading partner prices…")}</div>
+          <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("جارٍ تحميل الأسعار…", "Loading prices…")}</div>
         ) : (
           <div className="abh-grid-cards">
             {shown.map((s, i) => {
@@ -307,22 +304,20 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
               const disc = so > sp && sp > 0 ? Math.round((1 - sp / so) * 100) : 0;
               return (
                 <div key={s.id} style={{ opacity: s.active ? 1 : 0.55, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
-                  <ImageCard image={s.image} seed={s.slug || txt(s.name)} height={isPartnerMode ? 330 : 278}
+                  <ImageCard image={s.image} seed={s.slug || txt(s.name)} height={isEditorMode ? 330 : 278}
                     badge={s.featured ? T("مميّزة", "Featured") : undefined}
                     topRight={<Chip tone="platinum">{catName(s.categoryId)}</Chip>}
-                    actions={!isPartnerMode ? <>
+                    actions={!isEditorMode ? <>
                       <IconBtn icon={Ic.pencil} label={T("تعديل", "Edit")} solid onClick={() => setEditing(s)} />
                       <IconBtn icon={Ic.trash} label={T("حذف", "Delete")} solid danger onClick={() => setConfirm(s)} />
                     </> : undefined}>
                     <h3 className="abh-display" style={{ margin: 0, fontSize: 25, color: "var(--abh-ivory)" }}>{txt(s.name) || "—"}</h3>
 
-                    {isPartnerMode ? (
-                      /* ── وضع الشركة: حقول سعر + عمولة لكل حجم ── */
+                    {isEditorMode ? (
                       <PartnerPriceEditor
                         svc={s} sizes={sizes} draft={partnerDraft} setCell={setPartnerCell}
                         sizeLabel={sizeLabel} T={T} ccy={ccy} isAr={isAr} pubPrice={(size) => s.prices[size as SizeKey]?.price || 0} />
                     ) : (
-                      /* ── الوضع العام: نفس العرض القديم ── */
                       <>
                         {txt(s.description) && <div style={{ fontSize: 12.5, color: "rgba(203,205,205,.8)", marginTop: 4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{txt(s.description)}</div>}
                         <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11, color: "rgba(203,205,205,.8)", flexWrap: "wrap" }}>
@@ -359,7 +354,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   );
 }
 
-/* ═════════════════ محرّر أسعار الشركة داخل الكرت ═════════════════ */
+/* ═════════════════ محرّر سعر + عمولة داخل الكرت (دفتر أو شركة) ═════════════════ */
 function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isAr, pubPrice }: {
   svc: Svc; sizes: { code: string; label: string }[]; draft: PartnerPriceMap;
   setCell: (serviceId: number, size: SizeKey, field: "price" | "commission", val: number) => void;
@@ -367,7 +362,7 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
   pubPrice: (size: string) => number;
 }) {
   if (svc.onRequest) {
-    return <div style={{ marginTop: 10, fontSize: 13, color: "var(--abh-platinum)" }}>{T("هذه الخدمة «حسب الطلب» — لا تُسعَّر للشركات.", "“On request” service — not priced for partners.")}</div>;
+    return <div style={{ marginTop: 10, fontSize: 13, color: "var(--abh-platinum)" }}>{T("هذه الخدمة «حسب الطلب» — لا تُسعَّر.", "“On request” service — not priced.")}</div>;
   }
   const availSizes = (sizes.length ? sizes.map((s) => s.code) : ["small", "medium", "large"]) as SizeKey[];
   const cellInput: React.CSSProperties = { width: "100%", borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "8px 10px", fontSize: 13, color: "var(--abh-ivory)", outline: "none", textAlign: isAr ? "right" : "left" };
@@ -376,8 +371,8 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.12)" }}>
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: 8, alignItems: "center", fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
         <span>{T("الحجم", "Size")}</span>
-        <span>{T("سعر الشركة", "Partner price")}</span>
-        <span>{T("عمولة الشركة", "Partner commission")}</span>
+        <span>{T("السعر", "Price")}</span>
+        <span>{T("العمولة", "Commission")}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {availSizes.map((size) => {
@@ -401,8 +396,8 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
         })}
       </div>
       <div style={{ marginTop: 8, fontSize: 10, color: "var(--abh-steel)", lineHeight: 1.7 }}>
-        {T(`القيم بالـ${ccy}. «سعر الشركة» = ما تدفعه الشركة. «عمولة الشركة» = ما يخصّها هي على كل بيعة (صافيك = السعر − العمولة). اترك السعر 0 لترجع للسعر العام.`,
-           `Values in ${ccy}. “Partner price” = what they pay. “Partner commission” = what they earn per sale (your net = price − commission). Leave price 0 to fall back to public.`)}
+        {T(`القيم بالـ${ccy}. «السعر» = ما يُدفع. «العمولة» = ما يخصّ الطرف على كل بيعة. اترك السعر والعمولة 0 للرجوع للسعر العام.`,
+           `Values in ${ccy}. “Price” = paid amount. “Commission” = earned per sale. Leave price & commission 0 to fall back to public.`)}
       </div>
     </div>
   );
@@ -484,7 +479,6 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
           </div>
         </div>
 
-        {/* ── الصور: عرضية (image) + طولية للكرت (cardImage) ── */}
         <div>
           <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("صور الخدمة", "Service images")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

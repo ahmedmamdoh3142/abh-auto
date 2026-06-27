@@ -1,7 +1,9 @@
 /**
- * app/admin/page.tsx — نظرة عامة (SERVER) · v2
- * استعلامات غنية: إيراد محصّل + متوقّع، تريند شهري، شارت 14 يوم،
- * توزيع الحالات، تقسيم الدفع، أكثر الخدمات طلبًا، وأقرب الحجوزات بأسماء العملاء.
+ * app/admin/page.tsx — نظرة عامة (SERVER) · v4
+ * ──────────────────────────────────────────────────────────────────────
+ * فلتر فترة حقيقي من السيرفر (يوم / أسبوع / شهر / سنة) عبر ?range=.
+ * استعلامات: KPIs + تريند، سلسلة زمنية، توزيع الحالات، طرق الدفع،
+ * أكثر الخدمات، وأقرب الحجوزات.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -12,54 +14,118 @@ import OverviewClient from "./overview-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminOverviewPage() {
+type RangeKey = "day" | "week" | "month" | "year";
+
+const RANGES: Record<RangeKey, {
+  bucket: string; step: string; spanStart: string; prevStart: string; prevEnd: string;
+}> = {
+  day: {
+    bucket: "date_trunc('hour', b.created_at)",
+    step: "1 hour",
+    spanStart: "date_trunc('day', now())",
+    prevStart: "date_trunc('day', now()) - interval '1 day'",
+    prevEnd: "date_trunc('day', now())",
+  },
+  week: {
+    bucket: "date_trunc('day', b.created_at)",
+    step: "1 day",
+    spanStart: "date_trunc('day', now()) - interval '6 days'",
+    prevStart: "date_trunc('day', now()) - interval '13 days'",
+    prevEnd: "date_trunc('day', now()) - interval '6 days'",
+  },
+  month: {
+    bucket: "date_trunc('day', b.created_at)",
+    step: "1 day",
+    spanStart: "date_trunc('day', now()) - interval '29 days'",
+    prevStart: "date_trunc('day', now()) - interval '59 days'",
+    prevEnd: "date_trunc('day', now()) - interval '29 days'",
+  },
+  year: {
+    bucket: "date_trunc('month', b.created_at)",
+    step: "1 month",
+    spanStart: "date_trunc('month', now()) - interval '11 months'",
+    prevStart: "date_trunc('month', now()) - interval '23 months'",
+    prevEnd: "date_trunc('month', now()) - interval '11 months'",
+  },
+};
+
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   await requireAdmin();
   const locale = (await getLocale()) as Locale;
+  const sp = await searchParams;
+  const range: RangeKey = (["day", "week", "month", "year"].includes(sp?.range || "")
+    ? sp!.range
+    : "month") as RangeKey;
+  const R = RANGES[range];
 
+  /* ═══════════ KPIs ضمن الفترة + الفترة السابقة ═══════════ */
   const [counts] = await query<any>(
     `SELECT
-       COALESCE((SELECT sum(total) FROM bookings WHERE payment_status='paid'),0)                                   AS collected,
-       COALESCE((SELECT sum(total) FROM bookings WHERE status<>'cancelled'),0)                                     AS expected,
-       COALESCE((SELECT sum(total) FROM bookings WHERE payment_status='paid' AND created_at >= date_trunc('month',now())),0)                                  AS month_rev,
-       COALESCE((SELECT sum(total) FROM bookings WHERE payment_status='paid' AND created_at >= date_trunc('month',now()) - interval '1 month' AND created_at < date_trunc('month',now())),0) AS prev_month_rev,
-       (SELECT count(*) FROM bookings WHERE status='upcoming')                                                     AS upcoming,
-       (SELECT count(*) FROM bookings WHERE status='active')                                                       AS active,
-       (SELECT count(*) FROM bookings WHERE status='completed')                                                    AS completed,
-       (SELECT count(*) FROM bookings WHERE status='cancelled')                                                    AS cancelled,
-       (SELECT count(*) FROM bookings WHERE created_at >= date_trunc('month',now()))                               AS month_count,
-       (SELECT count(*) FROM bookings WHERE created_at >= date_trunc('month',now()) - interval '1 month' AND created_at < date_trunc('month',now())) AS prev_month_count,
-       (SELECT count(*) FROM bookings WHERE scheduled_date = current_date)                                         AS today_count,
-       (SELECT count(*) FROM bookings WHERE payment_status='paid')                                                 AS paid_count,
-       (SELECT count(*) FROM bookings WHERE payment_status<>'paid' AND status<>'cancelled')                        AS unpaid_count,
-       (SELECT count(*) FROM users WHERE role='member')                                                            AS members,
-       (SELECT count(*) FROM users WHERE role='member' AND member_since >= date_trunc('month',now()))              AS new_members`
+       COALESCE((SELECT sum(total) FROM bookings WHERE payment_status='paid'),0)                                   AS collected_all,
+       COALESCE((SELECT sum(total) FROM bookings WHERE status<>'cancelled'),0)                                      AS expected_all,
+       COALESCE((SELECT sum(total) FROM bookings
+                 WHERE payment_status='paid' AND created_at >= ${R.spanStart}),0)                                   AS rev_cur,
+       COALESCE((SELECT sum(total) FROM bookings
+                 WHERE payment_status='paid' AND created_at >= ${R.prevStart} AND created_at < ${R.prevEnd}),0)     AS rev_prev,
+       (SELECT count(*) FROM bookings WHERE created_at >= ${R.spanStart})                                           AS cnt_cur,
+       (SELECT count(*) FROM bookings WHERE created_at >= ${R.prevStart} AND created_at < ${R.prevEnd})             AS cnt_prev,
+       (SELECT count(*) FROM bookings WHERE status='upcoming')                                                      AS upcoming,
+       (SELECT count(*) FROM bookings WHERE status='active')                                                        AS active,
+       (SELECT count(*) FROM bookings WHERE status='completed')                                                     AS completed,
+       (SELECT count(*) FROM bookings WHERE status='cancelled')                                                     AS cancelled,
+       (SELECT count(*) FROM bookings WHERE payment_status='paid')                                                  AS paid_count,
+       (SELECT count(*) FROM bookings WHERE payment_status<>'paid' AND status<>'cancelled')                         AS unpaid_count,
+       (SELECT count(*) FROM users WHERE role='member')                                                             AS members,
+       (SELECT count(*) FROM users WHERE role='member' AND member_since >= ${R.spanStart})                          AS new_members`
   );
 
-  // شارت آخر 14 يوم (قيمة الحجوزات غير الملغاة حسب تاريخ الإنشاء)
+  /* ═══════════ السلسلة الزمنية حسب الفترة (قيمة + عدد) ═══════════ */
   const series = await query<any>(
-    `SELECT to_char(d::date,'YYYY-MM-DD') AS day,
-            COALESCE((SELECT sum(total) FROM bookings b WHERE b.created_at::date = d::date AND b.status<>'cancelled'),0) AS value,
-            (SELECT count(*) FROM bookings b WHERE b.created_at::date = d::date AND b.status<>'cancelled') AS cnt
-     FROM generate_series(current_date - interval '13 days', current_date, interval '1 day') d
-     ORDER BY day`
+    `WITH buckets AS (
+        SELECT generate_series(${R.spanStart}, now(), interval '${R.step}') AS bk
+     )
+     SELECT to_char(buckets.bk, 'YYYY-MM-DD"T"HH24:MI:SS') AS bucket,
+            COALESCE(sum(b.total) FILTER (WHERE b.status<>'cancelled'), 0) AS value,
+            count(b.id) FILTER (WHERE b.status<>'cancelled')               AS cnt
+     FROM buckets
+     LEFT JOIN bookings b
+       ON ${R.bucket} = buckets.bk
+     GROUP BY buckets.bk
+     ORDER BY buckets.bk`
   );
 
-  // أكثر الخدمات طلبًا
+  /* ═══════════ أكثر الخدمات طلبًا (ضمن الفترة) ═══════════ */
   const topServices = await query<any>(
     `SELECT bi.service_slug AS slug, bi.name_snapshot AS name,
             count(*)::int AS cnt, COALESCE(sum(bi.line_total),0) AS revenue
      FROM booking_items bi
      JOIN bookings b ON b.id = bi.booking_id AND b.status<>'cancelled'
+       AND b.created_at >= ${R.spanStart}
      GROUP BY bi.service_slug, bi.name_snapshot
      ORDER BY cnt DESC, revenue DESC
-     LIMIT 5`
+     LIMIT 6`
   );
 
-  // أقرب الحجوزات
+  /* ═══════════ طرق الدفع (ضمن الفترة) ═══════════ */
+  const byPayment = await query<any>(
+    `SELECT b.payment_method_code AS code, COALESCE(pm.name, '{}'::jsonb) AS name,
+            count(*)::int AS cnt, COALESCE(sum(b.total),0) AS revenue
+     FROM bookings b
+     LEFT JOIN payment_methods pm ON pm.code = b.payment_method_code
+     WHERE b.status<>'cancelled' AND b.created_at >= ${R.spanStart} AND b.payment_method_code IS NOT NULL
+     GROUP BY b.payment_method_code, pm.name
+     ORDER BY cnt DESC`
+  );
+
+  /* ═══════════ أقرب الحجوزات ═══════════ */
   const recent = await query<any>(
     `SELECT b.reference, b.vehicle_label, b.status, b.total, b.payment_status,
             b.scheduled_date, b.scheduled_time, b.plate, b.branch_code,
-            COALESCE(u.name,'—') AS customer
+            COALESCE(u.name, b.customer_name, '—') AS customer
      FROM bookings b
      LEFT JOIN users u ON u.id = b.user_id
      WHERE b.status IN ('upcoming','active')
@@ -71,29 +137,45 @@ export default async function AdminOverviewPage() {
   const branchName: Record<string, string> = {};
   for (const br of branches) branchName[br.code] = pick(br.name, locale);
 
-  const trend = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : 0);
+  const trend = (cur: number, prev: number) =>
+    prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : 0;
 
   return (
     <OverviewClient
       locale={locale}
+      range={range}
       counts={{
-        collected: Number(counts?.collected) || 0,
-        expected: Number(counts?.expected) || 0,
+        collected: Number(counts?.collected_all) || 0,
+        expected: Number(counts?.expected_all) || 0,
         upcoming: Number(counts?.upcoming) || 0,
         active: Number(counts?.active) || 0,
         completed: Number(counts?.completed) || 0,
         cancelled: Number(counts?.cancelled) || 0,
-        monthCount: Number(counts?.month_count) || 0,
-        todayCount: Number(counts?.today_count) || 0,
+        periodCount: Number(counts?.cnt_cur) || 0,
         paidCount: Number(counts?.paid_count) || 0,
         unpaidCount: Number(counts?.unpaid_count) || 0,
         members: Number(counts?.members) || 0,
         newMembers: Number(counts?.new_members) || 0,
-        revTrend: trend(Number(counts?.month_rev) || 0, Number(counts?.prev_month_rev) || 0),
-        countTrend: trend(Number(counts?.month_count) || 0, Number(counts?.prev_month_count) || 0),
+        revTrend: trend(Number(counts?.rev_cur) || 0, Number(counts?.rev_prev) || 0),
+        countTrend: trend(Number(counts?.cnt_cur) || 0, Number(counts?.cnt_prev) || 0),
+        periodRevenue: Number(counts?.rev_cur) || 0,
       }}
-      series={series.map((r) => ({ day: r.day, value: Number(r.value) || 0, cnt: Number(r.cnt) || 0 }))}
-      topServices={topServices.map((s) => ({ name: pick(s.name, locale) || s.slug, cnt: s.cnt, revenue: Number(s.revenue) || 0 }))}
+      series={series.map((r) => ({
+        bucket: r.bucket,
+        value: Number(r.value) || 0,
+        cnt: Number(r.cnt) || 0,
+      }))}
+      topServices={topServices.map((s) => ({
+        name: pick(s.name, locale) || s.slug,
+        cnt: s.cnt,
+        revenue: Number(s.revenue) || 0,
+      }))}
+      byPayment={byPayment.map((p) => ({
+        name: pick(p.name, locale) || p.code || "—",
+        code: p.code,
+        cnt: p.cnt,
+        revenue: Number(p.revenue) || 0,
+      }))}
       recent={recent.map((r) => ({
         reference: r.reference,
         vehicle: r.vehicle_label || "—",

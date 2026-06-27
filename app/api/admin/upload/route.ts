@@ -1,12 +1,15 @@
 /**
- * app/api/admin/upload/route.ts — رفع/حذف صور (خدمات + إثباتات تحويل).
+ * app/api/admin/upload/route.ts — رفع/حذف صور (خدمات + إثباتات تحويل) · v2
  * • POST  (multipart/form-data, field "file" [+ "name"] [+ "folder"]) →
  *         يتحقق إنه صورة، يحوّله WebP بـsharp، ويحفظه في المجلد المسموح،
  *         ويرجّع { ok, path: "/<folder>/xxx.webp" }.
- *         folder المسموح: "services-img" (افتراضي) أو "payouts-img".
- * • DELETE ?path=/<folder>/xxx.webp → يمسح الملف (مع حماية من الخروج بره الفولدر).
+ * • DELETE ?path=/<folder>/xxx.webp → يمسح الملف.
  *
- * ملاحظة: محتاج sharp (npm i sharp). لو مش متاح، بيحفظ الصورة بصيغتها الأصلية.
+ * إصلاحات v2:
+ *  • safeName ماعدش بيعتمد على الاسم العربي (كان بيتحوّل لفاضي ويسبّب تصادم).
+ *    دلوقتي بيستخدم سلَج لاتيني لو متاح، وإلا اسم عشوائي مضمون الفرادة.
+ *  • fallback أنضف: لو sharp مش متاح، بنحفظ بامتداد صحيح من نوع الملف.
+ *  • أي حال، المسار اللي بيترجّع بيطابق الملف المكتوب فعليًا.
  */
 import { NextResponse } from "next/server";
 import { getAdminOrNull } from "@/lib/admin/guard";
@@ -16,22 +19,36 @@ import { promises as fs } from "fs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// المجلدات المسموح الرفع إليها (whitelist صارم — لا نقبل أي قيمة أخرى)
 const ALLOWED_FOLDERS = new Set(["services-img", "payouts-img"]);
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
-const MAX_BYTES = 8 * 1024 * 1024; // 8MB
+const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]);
+const EXT_FROM_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif", "image/gif": "gif",
+};
 
 function folderDir(folder: string): string {
   return path.join(PUBLIC_ROOT, folder);
 }
 
-/* اسم ملف نظيف وفريد */
+/**
+ * اسم ملف نظيف وفريد — لا يعتمد على الحروف العربية إطلاقًا.
+ * بناخد الجزء اللاتيني فقط من التلميح (لو فيه)، وإلا نستخدم "img".
+ * الفرادة مضمونة دايمًا بـ time + random بغضّ النظر عن الاسم.
+ */
 function safeName(input: string): string {
-  const base = (input || "img")
-    .toLowerCase().normalize("NFKD")
-    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 40) || "img";
-  return `${base}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const latin = (input || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9\s-]/g, "") // سيب اللاتيني والأرقام فقط
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 32)
+    .replace(/^-+|-+$/g, "");
+  const stem = latin || "img";
+  const unique = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${stem}-${unique}`;
 }
 
 export async function POST(request: Request) {
@@ -58,8 +75,8 @@ export async function POST(request: Request) {
     const stem = safeName(nameHint || folder);
     let filename = `${stem}.webp`;
     let outBuf: Buffer = bytes;
+    let usedSharp = false;
 
-    // تحويل WebP عبر sharp لو متاح (مع تصغير الأبعاد الكبيرة)
     try {
       const sharp = (await import("sharp")).default;
       outBuf = await sharp(bytes)
@@ -67,13 +84,28 @@ export async function POST(request: Request) {
         .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 82 })
         .toBuffer();
+      usedSharp = true;
     } catch {
-      // لا يوجد sharp → احفظ بالامتداد الأصلي
-      const ext = (blob.type && blob.type.split("/")[1]) || "bin";
-      filename = `${stem}.${ext === "jpeg" ? "jpg" : ext}`;
+      usedSharp = false;
     }
 
-    await fs.writeFile(path.join(dir, filename), outBuf);
+    if (!usedSharp) {
+      // بدون sharp: احفظ بالامتداد الصحيح المشتقّ من نوع الملف (مش .bin)
+      const ext = EXT_FROM_TYPE[blob.type] || "jpg";
+      filename = `${stem}.${ext}`;
+      outBuf = bytes;
+    }
+
+    const finalPath = path.join(dir, filename);
+    await fs.writeFile(finalPath, outBuf);
+
+    // تأكيد إن الملف اتكتب فعلاً قبل ما نرجّع المسار
+    try {
+      await fs.access(finalPath);
+    } catch {
+      return NextResponse.json({ ok: false, error: "write_failed" }, { status: 500 });
+    }
+
     return NextResponse.json({ ok: true, path: `/${folder}/${filename}` });
   } catch (err) {
     console.error("POST /api/admin/upload failed:", err);
@@ -89,18 +121,16 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const rel = searchParams.get("path") || "";
 
-    // حماية: لازم يبدأ بأحد المجلدات المسموحة ومفيش تسلّق مسارات
     const seg = rel.replace(/^\//, "").split("/")[0];
     if (!ALLOWED_FOLDERS.has(seg) || rel.includes("..")) {
       return NextResponse.json({ ok: false, error: "bad_path" }, { status: 400 });
     }
     const abs = path.join(PUBLIC_ROOT, rel.replace(/^\//, ""));
-    // تأكيد إضافي أن المسار النهائي داخل مجلد public المسموح
     if (!abs.startsWith(folderDir(seg))) {
       return NextResponse.json({ ok: false, error: "bad_path" }, { status: 400 });
     }
 
-    await fs.unlink(abs).catch(() => {}); // لو الملف مش موجود، عادي
+    await fs.unlink(abs).catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/admin/upload failed:", err);

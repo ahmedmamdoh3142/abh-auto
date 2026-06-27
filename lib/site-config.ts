@@ -8,7 +8,7 @@ export const siteConfig = {
   name: 'ABH Auto',
   shortName: 'ABH',
   tagline: 'Premium Automotive Protection',
-  url: 'https://abh-auto.example',
+  url: 'https://abh-auto.com',
   description:
     'ABH Auto — a specialized workshop for automotive protection. Nano-ceramic, paint protection film, armored security, smart tracking and bespoke detailing for the world\'s finest vehicles.',
   ogImage: '/images/og.jpg',
