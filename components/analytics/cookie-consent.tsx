@@ -20,13 +20,18 @@ declare global {
 function updateGoogleConsent(granted: boolean) {
   if (typeof window === "undefined") return;
   window.dataLayer = window.dataLayer || [];
-  // نستخدم نفس دالة gtag المعرّفة في GoogleAnalytics
-  function gtag(...args: any[]) { window.dataLayer!.push(args); }
+  // مهم: لازم ندفع كائن arguments الحقيقي (مش array) — ده الشكل الوحيد اللي
+  // GTM بيتعرّف عليه كإشارة gtag. لو دفعناه كـ array، GTM بيتجاهلها وتفضل
+  // الموافقة "denied" فمفيش بيانات بتتجمّع.
+  function gtag() {
+    (window.dataLayer as any[]).push(arguments);
+  }
+  const value = granted ? "granted" : "denied";
   gtag("consent", "update", {
-    ad_storage: granted ? "granted" : "denied",
-    ad_user_data: granted ? "granted" : "denied",
-    ad_personalization: granted ? "granted" : "denied",
-    analytics_storage: granted ? "granted" : "denied",
+    ad_storage: value,
+    ad_user_data: value,
+    ad_personalization: value,
+    analytics_storage: value,
   });
 }
 
