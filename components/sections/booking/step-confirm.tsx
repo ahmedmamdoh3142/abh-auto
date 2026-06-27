@@ -251,12 +251,6 @@ export function StepConfirm({
                 </span>
               </div>
 
-              {data.payment === 'tabby' && total.grand > 0 && (
-                <InstallmentNote t={t} text={t('step4.tabbyNote', { amount: currencyFmt(Math.round(total.grand / 4)) })} />
-              )}
-              {data.payment === 'tamara' && total.grand > 0 && (
-                <InstallmentNote t={t} text={t('step4.tamaraNote', { amount: currencyFmt(Math.round(total.grand / 3)) })} />
-              )}
             </div>
 
             {!data.payment && <p className="mt-3 text-[0.7rem] text-steel">{t('step4.selectPayment')}</p>}
@@ -606,14 +600,6 @@ function PaymentMark({ method }: { method: PaymentMethod }) {
     <span className="grid h-10 w-14 flex-shrink-0 place-items-center rounded-lg border border-white/12 bg-gradient-to-b from-white/[0.06] to-white/[0.01]">
       <span className="text-[0.62rem] font-semibold tracking-tight text-ivory">{label}</span>
     </span>
-  );
-}
-
-function InstallmentNote({ t, text }: { t: ReturnType<typeof useTranslations>; text: string }) {
-  return (
-    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-platinum/20 bg-platinum/[0.05] px-3 py-1.5 text-[0.62rem] text-platinum">
-      <Check className="h-[11px] w-[11px]" strokeWidth={2.4} />{text}
-    </div>
   );
 }
 
