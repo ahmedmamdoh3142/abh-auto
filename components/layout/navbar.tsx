@@ -71,7 +71,7 @@ export function Navbar() {
         >
           {/* logo */}
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
-            <Logo size={80} />
+            <Logo size={130} />
           </Link>
 
           {/* Center nav */}
