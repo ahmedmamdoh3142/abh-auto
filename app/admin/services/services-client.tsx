@@ -18,6 +18,7 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, LocaleField, Selectbox, Chip, Modal, Confirm, useToast, Ic, EGP, PageHeader, ImageCard } from "@/components/admin/ui";
 import { emptyLoc, type Loc } from "@/lib/admin/i18n-json";
 import ImageUpload from "@/components/admin/image-upload";
+import { printPriceList, type PriceGroup, type PriceMode } from "@/lib/admin/pricelist-print";
 
 type SizeKey = "small" | "medium" | "large";
 type SizePrice = { price: number; old: number };
@@ -169,6 +170,53 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     }
   }
 
+  // ── طباعة/تصدير قائمة الأسعار (تشتغل في كل الأوضاع) ──
+  function printPrices() {
+    const mode: PriceMode = isEditorMode ? "partner" : "public";
+    // التصنيفات المعروضة فعلًا (تحترم فلتر الفئة الحالي)
+    const cats = categories.filter((c) => cat === 0 || c.id === cat);
+    const sizeCodes = (sizes.length ? sizes : SIZE_ORDER.map((c) => ({ code: c, label: c })));
+
+    const groups: PriceGroup[] = cats.map((c) => {
+      const rows = list
+        .filter((s) => s.categoryId === c.id)
+        .map((s) => {
+          const cells: Record<string, { price: number; old?: number; commission?: number }> = {};
+          for (const sz of sizeCodes) {
+            const code = sz.code as SizeKey;
+            if (isEditorMode) {
+              const cell = partnerDraft[`${s.id}:${code}`];
+              cells[code] = { price: cell?.price || 0, commission: cell?.commission || 0 };
+            } else {
+              const p = s.prices[code];
+              cells[code] = { price: p?.price || 0, old: p?.old || 0 };
+            }
+          }
+          return { name: txt(s.name) || s.slug || "—", onRequest: s.onRequest, cells };
+        });
+      return { category: c.label, rows };
+    }).filter((g) => g.rows.length > 0);
+
+    const title = isTemplateMode
+      ? (templateKind === "partner" ? T("دفتر أسعار الشركاء", "Partners price book") : T("دفتر أسعار المناديب", "Reps price book"))
+      : isPartnerMode
+      ? (activePartner?.name ?? T("أسعار شركة", "Partner prices"))
+      : T("قائمة الأسعار", "Price list");
+
+    const subtitle = isPartnerMode
+      ? T("أسعار وعمولات خاصة", "Custom prices & commissions")
+      : isTemplateMode
+      ? T("دفتر معتمد", "Approved book")
+      : T("الأسعار العامة على الموقع", "Public website prices");
+
+    try {
+      printPriceList({ title, subtitle, sizes: sizeCodes, groups, mode, isAr, ccy });
+    } catch (e) {
+      console.error("price print failed:", e);
+      toast(T("تعذّر فتح الطباعة", "Couldn't open print"), "bad");
+    }
+  }
+
   async function save(s: Svc) {
     const method = s.id ? "PATCH" : "POST";
     try {
@@ -218,7 +266,12 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           ? T(`تعدّل أسعار وعمولات «${activePartner?.name ?? ""}». تقدر تطبّق دفتر الشركاء/المناديب كنقطة بداية ثم تعدّل.`, `Editing prices & commissions for “${activePartner?.name ?? ""}”. You can apply the partners/reps book as a starting point then tweak.`)
           : T("أضف وعدّل خدمات الكتالوج بالعربي والإنجليزي، مع سعر لكل حجم سيارة وقائمة مشمولات.", "Create and edit catalogue services in Arabic & English, with a price per vehicle size and an includes list.")}
         seed="services-hero"
-        action={!isEditorMode ? <Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("خدمة جديدة", "New service")}</Pill> : undefined} />
+        action={
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Ghost icon={Ic.download} onClick={printPrices}>{T("طباعة / PDF", "Print / PDF")}</Ghost>
+            {!isEditorMode && <Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("خدمة جديدة", "New service")}</Pill>}
+          </div>
+        } />
 
       {/* ════ شريط اختيار وضع التسعير ════ */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 22, padding: 18, borderRadius: 20, border: `1px solid ${isEditorMode ? "rgba(203,205,205,.35)" : "rgba(255,255,255,.08)"}`, background: isEditorMode ? "rgba(203,205,205,.05)" : "rgba(255,255,255,.02)" }}>

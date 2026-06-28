@@ -180,7 +180,7 @@ function a4Html(b: InvoiceBooking, isAr: boolean, ccy: string) {
   </div>`;
 }
 
-/* ===================== إيصال 80mm ===================== */
+/* ===================== إيصال 80mm (محسّن للطابعة الحرارية) ===================== */
 function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   const T = (a: string, e: string) => (isAr ? a : e);
   const dir = isAr ? "rtl" : "ltr";
@@ -188,27 +188,28 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   const subtotal = b.subtotal != null ? b.subtotal : services.reduce((s, x) => s + (Number(x.price) || 0), 0);
   const pay = payInfo(b.payment, isAr);
   const issued = new Date().toLocaleString(isAr ? "ar-EG" : "en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  const dash = `<div style="border-top:1px dashed #bbb;margin:8px 0;"></div>`;
-  const line = (l: string, v: string, bold = false) =>
-    `<div style="display:flex;justify-content:space-between;gap:8px;font-size:${bold ? 14 : 12}px;${bold ? "font-weight:700;" : ""}margin:2px 0;"><span>${esc(l)}</span><span dir="ltr">${v}</span></div>`;
+  // فاصل صلب (أسود نقي) بدل المنقّط الرمادي اللي بيبهت
+  const dash = `<div style="border-top:2px solid #000;margin:9px 0;"></div>`;
+  const line = (l: string, v: string, big = false) =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;font-size:${big ? 19 : 15}px;font-weight:${big ? 800 : 600};margin:3px 0;color:#000;line-height:1.35;"><span>${esc(l)}</span><span dir="ltr">${v}</span></div>`;
 
   const items = services.length === 0
-    ? `<div style="text-align:center;color:#777;font-size:12px;">${T("لا توجد خدمات", "No services")}</div>`
+    ? `<div style="text-align:center;color:#000;font-size:14px;font-weight:600;">${T("لا توجد خدمات", "No services")}</div>`
     : services.map((s) => {
         const gift = !!s.isGift;
         const price = gift && (Number(s.price) || 0) === 0 ? T("مجانية", "Free") : (Number(s.price) > 0 ? `${money(s.price)}` : T("حسب الطلب", "On req."));
-        return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin:3px 0;">
-          <span style="max-width:48mm;">${esc(s.name)}${gift ? ` <b style="color:#9a7a1f;">(${T("هدية", "Gift")})</b>` : ""}</span>
+        return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:600;margin:4px 0;color:#000;line-height:1.35;">
+          <span style="max-width:46mm;">${esc(s.name)}${gift ? ` <b>(${T("هدية", "Gift")})</b>` : ""}</span>
           <span dir="ltr">${price}</span>
         </div>`;
       }).join("");
 
   return `
-  <div style="width:72mm;margin:0 auto;background:#fff;color:#000;font-family:'Helvetica Neue',Arial,'Tahoma',sans-serif;direction:${dir};padding:4mm 2mm;">
-    <div style="text-align:center;margin-bottom:6px;">
+  <div style="width:72mm;margin:0 auto;background:#fff;color:#000;font-family:'Courier New','Roboto Mono',ui-monospace,monospace;direction:${dir};padding:3mm 2mm;font-weight:600;">
+    <div style="text-align:center;margin-bottom:7px;">
       <div style="display:inline-block;">${logoBlock(false)}</div>
     </div>
-    <div style="text-align:center;font-size:11px;color:#444;letter-spacing:1px;">${T("فاتورة حجز", "BOOKING INVOICE")}</div>
+    <div style="text-align:center;font-size:14px;font-weight:800;color:#000;letter-spacing:1px;">${T("فاتورة حجز", "BOOKING INVOICE")}</div>
     ${dash}
     ${line(T("رقم الحجز", "Ref"), esc(b.reference))}
     ${line(T("التاريخ", "Date"), esc(issued))}
@@ -219,18 +220,18 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
     ${b.branch ? line(T("الفرع", "Branch"), esc(b.branch)) : ""}
     ${(b.date || b.time) ? line(T("الموعد", "When"), esc(`${fmtDate(b.date, isAr)} ${b.time || ""}`.trim())) : ""}
     ${dash}
-    <div style="font-size:10px;letter-spacing:1px;color:#555;margin-bottom:3px;">${T("الخدمات", "SERVICES")}</div>
+    <div style="font-size:13px;font-weight:800;color:#000;letter-spacing:1px;margin-bottom:4px;">${T("الخدمات", "SERVICES")}</div>
     ${items}
     ${dash}
     ${line(T("إجمالي الخدمات", "Subtotal"), `${money(subtotal)} ${esc(ccy)}`)}
     ${Number(b.towing) > 0 ? line(T("النقل", "Towing"), `${money(b.towing)} ${esc(ccy)}`) : ""}
     ${dash}
     ${line(T("الإجمالي", "TOTAL"), `${money(b.total)} ${esc(ccy)}`, true)}
-    <div style="text-align:center;margin-top:6px;">
-      <span style="display:inline-block;padding:3px 10px;border:1px solid ${pay.color};border-radius:99px;font-size:11px;color:${pay.color};font-weight:700;">${esc(pay.label)}</span>
+    <div style="text-align:center;margin-top:8px;">
+      <span style="display:inline-block;padding:4px 14px;border:2px solid #000;border-radius:4px;font-size:14px;color:#000;font-weight:800;">${esc(pay.label)}</span>
     </div>
     ${dash}
-    <div style="text-align:center;font-size:10.5px;color:#555;line-height:1.7;">
+    <div style="text-align:center;font-size:12px;font-weight:600;color:#000;line-height:1.6;">
       ${T("شكرًا لاختيارك ABH AUTO", "Thank you for choosing ABH AUTO")}<br/>abh-auto.com
     </div>
   </div>`;

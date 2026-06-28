@@ -17,7 +17,8 @@ import { Pill, Ghost, IconBtn, Toggle, Field, Input, Selectbox, Chip, Modal, Con
 import { CampaignsSection } from "./campaigns";
 
 /* ───────────── الأنواع ───────────── */
-type PromoKind = "percentage" | "fixed" | "service_percent" | "service_each";
+/* ───────────── الأنواع ───────────── */
+type PromoKind = "percentage" | "fixed" | "service_percent" | "service_each" | "gift_service";
 type SvcRule = { serviceId: number; amountMode: "percent" | "fixed"; value: number };
 type Promo = {
   id: string; code: string; kind: PromoKind; label: string | null; description: string | null;
@@ -34,6 +35,7 @@ const KIND_META: Record<PromoKind, { ar: string; en: string; icon: keyof typeof 
   fixed:           { ar: "مبلغ ثابت", en: "Fixed amount", icon: "plus", desc: ["مبلغ يُخصم من الإجمالي", "Flat amount off order"] },
   service_percent: { ar: "خدمات — نسبة موحّدة", en: "Services — flat %", icon: "sliders", desc: ["% على خدمات محددة", "% on selected services"] },
   service_each:    { ar: "خدمات — لكل خدمة قيمتها", en: "Services — per item", icon: "sparkle", desc: ["قيمة مستقلة لكل خدمة", "Per-service value"] },
+  gift_service:    { ar: "هدية — خدمة مجانية", en: "Gift — free service", icon: "sparkle", desc: ["كود يضيف خدمة مجانًا", "Code adds a free service"] },
 };
 
 export default function PromosClient({ services, locale }: { services: ServiceLite[]; locale: string }) {
@@ -235,7 +237,7 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
   fmtDate: (s: string | null) => string; expired: boolean;
   onToggle: (v: boolean) => void; onEdit: () => void; onDelete: () => void; onStats: () => void;
 }) {
-  const meta = KIND_META[p.kind];
+  const meta = KIND_META[p.kind] ?? KIND_META.percentage;
   const KindIcon = Ic[meta.icon];
   const align = isAr ? "right" : "left";
   const usagePct = p.maxUses ? Math.min(100, Math.round((p.usedCount / p.maxUses) * 100)) : 0;
