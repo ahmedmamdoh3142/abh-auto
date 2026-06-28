@@ -69,9 +69,14 @@ export function Navbar() {
               : 'max-w-7xl bg-transparent border border-transparent',
           )}
         >
-          {/* logo */}
+          {/* logo — يصغر بنعومة عند تلمّ الناف بار (scrolled) */}
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
-            <Logo size={130} />
+            <span
+              className="block overflow-hidden transition-[width] duration-700 ease-out"
+              style={{ width: scrolled ? 110 : 150 }}
+            >
+              <Logo size={150} className="w-full h-auto" />
+            </span>
           </Link>
 
           {/* Center nav */}
@@ -156,7 +161,7 @@ export function Navbar() {
               transition={{ delay: 0.05 }}
               className="absolute top-5 left-0 right-0 z-10 flex items-center justify-between px-6"
             >
-              <Logo size={28} />
+              <Logo size={50} />
               <button
                 onClick={() => setOpen(false)}
                 className="h-10 w-10 rounded-full glass flex items-center justify-center"
