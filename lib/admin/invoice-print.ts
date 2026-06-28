@@ -10,7 +10,7 @@
  *   printBookingInvoice(b, { isAr, ccy, size: "a4" });      // أو size: "receipt"
  */
 
-// ✏️ عدّل ده لمسار اللوجو بتاعك في /public (مثال: "/logo2.png" أو "/images/logo-white.png")
+// ✏️ عدّل ده لمسار اللوجو بتاعك في /public (مثال: "/logo.png" أو "/images/logo-white.png")
 const logo_SRC = "/images/logo2.webp";
 // اللوجو فاتح (أبيض) واللا غامق؟ لو أبيض هنحطّه على خلفية سوداء.
 const logo_IS_LIGHT = true;

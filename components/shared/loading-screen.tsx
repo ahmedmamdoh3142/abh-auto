@@ -10,7 +10,7 @@ import { useTranslations } from 'next-intl';
  *  • شِيل framer-motion بالكامل — كل الحركة CSS keyframes على الـ compositor
  *    (transform/opacity فقط) فلا تلمس الـ main thread ولا تؤخّر الـ LCP.
  *  • شِيل الجزيئات الـ12 المتحركة (كانت framer infinite على الـ main thread).
- *  • اللوجو صورة حقيقية (/images/logo2.webp) بدل SVG السداسي — أخف وأوضح.
+ *  • اللوجو صورة حقيقية (/images/logo.webp) بدل SVG السداسي — أخف وأوضح.
  *  • يظهر مرة واحدة لكل جلسة (sessionStorage)، ويقفل بعد ~750ms.
  *  • الخروج fade/scale عبر class (مش framer) فلا يحجب الرسم.
  */
