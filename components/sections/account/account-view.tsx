@@ -18,7 +18,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   LayoutGrid, CalendarCheck, Car, UserRound, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowLeft, Clock, MapPin,
-  ShieldCheck, CircleDot, Calendar, logo2ut, CreditCard, Wallet, CalendarClock, Sparkles,
+  ShieldCheck, CircleDot, Calendar, logout, CreditCard, Wallet, CalendarClock, Sparkles,
   Gauge, Hourglass, History, KeyRound, Hash, Building2, Crown,
 } from 'lucide-react';
 
@@ -262,7 +262,7 @@ function SectionNav({ t, locale, section, setSection, isPartner }: { t: Tr; loca
           </div>
           <button data-cursor="hover" onClick={() => { signOut(); router.push('/'); }}
             className="hidden flex-none items-center gap-2 rounded-full px-4 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/55 transition-colors hover:text-[#e7b4b4] sm:flex">
-            <logo2ut className="reversible-icon h-4 w-4" strokeWidth={1.7} />{t('nav.signOut')}
+            <logout className="reversible-icon h-4 w-4" strokeWidth={1.7} />{t('nav.signOut')}
           </button>
         </div>
       </div>

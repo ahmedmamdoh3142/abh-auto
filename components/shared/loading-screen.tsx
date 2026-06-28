@@ -58,7 +58,7 @@ export function LoadingScreen() {
 
       <div className="abh-loader-inner">
         {/* اللوجو الحقيقي */}
-        <div className="abh-loader-logo2">
+        <div className="abh-loader-logo">
           <img
             src="/images/logo2.webp"
             alt={tBrand('name')}
@@ -124,16 +124,16 @@ const LOADER_CSS = `
 }
 
 /* اللوجو: ظهور + طفو لطيف (transform فقط = compositor) */
-.abh-loader-logo2{
-  animation:abhlogo2In .8s cubic-bezier(.16,1,.3,1) both;
+.abh-loader-logo{
+  animation:abhlogoIn .8s cubic-bezier(.16,1,.3,1) both;
   will-change:transform,opacity;
 }
-.abh-loader-logo2 img{
+.abh-loader-logo img{
   display:block; width:120px; height:auto;
   filter:drop-shadow(0 0 26px rgba(203,205,205,.32));
   animation:abhFloat 3.2s ease-in-out infinite;
 }
-@keyframes abhlogo2In{
+@keyframes abhlogoIn{
   from{opacity:0; transform:scale(.86) translateY(8px)}
   to{opacity:1; transform:scale(1) translateY(0)}
 }
@@ -184,6 +184,6 @@ const LOADER_CSS = `
 
 /* احترام تقليل الحركة + توفير على الموبايل */
 @media (prefers-reduced-motion:reduce){
-  .abh-loader-logo2 img,.abh-loader-glow{animation:none!important}
+  .abh-loader-logo img,.abh-loader-glow{animation:none!important}
 }
 `;

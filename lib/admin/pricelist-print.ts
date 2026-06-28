@@ -10,7 +10,7 @@
  *   printPriceList({ title, subtitle, sizes, groups, mode, isAr, ccy });
  */
 
-const logo2_SRC = "/images/logo2.webp";
+const logo_SRC = "/images/logo2.webp";
 
 export type PriceMode = "public" | "partner";
 
@@ -39,14 +39,14 @@ const money = (n: number | undefined) =>
 const esc = (s: any) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function logo2Block() {
+function logoBlock() {
   const fallback = `<div style="line-height:1;">
       <div style="font:700 24px Georgia,serif;letter-spacing:1.5px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div>
       <div style="font-size:8.5px;letter-spacing:6px;color:#cbcdcd;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
     </div>`;
-  if (!logo2_SRC) return fallback;
+  if (!logo_SRC) return fallback;
   const fb = JSON.stringify(fallback).replace(/"/g, "&quot;");
-  return `<img src="${logo2_SRC}" alt="ABH AUTO" style="height:42px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
+  return `<img src="${logo_SRC}" alt="ABH AUTO" style="height:42px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
 }
 
 function buildHtml(d: PriceListInput) {
@@ -123,7 +123,7 @@ function buildHtml(d: PriceListInput) {
   return `
   <div style="width:190mm;margin:0 auto;background:#fff;color:#15161a;font-family:'Helvetica Neue',Arial,'Segoe UI','Tahoma',sans-serif;direction:${dir};">
     <div style="background:#0c0d0e;padding:24px 30px;display:flex;align-items:center;justify-content:space-between;">
-      <div style="text-align:${sA};">${logo2Block()}</div>
+      <div style="text-align:${sA};">${logoBlock()}</div>
       <div style="text-align:${eA};">
         <div style="font:300 19px Georgia,serif;letter-spacing:4px;color:#fff;">${esc(d.title)}</div>
         ${d.subtitle ? `<div style="font-size:11px;color:#aeb2b7;margin-top:5px;">${esc(d.subtitle)}</div>` : ""}

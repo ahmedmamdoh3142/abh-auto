@@ -16,8 +16,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslations } from 'next-intl';
-import { Menu, X, User, logo2ut, ChevronDown } from 'lucide-react';
-import { logo2 } from '@/components/shared/logo2';
+import { Menu, X, User, logout, ChevronDown } from 'lucide-react';
+import { logo } from '@/components/shared/logo';
 import { Button } from '@/components/ui/button';
 import { LocaleSwitcher } from '@/components/shared/locale-switcher';
 import { useAuth, type Member } from '@/components/shared/auth-provider';
@@ -69,9 +69,9 @@ export function Navbar() {
               : 'max-w-7xl bg-transparent border border-transparent',
           )}
         >
-          {/* logo2 */}
+          {/* logo */}
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
-            <logo2 size={80} />
+            <logo size={80} />
           </Link>
 
           {/* Center nav */}
@@ -156,7 +156,7 @@ export function Navbar() {
               transition={{ delay: 0.05 }}
               className="absolute top-5 left-0 right-0 z-10 flex items-center justify-between px-6"
             >
-              <logo2 size={28} />
+              <logo size={28} />
               <button
                 onClick={() => setOpen(false)}
                 className="h-10 w-10 rounded-full glass flex items-center justify-center"
@@ -303,7 +303,7 @@ function AccountMenu({ member }: { member: Member }) {
                 onClick={() => { signOut(); setOpen(false); router.push('/'); }}
                 className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start text-sm text-platinum/70 transition-colors duration-200 hover:bg-[#2a1414]/40 hover:text-[#e7b4b4]"
               >
-                <logo2ut className="reversible-icon h-4 w-4" strokeWidth={1.7} />
+                <logout className="reversible-icon h-4 w-4" strokeWidth={1.7} />
                 {ta('signOut')}
               </button>
             </div>
