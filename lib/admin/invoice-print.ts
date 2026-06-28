@@ -10,10 +10,10 @@
  *   printBookingInvoice(b, { isAr, ccy, size: "a4" });      // أو size: "receipt"
  */
 
-// ✏️ عدّل ده لمسار اللوجو بتاعك في /public (مثال: "/logo.png" أو "/images/logo-white.png")
-const LOGO_SRC = "/images/logo.webp";
+// ✏️ عدّل ده لمسار اللوجو بتاعك في /public (مثال: "/logo2.png" أو "/images/logo2-white.png")
+const logo2_SRC = "/images/logo2.webp";
 // اللوجو فاتح (أبيض) واللا غامق؟ لو أبيض هنحطّه على خلفية سوداء.
-const LOGO_IS_LIGHT = true;
+const logo2_IS_LIGHT = true;
 
 type InvoiceService = { name: string; price: number; isGift?: boolean };
 export type InvoiceBooking = {
@@ -68,16 +68,16 @@ function fmtDate(iso: string | undefined, isAr: boolean) {
 
 /* شعار: صورة لو متوفّرة، وإلا نص فخم احتياطي.
    لو اللوجو فاتح (أبيض) وبنعرضه على خلفية فاتحة (الإيصال) → نحطّه في مربع غامق يبان. */
-function logoBlock(onDark: boolean) {
+function logo2Block(onDark: boolean) {
   const fallback = `<div style="line-height:1;">
       <div style="font:700 26px Georgia,serif;letter-spacing:1.5px;color:${onDark ? "#fff" : "#0c0d0e"};">ABH<span style="color:#c2a04e;">.</span></div>
       <div style="font-size:9px;letter-spacing:7px;color:${onDark ? "#cbcdcd" : "#6c7077"};margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
     </div>`;
-  if (!LOGO_SRC) return fallback;
+  if (!logo2_SRC) return fallback;
   const fb = JSON.stringify(fallback).replace(/"/g, "&quot;");
-  const img = `<img src="${LOGO_SRC}" alt="ABH AUTO" style="height:46px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
+  const img = `<img src="${logo2_SRC}" alt="ABH AUTO" style="height:46px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
   // لوجو فاتح على خلفية فاتحة → لفّه بمربع غامق
-  if (!onDark && LOGO_IS_LIGHT) {
+  if (!onDark && logo2_IS_LIGHT) {
     return `<div style="display:inline-block;background:#0c0d0e;padding:7px 12px;border-radius:8px;">${img.replace("height:46px", "height:34px")}</div>`;
   }
   return img;
@@ -114,7 +114,7 @@ function a4Html(b: InvoiceBooking, isAr: boolean, ccy: string) {
   return `
   <div style="width:190mm;margin:0 auto;background:#fff;color:#15161a;font-family:'Helvetica Neue',Arial,'Segoe UI','Tahoma',sans-serif;direction:${dir};">
     <div style="background:#0c0d0e;padding:26px 32px;display:flex;align-items:center;justify-content:space-between;">
-      <div style="text-align:${sA};">${logoBlock(true)}</div>
+      <div style="text-align:${sA};">${logo2Block(true)}</div>
       <div style="text-align:${eA};">
         <div style="font:300 20px Georgia,serif;letter-spacing:5px;color:#fff;">${T("فاتورة", "INVOICE")}</div>
         <div dir="ltr" style="font-size:12px;color:#aeb2b7;margin-top:6px;text-align:${eA};">${esc(b.reference)}</div>
@@ -207,7 +207,7 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   return `
   <div style="width:72mm;margin:0 auto;background:#fff;color:#000;font-family:'Courier New','Roboto Mono',ui-monospace,monospace;direction:${dir};padding:3mm 2mm;font-weight:600;">
     <div style="text-align:center;margin-bottom:7px;">
-      <div style="display:inline-block;">${logoBlock(false)}</div>
+      <div style="display:inline-block;">${logo2Block(false)}</div>
     </div>
     <div style="text-align:center;font-size:14px;font-weight:800;color:#000;letter-spacing:1px;">${T("فاتورة حجز", "BOOKING INVOICE")}</div>
     ${dash}

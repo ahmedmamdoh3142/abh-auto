@@ -183,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     setMember(null);
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    fetch('/api/auth/logo2ut', { method: 'POST' }).catch(() => {});
   }, []);
 
   const updateProfile = useCallback<AuthContextValue['updateProfile']>((patch) => {

@@ -82,7 +82,7 @@ export default function AdminShell({
         <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: collapsed ? "center" : "flex-start" }}>
           <span style={{ display: "grid", placeItems: "center", height: 38, width: 38, borderRadius: 999, flexShrink: 0, border: "1px solid rgba(255,255,255,.15)", background: "linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.02))" }}><span className="abh-display" style={{ fontSize: 13, color: "var(--abh-platinum)", textTransform: "uppercase" }}>{(user.name || "A")[0]}</span></span>
           {!collapsed && <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, color: "var(--abh-ivory)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name} · {user.role === "admin" ? t("مدير", "Admin") : t("موظّف", "Staff")}</div><div style={{ fontSize: 10.5, color: "var(--abh-steel)", direction: "ltr" }}>{user.email}</div></div>}
-          {!collapsed && <a href="/api/auth/logout" title={t("خروج", "Logout")} style={{ display: "grid", placeItems: "center", height: 36, width: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", color: "var(--abh-platinum)" }}><Ic.logout s={15} /></a>}
+          {!collapsed && <a href="/api/auth/logo2ut" title={t("خروج", "logo2ut")} style={{ display: "grid", placeItems: "center", height: 36, width: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", color: "var(--abh-platinum)" }}><Ic.logo2ut s={15} /></a>}
         </div>
       </div>
     </aside>
