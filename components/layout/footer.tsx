@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { logo } from "@/components/shared/logo";
+import { Logo } from "@/components/shared/logo";
 import { siteConfig } from "@/lib/site-config";
 
 /* ---- Inline brand-coloured social icons (lucide doesn't carry Snap/TikTok) -- */
@@ -77,7 +77,7 @@ export function Footer() {
 
       <div className="container mx-auto px-6 py-10 md:px-10 md:py-12">
         <div className="flex flex-col items-center text-center">
-          <logo />
+          <Logo />
 
           <p className="mt-4 max-w-md text-sm leading-relaxed text-platinum/55">
             {t('tagline')}

@@ -1,19 +1,19 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
-interface logoProps {
+interface LogoProps {
   className?: string;
   size?: number;
   imageSrc?: string;
   alt?: string;
 }
 
-export function logo({
+export function Logo({
   className,
   size = 90,
   imageSrc = '/images/logo2.webp',
   alt = 'ABH Auto',
-}: logoProps) {
+}: LogoProps) {
   return (
     <Image
       src={imageSrc}
