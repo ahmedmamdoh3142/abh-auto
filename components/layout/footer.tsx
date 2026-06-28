@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { Logo } from "@/components/shared/logo";
+import { logo } from "@/components/shared/logo";
 import { siteConfig } from "@/lib/site-config";
 
 /* ---- Inline brand-coloured social icons (lucide doesn't carry Snap/TikTok) -- */
