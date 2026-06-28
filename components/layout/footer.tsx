@@ -77,7 +77,7 @@ export function Footer() {
 
       <div className="container mx-auto px-6 py-10 md:px-10 md:py-12">
         <div className="flex flex-col items-center text-center">
-          <Logo />
+          <logo />
 
           <p className="mt-4 max-w-md text-sm leading-relaxed text-platinum/55">
             {t('tagline')}
