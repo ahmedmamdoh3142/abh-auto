@@ -268,7 +268,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
         seed="services-hero"
         action={
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Ghost icon={Ic.download} onClick={printPrices}>{T("طباعة / PDF", "Print / PDF")}</Ghost>
+            <Ghost icon={Ic.sparkle} onClick={printPrices}>{T("طباعة / PDF", "Print / PDF")}</Ghost>
             {!isEditorMode && <Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("خدمة جديدة", "New service")}</Pill>}
           </div>
         } />
