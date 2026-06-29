@@ -94,12 +94,6 @@ export function Compose() {
       className="relative w-full overflow-hidden bg-obsidian py-28 md:py-40"
       data-section="compose"
     >
-      <ChapterSlate
-        number={t('chapter')}
-        label={t('label')}
-        variant="dark"
-      />
-      <AtelierMark variant="dark" />
 
       {/* Ambient platinum bloom */}
       <motion.div

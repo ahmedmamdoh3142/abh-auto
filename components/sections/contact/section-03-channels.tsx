@@ -79,8 +79,6 @@ export function Channels() {
 
   return (
     <section ref={ref} className="relative w-full overflow-hidden py-28 md:py-40" data-section="channels">
-      <ChapterSlate number="02" label={eyebrow} opacity={slateOp} variant="dark" />
-      <AtelierMark opacity={slateOp} variant="dark" />
 
       <div className="container relative">
         <div className="mx-auto max-w-3xl text-center">

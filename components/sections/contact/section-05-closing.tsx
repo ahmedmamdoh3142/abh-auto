@@ -56,8 +56,6 @@ export function ClosingScene() {
       className="relative w-full overflow-hidden bg-obsidian py-0"
       data-section="closing"
     >
-      <ChapterSlate number="04" label={t('eyebrow')} opacity={slateOp} variant="light" />
-      <AtelierMark opacity={slateOp} variant="light" />
 
       <div className="relative h-[100svh] min-h-[700px] w-full overflow-hidden">
         {/* Parallax image */}

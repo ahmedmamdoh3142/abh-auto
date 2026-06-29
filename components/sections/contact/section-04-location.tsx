@@ -50,8 +50,6 @@ export function Location() {
 
   return (
     <section ref={ref} className="relative w-full overflow-hidden py-28 md:py-40" data-section="location">
-      <ChapterSlate number="03" label={L(T.eyebrow)} opacity={slateOp} variant="dark" />
-      <AtelierMark opacity={slateOp} variant="dark" />
 
       <div className="container relative">
         <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
