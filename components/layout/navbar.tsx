@@ -161,7 +161,7 @@ export function Navbar() {
               transition={{ delay: 0.05 }}
               className="absolute top-5 left-0 right-0 z-10 flex items-center justify-between px-6"
             >
-              <Logo size={50} />
+              <Logo size={60} />
               <button
                 onClick={() => setOpen(false)}
                 className="h-10 w-10 rounded-full glass flex items-center justify-center"

@@ -11,7 +11,7 @@
  */
 
 // ✏️ عدّل ده لمسار اللوجو بتاعك في /public (مثال: "/logo.png" أو "/images/logo-white.png")
-const logo_SRC = "/images/logo2.webp";
+const logo_SRC = "/images/logo3.webp";
 // اللوجو فاتح (أبيض) واللا غامق؟ لو أبيض هنحطّه على خلفية سوداء.
 const logo_IS_LIGHT = true;
 

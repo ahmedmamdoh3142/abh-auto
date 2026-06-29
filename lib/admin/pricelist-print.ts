@@ -6,11 +6,15 @@
  *   • وضع شركة/دفتر     → جدول (الخدمة + سعر كل حجم + عمولة كل حجم) + اسم الطرف.
  * مقسّم حسب التصنيف (عنوان لكل فئة ثم خدماتها). هوية ABH AUTO فاخرة.
  *
+ * الجديد:
+ *   • لوجو أكبر في الترويسة.
+ *   • تحت كل خدمة يظهر سطر «المشمولات» (ما يتم عمله في الخدمة) لو مُمرّر.
+ *
  * الاستخدام:
  *   printPriceList({ title, subtitle, sizes, groups, mode, isAr, ccy });
  */
 
-const logo_SRC = "/images/logo2.webp";
+const logo_SRC = "/images/logo3.webp";
 
 export type PriceMode = "public" | "partner";
 
@@ -19,6 +23,8 @@ export interface PriceRow {
   onRequest: boolean;
   /** sizeCode → { price, old?, commission? } */
   cells: Record<string, { price: number; old?: number; commission?: number }>;
+  /** محتويات الخدمة (المشمولات) — تظهر كسطر تحت اسم الخدمة */
+  includes?: string[];
 }
 export interface PriceGroup {
   category: string;
@@ -41,12 +47,13 @@ const esc = (s: any) =>
 
 function logoBlock() {
   const fallback = `<div style="line-height:1;">
-      <div style="font:700 24px Georgia,serif;letter-spacing:1.5px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div>
-      <div style="font-size:8.5px;letter-spacing:6px;color:#cbcdcd;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
+      <div style="font:700 34px Georgia,serif;letter-spacing:2px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div>
+      <div style="font-size:10px;letter-spacing:8px;color:#cbcdcd;margin-top:5px;">A&nbsp;U&nbsp;T&nbsp;O</div>
     </div>`;
   if (!logo_SRC) return fallback;
   const fb = JSON.stringify(fallback).replace(/"/g, "&quot;");
-  return `<img src="${logo_SRC}" alt="ABH AUTO" style="height:42px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
+  // لوجو أكبر: 64px بدل 42px
+  return `<img src="${logo_SRC}" alt="ABH AUTO" style="height:74px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
 }
 
 function buildHtml(d: PriceListInput) {
@@ -84,10 +91,21 @@ function buildHtml(d: PriceListInput) {
 
     const rows = g.rows.map((r, i) => {
       const bg = i % 2 ? "#ffffff" : "#fbfaf7";
+
+      // سطر المشمولات (يظهر تحت اسم الخدمة لو فيه عناصر)
+      const inc = (r.includes || []).filter(Boolean);
+      const incHtml = inc.length
+        ? `<div style="margin-top:5px;font-size:9.5px;color:#7a7e84;line-height:1.7;">
+             ${inc.map((x) => `<span style="display:inline-block;margin-${eA}:6px;white-space:nowrap;"><span style="color:#c2a04e;">✓</span> ${esc(x)}</span>`).join("")}
+           </div>`
+        : "";
+
+      const nameCell = `<div style="font-size:12px;font-weight:600;color:#15161a;">${esc(r.name)}</div>${incHtml}`;
+
       if (r.onRequest) {
         return `<tr style="background:${bg};">
-          <td style="padding:10px 14px;font-size:12px;color:#15161a;text-align:${sA};border-bottom:1px solid #ece9e1;">${esc(r.name)}</td>
-          <td colspan="${totalCols - 1}" style="padding:10px 14px;font-size:11.5px;color:#9a7a1f;text-align:center;border-bottom:1px solid #ece9e1;">${T("حسب الطلب", "On request")}</td>
+          <td style="padding:10px 14px;text-align:${sA};border-bottom:1px solid #ece9e1;vertical-align:top;">${nameCell}</td>
+          <td colspan="${totalCols - 1}" style="padding:10px 14px;font-size:11.5px;color:#9a7a1f;text-align:center;border-bottom:1px solid #ece9e1;vertical-align:top;">${T("حسب الطلب", "On request")}</td>
         </tr>`;
       }
       const cells = sizeCols.map((s) => {
@@ -96,17 +114,17 @@ function buildHtml(d: PriceListInput) {
           ? `${money(c.price)}${c.old && c.old > c.price ? `<span style="color:#b9810f;font-size:9px;text-decoration:line-through;margin-${sA}:4px;">${money(c.old)}</span>` : ""}`
           : `<span style="color:#bcbfc3;">—</span>`;
         if (!isPartner) {
-          return `<td style="padding:10px 12px;font-size:12px;color:#15161a;text-align:center;border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;" dir="ltr">${price}</td>`;
+          return `<td style="padding:10px 12px;font-size:12px;color:#15161a;text-align:center;border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;vertical-align:top;" dir="ltr">${price}</td>`;
         }
         const comm = (c.commission ?? 0) > 0
           ? `<span style="color:#9a7a1f;">${money(c.commission)}</span>`
           : `<span style="color:#bcbfc3;">—</span>`;
         return `
-          <td style="padding:10px 10px;font-size:12px;color:#15161a;text-align:center;border-bottom:1px solid #ece9e1;" dir="ltr">${price}</td>
-          <td style="padding:10px 10px;font-size:12px;text-align:center;border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;" dir="ltr">${comm}</td>`;
+          <td style="padding:10px 10px;font-size:12px;color:#15161a;text-align:center;border-bottom:1px solid #ece9e1;vertical-align:top;" dir="ltr">${price}</td>
+          <td style="padding:10px 10px;font-size:12px;text-align:center;border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;vertical-align:top;" dir="ltr">${comm}</td>`;
       }).join("");
       return `<tr style="background:${bg};">
-        <td style="padding:10px 14px;font-size:12px;color:#15161a;text-align:${sA};border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;">${esc(r.name)}</td>
+        <td style="padding:10px 14px;text-align:${sA};border-bottom:1px solid #ece9e1;border-${eA}:1px solid #f0ede5;vertical-align:top;">${nameCell}</td>
         ${cells}
       </tr>`;
     }).join("");

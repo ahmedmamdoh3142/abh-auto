@@ -1,15 +1,18 @@
 /**
- * app/api/admin/upload/route.ts — رفع/حذف صور (خدمات + إثباتات تحويل) · v2
+ * app/api/admin/upload/route.ts — رفع/حذف صور (خدمات + إثباتات تحويل) · v3
+ *
+ * تغيير v3 (مهم):
+ *  • الصور بتتكتب دلوقتي في مجلد ثابت خارج المشروع (UPLOAD_ROOT)، مش في public/.
+ *    السبب: Next.js مابيخدمش الملفات المضافة لـpublic/ وقت التشغيل (بترجع 404)،
+ *    وكمان أي ملف داخل المشروع بيتمسح مع git pull / build. المجلد الخارجي بيحلّ
+ *    المشكلتين: الصور تظهر فورًا (nginx بيخدمها مباشرة)، وتنجو من السحب والبناء.
+ *  • المسار اللي بيترجّع يفضل /<folder>/<filename> — وnginx معمول له alias
+ *    على /services-img/ و/payouts-img/ يوجّههم للمجلد الخارجي.
+ *
  * • POST  (multipart/form-data, field "file" [+ "name"] [+ "folder"]) →
  *         يتحقق إنه صورة، يحوّله WebP بـsharp، ويحفظه في المجلد المسموح،
  *         ويرجّع { ok, path: "/<folder>/xxx.webp" }.
  * • DELETE ?path=/<folder>/xxx.webp → يمسح الملف.
- *
- * إصلاحات v2:
- *  • safeName ماعدش بيعتمد على الاسم العربي (كان بيتحوّل لفاضي ويسبّب تصادم).
- *    دلوقتي بيستخدم سلَج لاتيني لو متاح، وإلا اسم عشوائي مضمون الفرادة.
- *  • fallback أنضف: لو sharp مش متاح، بنحفظ بامتداد صحيح من نوع الملف.
- *  • أي حال، المسار اللي بيترجّع بيطابق الملف المكتوب فعليًا.
  */
 import { NextResponse } from "next/server";
 import { getAdminOrNull } from "@/lib/admin/guard";
@@ -20,7 +23,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_FOLDERS = new Set(["services-img", "payouts-img"]);
-const PUBLIC_ROOT = path.join(process.cwd(), "public");
+
+// مجلد التخزين الثابت خارج المشروع (يطابق ما هيّأناه على السيرفر + nginx alias).
+// قابل للتعديل عبر متغيّر البيئة UPLOAD_DIR لو احتجت مسارًا مختلفًا.
+const UPLOAD_ROOT = process.env.UPLOAD_DIR || "/var/www/abh-uploads";
+
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]);
 const EXT_FROM_TYPE: Record<string, string> = {
@@ -28,7 +35,7 @@ const EXT_FROM_TYPE: Record<string, string> = {
 };
 
 function folderDir(folder: string): string {
-  return path.join(PUBLIC_ROOT, folder);
+  return path.join(UPLOAD_ROOT, folder);
 }
 
 /**
@@ -106,6 +113,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "write_failed" }, { status: 500 });
     }
 
+    // المسار العام (nginx بيخدمه عبر alias على /<folder>/)
     return NextResponse.json({ ok: true, path: `/${folder}/${filename}` });
   } catch (err) {
     console.error("POST /api/admin/upload failed:", err);
@@ -125,7 +133,7 @@ export async function DELETE(request: Request) {
     if (!ALLOWED_FOLDERS.has(seg) || rel.includes("..")) {
       return NextResponse.json({ ok: false, error: "bad_path" }, { status: 400 });
     }
-    const abs = path.join(PUBLIC_ROOT, rel.replace(/^\//, ""));
+    const abs = path.join(UPLOAD_ROOT, rel.replace(/^\//, ""));
     if (!abs.startsWith(folderDir(seg))) {
       return NextResponse.json({ ok: false, error: "bad_path" }, { status: 400 });
     }

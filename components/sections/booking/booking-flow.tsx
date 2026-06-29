@@ -371,7 +371,7 @@ function BookingHero({ t }: { t: ReturnType<typeof useTranslations> }) {
           .glass,.spotlight{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
           .glass{background:rgba(10,11,12,0.92)!important;}
           [class*="backdrop-blur"]{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
-          [class*="blur-3xl"],[class*="blur-2xl"]{display:none!important;}
+          [class*="blur-3xl"]:not([class*="backdrop"]),[class*="blur-2xl"]:not([class*="backdrop"]){display:none!important;}
         }
       `}</style>
 

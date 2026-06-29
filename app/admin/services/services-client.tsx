@@ -192,7 +192,12 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
               cells[code] = { price: p?.price || 0, old: p?.old || 0 };
             }
           }
-          return { name: txt(s.name) || s.slug || "—", onRequest: s.onRequest, cells };
+          return {
+            name: txt(s.name) || s.slug || "—",
+            onRequest: s.onRequest,
+            cells,
+            includes: (s.includes || []).map((inc) => txt(inc)).filter(Boolean),
+          };
         });
       return { category: c.label, rows };
     }).filter((g) => g.rows.length > 0);

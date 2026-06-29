@@ -11,7 +11,7 @@ interface LogoProps {
 export function Logo({
   className,
   size = 150,
-  imageSrc = '/images/logo2.webp',
+  imageSrc = '/images/logo3.webp',
   alt = 'ABH Auto',
 }: LogoProps) {
   return (

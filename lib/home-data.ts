@@ -55,7 +55,7 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
     query(`SELECT label->>$1 AS label FROM marquee_items ORDER BY sort`, [locale]),
     query(`SELECT value FROM settings WHERE key='images'`),
     block("banner", locale),
-    query(`SELECT value->>'ends_at' AS ends_at, value->>'badge_value' AS badge_value
+    query(`SELECT value->>'ends_at' AS ends_at, value->>'badge_value' AS badge_value, is_visible
            FROM content_blocks WHERE key='banner'`),
     block("offers", locale),
     block("services", locale),
@@ -117,7 +117,8 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
         }));
 
   // ── البانر الترويجي: مخفي تمامًا عن الشركاء ──
-  const banner = partner
+  const bannerVisible = (bannerMetaRow[0] as any)?.is_visible !== false;
+  const banner = (partner || !bannerVisible)
     ? null
     : {
         ...bannerCopy,

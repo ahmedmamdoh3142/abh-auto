@@ -99,7 +99,7 @@ export default function PartnersClient({ partners: initial, totals: initTotals, 
 
   const filters: { id: typeof filter; label: string; count: number }[] = [
     { id: "all", label: T("الكل", "All"), count: partners.length },
-    { id: "due", label: T("عليها مستحقّات", "Has dues"), count: partners.filter((p) => p.outstanding > 0).length },
+    { id: "due", label: T("عليا مستحقّات", "Has dues"), count: partners.filter((p) => p.outstanding > 0).length },
     { id: "active", label: T("نشطة", "Active"), count: partners.filter((p) => p.isActive).length },
     { id: "paused", label: T("موقوفة", "Paused"), count: partners.filter((p) => !p.isActive).length },
   ];
