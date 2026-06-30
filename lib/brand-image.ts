@@ -5,27 +5,27 @@
  * (الاسم = نفس id الماركة في جدول brands، مثل mercedes_benz.webp).
  * كل سيارات نفس الماركة تاخد نفس الصورة بغضّ النظر عن الموديل.
  *
- * لو الماركة غير معروفة أو مالهاش صورة → نرجع لصورة محايدة واحدة
- * (public/brands/_default.webp) بدل أي صورة عشوائية — أنضف بصريًا
- * وثابت دائمًا، فالكرت ما يبقاش فاضي ولا عشوائي.
+ * أي ماركة مش موجودة في القائمة تحت (لسه ماترفعش صورتها) → تاخد صورة
+ * محايدة واحدة public/brands/_default.webp بدل ما تبقى فاضية.
+ *
+ * مهم: القائمة دي لازم تحتوي بس على الماركات اللي صورتها موجودة فعلًا
+ * في public/brands/. لو رفعت صورة ماركة جديدة، ضيف معرّفها هنا.
  *
  * الاستخدام:
  *   import { brandImg } from "@/lib/brand-image";
  *   const bg = brandImg(booking.brandId);
  */
 
-/** قائمة معرّفات الماركات اللي عندها صورة مرفوعة في public/brands/.
- *  أي ماركة هنا = الكرت هياخد /brands/<id>.webp.
- *  (مطابقة لمعرّفات جدول brands.) */
+/** معرّفات الماركات اللي صورتها موجودة فعلًا في public/brands/.
+ *  (الـ17 ماركة الناقصة مش هنا، فتاخد _default تلقائيًا.) */
 const BRANDS_WITH_IMAGE = new Set<string>([
-  "baic", "dongfeng", "foton", "gwm", "isuzu", "jac", "jaecoo", "mini",
-  "omoda", "opel", "peugeot", "renault", "skoda", "subaru", "tank", "xpeng",
-  "zeekr", "aston_martin", "audi", "bmw", "byd", "bentley", "cadillac",
-  "changan", "chery", "chevrolet", "dodge", "exeed", "ferrari", "ford",
-  "gac", "gmc", "geely", "genesis", "haval", "honda", "hongqi", "hyundai",
+  "gwm", "mini", "opel", "peugeot", "renault", "skoda", "subaru",
+  "aston_martin", "audi", "bmw", "byd", "bentley", "cadillac",
+  "changan", "chevrolet", "dodge", "ferrari", "ford",
+  "gmc", "geely", "haval", "honda", "hyundai",
   "infiniti", "jaguar", "jeep", "jetour", "kia", "lamborghini", "land_rover",
-  "lexus", "lincoln", "lucid", "mg", "maserati", "mazda", "mclaren",
-  "mercedes_benz", "mitsubishi", "nissan", "porsche", "ram", "rolls_royce",
+  "lexus", "lucid", "mg", "maserati", "mazda", "mclaren",
+  "mercedes_benz", "mitsubishi", "nissan", "porsche", "rolls_royce",
   "suzuki", "tesla", "toyota", "volkswagen",
 ]);
 
