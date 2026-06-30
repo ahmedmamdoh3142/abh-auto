@@ -10,11 +10,12 @@
  * in the same block you paste wholesale — no separate `nav` edits required.
  *
  * إصلاح الأداء:
- *  • onScroll كان يقرأ window.scrollY مباشرة في كل حدث سكرول، وLenis بيكتب
- *    transforms في نفس الوقت → layout thrashing (هو مصدر الـforced reflow 32ms).
- *    لفّينا القراءة في requestAnimationFrame مع قفل ticking فما بتحصلش وسط دورة
- *    الكتابة → لا reflow قسري.
- *  • تأخير ظهور الهيدر اتنزّل من 1.8s لـ0.3s عشان يبان مع المحتوى الأساسي.
+ *  • عنصر الـLCP على كل الصفحات كان لوجو الناف بار (logo3.webp). كان محبوسًا
+ *    داخل motion.header بـinitial:{opacity:0} فما كان يظهر/يتحمّل غير بعد hydration
+ *    framer (~1.8s تأخير → LCP عالي). شِلنا framer من الـheader وحوّلناه CSS مع
+ *    backwards، فاللوجو يُرسم فورًا في الـHTML من أول فريم. ده يحسّن LCP على
+ *    كل صفحة في الموقع، مش about بس.
+ *  • onScroll ملفوف في requestAnimationFrame مع قفل ticking → لا forced reflow.
  *
  * Path: components/layout/navbar.tsx
  */
@@ -71,12 +72,15 @@ export function Navbar() {
 
   return (
     <>
-      <motion.header
-        initial={{ y: -40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 1, delay: 0.3, ease: EASE }}
-        className="fixed top-0 left-0 right-0 z-50 px-3 md:px-6 pt-3 md:pt-5"
-      >
+      {/* دخول الهيدر — CSS بدل framer عشان اللوجو (عنصر LCP) يظهر فورًا في HTML.
+          backwards = العنصر موجود بحالته النهائية قبل بدء التأخير، فاللوجو لا يُؤجَّل. */}
+      <style>{`
+        .nav-enter{animation:navEnter .8s cubic-bezier(.16,1,.3,1) .2s backwards;}
+        @keyframes navEnter{from{opacity:0;transform:translateY(-40px)}to{opacity:1;transform:none}}
+        @media (prefers-reduced-motion:reduce){.nav-enter{animation:none}}
+      `}</style>
+
+      <header className="nav-enter fixed top-0 left-0 right-0 z-50 px-3 md:px-6 pt-3 md:pt-5">
         <div
           className={cn(
             'mx-auto flex items-center justify-between transition-all duration-700',
@@ -157,7 +161,7 @@ export function Navbar() {
             </button>
           </div>
         </div>
-      </motion.header>
+      </header>
 
       {/* Mobile drawer */}
       <AnimatePresence>
