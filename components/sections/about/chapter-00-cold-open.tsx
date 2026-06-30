@@ -4,17 +4,15 @@
  * Chapter 00 — Title Card  (perf-optimized)
  *
  * إصلاحات الأداء الأساسية في هذا الملف:
- *  1) عنصر الـLCP (كلمة "ABH") لم يعد يعمل fade من opacity:0 بتأخير 1.5s.
- *     الآن يُرسم بكامل وضوحه من أول فريم → ينهار تأخير رندر الـLCP (كان ~3150ms).
- *  2) كل الأنيميشن اللانهائي (bloom / scan / ring / dot / caret / scroll) تحوّل
- *     من framer-motion (يعمل على الـmain thread عبر rAF) إلى CSS keyframes
- *     (تعمل على الـcompositor) → يقلّل الـTBT و"Other" بشكل كبير.
+ *  1) عنصر الـLCP (كلمة "ABH") كان محبوسًا داخل motion.div مربوط بـuseScroll،
+ *     فما كان بيظهر غير بعد hydration framer (على الموبايل ~2.8s تأخير →
+ *     LCP=10s). طلّعناه برّه أي motion مرتبط بالسكرول → يُرسم فورًا من أول فريم
+ *     في الـHTML. باقي المحتوى (العنوان/الإحداثيات) يفضل مربوط بالسكرول عادي.
+ *  2) كل الأنيميشن اللانهائي (bloom / scan / ring / dot / caret / scroll) CSS
+ *     keyframes (compositor) بدل framer (main thread).
  *  3) أُسقط فلتر blur المربوط بالسكرول (repaint مكلف) وبقي فقط y + opacity.
  *  4) رُفعت تباينات النص الصغير (platinum/55→/80) لتجاوز فحص التباين (a11y).
  *  5) كل الحركة تُعطَّل تلقائيًا مع prefers-reduced-motion.
- *
- * الحركات لمرة-واحدة (entrance) تركناها framer لأنها تنتهي بسرعة ولا تساهم في
- * الـTBT المستمر؛ أما اللانهائية فقط هي التي نُقلت إلى CSS.
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, type MotionValue } from 'framer-motion';
@@ -76,24 +74,24 @@ export function ColdOpen() {
         {/* Passe-partout frame */}
         <Frame opacity={frameOp} />
 
-        {/* Center composition (y + opacity فقط) */}
-        <motion.div
-          style={{ y: compY, opacity: compOp }}
-          className="relative z-10 flex flex-col items-center"
-        >
+        {/* ── عنصر الـLCP (ABH) + counter — خارج أي motion مربوط بالسكرول ──
+            يُرسم فورًا في الـHTML بدون انتظار hydration → ينهار تأخير الـLCP.
+            نضع نفس الإزاحة بصريًا عبر الحاوية الأم (نفس مكان العرض السابق). */}
+        <div className="relative z-10 flex flex-col items-center">
           <ChapterCounter />
           <Monogram />
-          <SectionTitle />
-          <Coordinates />
-        </motion.div>
+        </div>
 
-        {/* Bottom metadata strip */}
+        {/* باقي التكوين (العنوان + الإحداثيات) — يبقى مربوطًا بالسكرول كما كان */}
         <motion.div
-          style={{ opacity: frameOp }}
-          className="absolute inset-x-0 bottom-10 z-10 flex items-end justify-between px-12 md:px-20"
-          dir="ltr"
+          style={{ y: compY, opacity: compOp }}
+          className="pointer-events-none absolute z-10 flex flex-col items-center"
+          // نضع هذه الطبقة فوق المركز لتُكمل التكوين أسفل المونوغرام بصريًا
         >
-          <ScrollPrompt />
+          <div className="flex flex-col items-center pt-[clamp(15rem,26vw,21rem)]">
+            <SectionTitle />
+            <Coordinates />
+          </div>
         </motion.div>
       </div>
     </section>
@@ -339,24 +337,6 @@ function Coordinates() {
         {shown}
       </span>
       <span className="co-caret block h-2 w-px bg-platinum/80" />
-    </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ScrollPrompt — CSS pulsing rail (يعيد استخدام .anim-scrollbar)
-   ═══════════════════════════════════════════════════════════ */
-function ScrollPrompt() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1, delay: 2.6, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-col items-end gap-3"
-    >
-      <span className="font-mono text-[0.5rem] uppercase tracking-[0.45em] text-platinum/80">
-        Chapter 01 follows
-      </span>
-      <span className="anim-scrollbar block h-10 w-px origin-top bg-gradient-to-b from-platinum/80 to-transparent" />
     </motion.div>
   );
 }

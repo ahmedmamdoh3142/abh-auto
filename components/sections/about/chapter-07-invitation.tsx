@@ -27,12 +27,15 @@ export function ChapterInvitation() {
       className="relative flex min-h-[100svh] w-full items-center justify-center overflow-hidden bg-obsidian px-8 py-32"
       data-chapter="07"
     >
-      {/* Platinum bloom */}
-      <motion.div
+      {/* Platinum bloom — CSS infinite (كان framer repeat:Infinity على main thread) */}
+      <style>{`
+        .inv-bloom{animation:invBloom 14s ease-in-out infinite;}
+        @keyframes invBloom{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.4}50%{transform:translate(-50%,-50%) scale(1.05);opacity:.7}}
+        @media (prefers-reduced-motion: reduce),(max-width:820px){.inv-bloom{animation:none}}
+      `}</style>
+      <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[55rem] w-[55rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.05] blur-[180px]"
-        animate={{ scale: [1, 1.05, 1], opacity: [0.4, 0.7, 0.4] }}
-        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+        className="inv-bloom pointer-events-none absolute left-1/2 top-1/2 z-0 h-[55rem] w-[55rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.05] blur-[180px]"
       />
 
       {/* Slate + atelier mark */}
