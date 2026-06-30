@@ -60,7 +60,7 @@ export function LoadingScreen() {
         {/* اللوجو الحقيقي */}
         <div className="abh-loader-logo">
           <img
-            src="/images/logo2.webp"
+            src="/images/logo3.webp"
             alt={tBrand('name')}
             width={120}
             height={120}

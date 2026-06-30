@@ -9,6 +9,13 @@
  * it. Account-menu copy reads from the `login.account` i18n block, so it lives
  * in the same block you paste wholesale — no separate `nav` edits required.
  *
+ * إصلاح الأداء:
+ *  • onScroll كان يقرأ window.scrollY مباشرة في كل حدث سكرول، وLenis بيكتب
+ *    transforms في نفس الوقت → layout thrashing (هو مصدر الـforced reflow 32ms).
+ *    لفّينا القراءة في requestAnimationFrame مع قفل ticking فما بتحصلش وسط دورة
+ *    الكتابة → لا reflow قسري.
+ *  • تأخير ظهور الهيدر اتنزّل من 1.8s لـ0.3s عشان يبان مع المحتوى الأساسي.
+ *
  * Path: components/layout/navbar.tsx
  */
 import { useEffect, useRef, useState } from 'react';
@@ -38,7 +45,17 @@ export function Navbar() {
   const { member, hydrated } = useAuth();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    // نلفّ قراءة scrollY في rAF حتى لا تحصل قراءة geometry وسط دورة كتابة Lenis
+    // (ده اللي كان بيسبّب forced reflow). قفل ticking يمنع تكديس الإطارات.
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 24);
+        ticking = false;
+      });
+    };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -57,7 +74,7 @@ export function Navbar() {
       <motion.header
         initial={{ y: -40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 1, delay: 1.8, ease: EASE }}
+        transition={{ duration: 1, delay: 0.3, ease: EASE }}
         className="fixed top-0 left-0 right-0 z-50 px-3 md:px-6 pt-3 md:pt-5"
       >
         <div

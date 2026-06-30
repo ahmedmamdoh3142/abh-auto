@@ -3,11 +3,12 @@
  * components/analytics/google-analytics.tsx — تحميل Google Tag Manager + GA4
  * مع Consent Mode v2 (الوضع الافتراضي: مرفوض، لحد ما المستخدم يوافق).
  *
- * • بيهيّئ الموافقة الافتراضية = denied قبل أي تحميل (مطلوب لـ Consent Mode).
- * • بيحمّل GTM (اللي بدوره بيحمّل GA4).
- * • بيتتبّع تغيير الصفحات في App Router (page_view) تلقائيًا.
+ * إصلاح الأداء (TBT 430ms): GTM كان afterInteractive — يتحمّل ويتنفّذ (462KB)
+ * فور الـhydration على الـmain thread فيقفله. حوّلناه لـlazyOnload: يتحمّل بعد
+ * حدث load، فما بيزاحمش الـTBT/LCP. الأحداث اللي بتتسجّل قبل ما يجهز بتتجمّع في
+ * dataLayer (متهيّأ من سكربت الـconsent) وبتتبعت أول ما GTM يشتغل — مفيش فقدان.
  *
- * ضع <GoogleAnalytics /> داخل <body> في app/layout.tsx.
+ * ملاحظة: سكربت الـconsent يفضل beforeInteractive (شرط Consent Mode إنه يسبق GTM).
  */
 import Script from "next/script";
 import { useEffect } from "react";
@@ -29,7 +30,7 @@ export default function GoogleAnalytics() {
 
   return (
     <>
-      {/* Consent Mode v2 — الافتراضي مرفوض قبل أي تحميل */}
+      {/* Consent Mode v2 — الافتراضي مرفوض قبل أي تحميل (يفضل beforeInteractive) */}
       <Script id="gtm-consent-default" strategy="beforeInteractive">
         {`
           window.dataLayer = window.dataLayer || [];
@@ -44,8 +45,8 @@ export default function GoogleAnalytics() {
         `}
       </Script>
 
-      {/* تحميل Google Tag Manager */}
-      <Script id="gtm-loader" strategy="afterInteractive">
+      {/* تحميل Google Tag Manager — lazyOnload: بعد حدث load (خارج المسار الحرج) */}
+      <Script id="gtm-loader" strategy="lazyOnload">
         {`
           (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
           new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],

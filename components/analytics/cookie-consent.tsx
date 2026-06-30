@@ -2,11 +2,10 @@
 /**
  * components/analytics/cookie-consent.tsx — بانر موافقة الكوكيز (عربي/RTL، بهوية ABH).
  *
- * • يظهر مرة واحدة لحد ما المستخدم يختار «موافق» أو «رفض».
- * • عند الموافقة: يحدّث Google Consent Mode إلى granted ويخزّن الاختيار،
- *   فتبدأ GA4 تجمع البيانات. عند الرفض: يفضل denied ولا تُجمع أي بيانات.
- *
- * ضع <CookieConsent /> داخل <body> في app/layout.tsx (بعد GoogleAnalytics).
+ * إصلاح الأداء: البانر كان يظهر فورًا فوق الطية عند أول زيارة (DOM + SVG +
+ * backdrop-blur وقت الـhydration) فيزاحم الـLCP/TBT على الموبايل. أجّلناه:
+ *   • القراءة من localStorage تفضل فورية (عشان نطبّق consent المحفوظ بسرعة).
+ *   • لكن إظهار البانر نفسه يتأخّر لِما المتصفح يخمل + 1.8s، فلا يلمس أول رسم.
  */
 import { useEffect, useState } from "react";
 import { CONSENT_KEY } from "@/lib/analytics";
@@ -20,10 +19,6 @@ declare global {
 function updateGoogleConsent(granted: boolean) {
   if (typeof window === "undefined") return;
   window.dataLayer = window.dataLayer || [];
-  // مهم: لازم ندفع كائن arguments الحقيقي (مش array) — ده الشكل الوحيد اللي
-  // GTM بيتعرّف عليه كإشارة gtag. لو دفعناه كـ array، GTM بيتجاهلها وتفضل
-  // الموافقة "denied" فمفيش بيانات بتتجمّع. النوع بيقبل أي arguments،
-  // والتنفيذ دالة عادية بتقرأ arguments الأصلي.
   const gtag: (...args: any[]) => void = function () {
     // eslint-disable-next-line prefer-rest-params
     (window.dataLayer as any[]).push(arguments);
@@ -43,11 +38,33 @@ export default function CookieConsent({ locale }: { locale?: string }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
+    let saved: string | null = null;
     try {
-      const saved = localStorage.getItem(CONSENT_KEY);
-      if (!saved) setShow(true);                 // ماقررش لسه
-      else if (saved === "granted") updateGoogleConsent(true); // وافق قبل كده
-    } catch { setShow(true); }
+      saved = localStorage.getItem(CONSENT_KEY);
+    } catch { /* */ }
+
+    // لو وافق قبل كده: طبّق الـconsent فورًا (مهم لـGA) — بدون إظهار بانر.
+    if (saved === "granted") {
+      updateGoogleConsent(true);
+      return;
+    }
+    if (saved) return; // رفض قبل كده — مفيش بانر
+
+    // زائر جديد: أجّل ظهور البانر حتى بعد أول رسم + خمول، عشان ما يزاحمش LCP/TBT.
+    const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number };
+    let t = 0;
+    const reveal = () => { t = window.setTimeout(() => setShow(true), 1800); };
+    let idle = 0;
+    if (typeof w.requestIdleCallback === "function") {
+      idle = w.requestIdleCallback(reveal);
+    } else {
+      t = window.setTimeout(() => setShow(true), 1800);
+    }
+    return () => {
+      if (t) clearTimeout(t);
+      const wc = window as unknown as { cancelIdleCallback?: (id: number) => void };
+      if (idle && wc.cancelIdleCallback) wc.cancelIdleCallback(idle);
+    };
   }, []);
 
   const decide = (granted: boolean) => {
