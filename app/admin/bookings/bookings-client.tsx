@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
 import { printBookingInvoice } from "@/lib/admin/invoice-print";
+import { brandImg } from "@/lib/brand-image";
 
 /* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
 function useMediaQuery(query: string) {
@@ -215,7 +216,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       }}
     >
       {/* صورة السيارة خلفية الكرت بالكامل */}
-      <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 900)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
+      <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.96) 8%, rgba(8,9,11,.5) 44%, rgba(8,9,11,.1) 72%, rgba(8,9,11,.35) 100%)" }} />
       <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${st.color}, transparent)`, zIndex: 4 }} />
 
@@ -318,7 +319,7 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   return (
     <div onClick={() => onOpen(b.id)} className="abh-lift abh-row" style={{ display: "grid", gridTemplateColumns: "auto 1.4fr 1.2fr 1fr auto auto", alignItems: "center", gap: 14, borderRadius: 16, border: "1px solid rgba(255,255,255,.07)", borderInlineStart: `3px solid ${st.color}`, background: "rgba(255,255,255,.02)", padding: "12px 16px", cursor: "pointer", animation: `abh-fadeUp .45s var(--abh-ease) ${i * 0.03}s both` }}>
-      <span style={{ height: 46, width: 64, borderRadius: 10, flexShrink: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 400)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.7)" }} />
+      <span style={{ height: 46, width: 64, borderRadius: 10, flexShrink: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.7)" }} />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 15, color: "var(--abh-ivory)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.vehicle}</div>
         <div dir="ltr" style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{b.reference}{b.plate ? ` · ${b.plate}` : ""}</div>
@@ -354,7 +355,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
       <div style={{ position: "relative", height: mobile ? 130 : 168, borderRadius: 20, overflow: "hidden", marginBottom: 18, border: `1px solid ${st.soft}` }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${carImg(b.plate || b.vehicle, 1400)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.6) contrast(1.05)" }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.6) contrast(1.05)" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.95), rgba(8,9,11,.25))" }} />
         <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg,transparent,${st.color},transparent)` }} />
         <div style={{ position: "absolute", insetInlineStart: 18, insetInlineEnd: 18, bottom: 14, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>

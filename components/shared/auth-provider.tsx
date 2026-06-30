@@ -35,6 +35,7 @@ export interface BookingRecord {
   status: BookingStatus;
   vehicleLabel: string;
   plate: string;
+  brandId?: string; 
   plateDigits?: string;   // ← جديد
   plateLetters?: string;
   serviceSlugs: string[];

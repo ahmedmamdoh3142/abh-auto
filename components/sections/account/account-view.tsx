@@ -30,6 +30,7 @@ import { PhoneField, isValidPhone } from '@/components/shared/phone-field';
 import { useAuth, type Vehicle, type BookingRecord, type BookingStatus } from '@/components/shared/auth-provider';
 import { PartnerPortal } from '@/components/sections/account/partner-portal';
 import { MembershipPanel } from '@/components/sections/account/membership-panel';
+import { brandImg } from '@/lib/brand-image';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -326,7 +327,7 @@ function NextAppointment({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}
       className="group relative overflow-hidden rounded-[28px] border border-white/[0.1]">
       <div aria-hidden className="absolute inset-0 scale-[1.04] bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-[1.1] group-hover:grayscale-0"
-        style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.55) brightness(0.5) contrast(1.05)' }} />
+        style={{ backgroundImage: `url('${brandImg(b.brandId, b.plate || b.id)}')`, filter: 'grayscale(0.55) brightness(0.5) contrast(1.05)' }} />
       <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/75 to-[#050608]/30" />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ background: tone.bar, opacity: 0.9 }} />
       <div aria-hidden className="pointer-events-none absolute -inset-x-10 -top-20 h-40 blur-3xl" style={{ background: `radial-gradient(closest-side, ${tone.glow}, transparent)`, opacity: 0.5 }} />
@@ -421,7 +422,7 @@ function BookingGridCard({ t, tb, isAr, b, onOpen }: { t: Tr; tb: Tr; isAr: bool
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }} whileHover={{ y: -4 }}
       className="group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-obsidian/20 transition-all duration-500 hover:border-white/25 hover:shadow-2xl">
       <div className="absolute inset-0">
-        <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105" style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'brightness(0.95) contrast(1.05)' }} />
+        <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out group-hover:scale-105" style={{ backgroundImage: `url('${brandImg(b.brandId, b.plate || b.id)}')`, filter: 'brightness(0.95) contrast(1.05)' }} />
         <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian/30 via-obsidian/60 to-obsidian/20" />
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 z-20 w-[3px]" style={{ background: tone.bar, opacity: 0.85 }} />
@@ -488,7 +489,7 @@ function BookingCard({ t, tb, isAr, b, onOpen, compact }: { t: Tr; tb: Tr; isAr:
       <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-[3px]" style={{ background: tone.bar, opacity: 0.8 }} />
       <div className="flex flex-col sm:flex-row">
         <div className="relative h-32 w-full flex-none overflow-hidden sm:h-auto sm:w-44">
-          <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-105 group-hover:grayscale-0" style={{ backgroundImage: `url('${carImg(b.plate || b.id)}')`, filter: 'grayscale(0.6) brightness(0.55)' }} />
+          <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-[transform,filter] duration-[1200ms] ease-out group-hover:scale-105 group-hover:grayscale-0" style={{ backgroundImage: `url('${brandImg(b.brandId, b.plate || b.id)}')`, filter: 'grayscale(0.6) brightness(0.55)' }} />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian/70 to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-obsidian/80" />
         </div>
         <div className="flex-1 p-5 md:p-6">
@@ -574,7 +575,7 @@ function BookingDetailModal({ t, tb, isAr, booking, onClose }: { t: Tr; tb: Tr; 
         {mode === 'view' && (
           <motion.div key="view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
             <div className="relative -mx-6 -mt-2 mb-6 h-40 overflow-hidden md:-mx-8 md:h-48">
-              <div aria-hidden className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${carImg(booking.plate || booking.id)}')`, filter: 'grayscale(0.5) brightness(0.55)' }} />
+              <div aria-hidden className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${brandImg(booking.brandId, booking.plate || booking.id)}')`, filter: 'grayscale(0.5) brightness(0.55)' }} />
               <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#0c0d0e] via-[#0c0d0e]/40 to-transparent" />
               <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ background: tone.bar, opacity: 0.9 }} />
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-5 md:p-6">
@@ -830,7 +831,7 @@ function VehicleCard({ t, v, colors, onEdit, onRemove, compact }: { t: Tr; v: Ve
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={`group relative overflow-hidden rounded-[26px] border border-white/[0.08] transition-colors duration-300 hover:border-white/20 ${compact ? 'h-[200px]' : 'h-[260px]'}`}>
       <div aria-hidden className="absolute inset-0 scale-[1.04] bg-cover bg-center transition-[transform,filter] duration-[1400ms] ease-out group-hover:scale-[1.1] group-hover:grayscale-0"
-        style={{ backgroundImage: `url('${carImg(v.id || v.plate)}')`, filter: 'grayscale(0.6) brightness(0.6) contrast(1.05)' }} />
+        style={{ backgroundImage: `url('${brandImg(v.brandId, v.id || v.plate)}')`, filter: 'grayscale(0.6) brightness(0.6) contrast(1.05)' }} />
       <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/45 to-obsidian/10" />
 
       <div className="relative flex items-start justify-between p-5">

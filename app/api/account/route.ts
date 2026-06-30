@@ -32,7 +32,7 @@ export async function GET() {
 
     // الحجوزات مع أسماء الخدمات من booking_items.name_snapshot
     const bRows = await query<any>(
-      `SELECT b.id, b.reference, b.status, b.vehicle_label, b.plate,
+      `SELECT b.id, b.reference, b.status, b.vehicle_label, b.plate, b.brand_id,
               b.size_code, b.branch_code, b.scheduled_date, b.scheduled_time,
               b.total, b.payment_method_code, b.payment_status, b.stage, b.created_at,
               COALESCE(
@@ -56,6 +56,7 @@ export async function GET() {
         status: b.status,
         vehicleLabel: b.vehicle_label ?? "",
         plate: b.plate ?? "",
+        brandId: b.brand_id ?? "",
         serviceSlugs,
         serviceSnapshots,
         branchKey: b.branch_code ?? "",
