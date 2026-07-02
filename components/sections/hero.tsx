@@ -85,14 +85,14 @@ export function Hero({ media }: { media?: HeroMedia }) {
       {/* ── الـ poster: عنصر LCP — next/image responsive + priority ── */}
       <div aria-hidden className="absolute inset-0" style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}>
         <Image
-          src={posterDesktop}
+          src={isDesktop === false ? posterMobile : posterDesktop}
           alt=""
           fill
           priority
           fetchPriority="high"
           sizes="100vw"
           quality={50}
-          className="object-cover object-center"
+          className="object-contain object-center md:object-cover"
         />
       </div>
 
