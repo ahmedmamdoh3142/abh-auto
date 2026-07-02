@@ -227,8 +227,10 @@ export async function POST(request: Request) {
     const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
 
     const total = Math.max(0, beforePromo - promoDiscount - loyaltyDiscount) + giftsCharge;
-    const paidImmediately = paymentMethod !== "cash";
-    const paymentStatus = paidImmediately ? "paid" : "pending";
+    // مفيش بوابة دفع مفعّلة فعليًا بعد — كل الحجوزات تبقى "بانتظار الدفع"
+    // (تُأكَّد يدويًا أو عند تفعيل بوابة تتحقق من الدفع فعلًا).
+    const paidImmediately = false;
+    const paymentStatus = "pending";
 
     // الحجز يفضل مربوطًا بحسابك أنت/الشريك (user.id) كما هو.
     const bookingRows = await query<{ id: string; reference: string }>(
