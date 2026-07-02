@@ -61,7 +61,10 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
   // الفيديو يُركَّب فقط على الديسكتوب (وبدون reduced-motion).
   const deskSrc: HeroVideoSources = hasDesktopVid ? desktop : mobile;
-  const showVideo = isDesktop === true && !reduce && !!(deskSrc.webm || deskSrc.mp4);
+  // ── الفيديو موقوف مؤقتًا (صورة فقط على كل الأجهزة زي الموبايل) ──
+  // للرجوع: احذف السطر التالي وفعّل السطر اللي تحته.
+  const showVideo = false;
+  // const showVideo = isDesktop === true && !reduce && !!(deskSrc.webm || deskSrc.mp4);
 
   // poster للفيديو (سمة poster) — نختار صورة الموبايل لو الجهاز موبايل.
   const videoPoster = isDesktop === false ? posterMobile : posterDesktop;
@@ -184,7 +187,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
           style={{ animationDelay: '0.4s' }}
         >
           <PrimaryCTA href="/booking">{t('cta_primary')}</PrimaryCTA>
-          <GhostCTA href="/services">{t('cta_secondary')}</GhostCTA>
+          <GhostCTA href="/offers">{t('cta_secondary')}</GhostCTA>
         </div>
       </div>
 
