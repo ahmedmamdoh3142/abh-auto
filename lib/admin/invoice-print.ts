@@ -13,7 +13,9 @@
  *   4) تبريز كل قسم على شكل كرت (خصوصًا إيصال الكاشير).
  *   5) رسالة الشكر + رابط الموقع.
  *   6) ترقيم فاتورة (1001…100000) — ثابت لكل حجز (أو يُمرَّر من الداتابيز).
- *   7) إيصال الكاشير يستخدم اللوجو الأسود (logo-black.webp) أكبر وبدون كونتينر.
+ *   7) إيصال الكاشير: الهيدر كما هو (لوجو أسود بلا كونتينر على خلفية بيضاء)،
+ *      وباقي الأقسام أُعيد تصميمها ككروت فخمة بعناوين ذهبية وصندوق إجمالي
+ *      بصف أسود — نفس هوية الـPDF.
  *   + QR كود متوافق مع ZATCA (المرحلة الأولى) للفاتورة المبسّطة.
  *
  * الاستخدام:
@@ -36,7 +38,7 @@ const VAT_RATE = 0.15;                  // 15% ضريبة القيمة المض�
 
 // اللوجو الأبيض (للخلفية الغامقة — هيدر A4)
 const LOGO_LIGHT_SRC = "/images/logo3.webp";
-// اللوجو الأسود (للخلفية الفاتحة — إيصال الكاشير) — نفس مجلد اللوجو الأبيض
+// اللوجو الأسود (للخلفية الفاتحة — هيدر إيصال الكاشير) — نفس مجلد اللوجو الأبيض
 const LOGO_DARK_SRC = "/images/logo-black.webp";
 
 /* سياسة الاسترجاع والاستبدال (تظهر في الفاتورتين) */
@@ -44,18 +46,24 @@ const RETURN_POLICY = {
   titleAr: "سياسة الاسترجاع والاستبدال",
   titleEn: "Refund & Exchange Policy",
   itemsAr: [
-    "يحق للعميل الاسترجاع قبل استلام السيارة، ولا يحق له الاسترجاع بعد التنفيذ، وسيُرجَع المبلغ إلى حساب العميل خلال 15 يوم عمل من تاريخ الطلب.",
-    "يحق للعميل استبدال الخدمة بأخرى قبل استلام السيارة، وفي حال كانت الخدمة الجديدة أعلى قيمةً يتم دفع الفرق.",
-    "تسري صلاحية الحجز 3 أشهر من تاريخ الدفع، وفي حال لم تُسلَّم السيارة للخدمة خلال الفترة يتم إرجاع المبلغ للعميل بعد خصم ضريبة القيمة المضافة.",
-    "لا تخضع القسائم الشرائية أو رموز الخصم للاسترجاع.",
-    "تُعد هذه السياسة جزءًا من عقد الخدمة.",
+    "يحق للعميل طلب استرجاع المبلغ المدفوع خلال 7 أيام عمل من تاريخ الدفع، شريطة أن يكون الطلب قبل تنفيذ الخدمة.",
+    "لا يُقبل أي طلب استرجاع بعد تنفيذ الخدمة أو بعد انتهاء فترة الاسترجاع المنصوص عليها، وذلك بصرف النظر عن السبب.",
+    "يُعاد المبلغ المستحق إلى حساب العميل عبر وسيلة الدفع الأصلية خلال مدة لا تتجاوز 15 يوم عمل من تاريخ قبول الطلب.",
+    "يحق للعميل استبدال الخدمة المحجوزة بخدمة أخرى قبل استلام المركبة، وفي حال كانت الخدمة البديلة أعلى سعرًا يلزم العميل بسداد فرق السعر.",
+    "تسري صلاحية الحجز لمدة 3 أشهر من تاريخ الدفع، وفي حال انقضت المدة دون تنفيذ الخدمة يتم استرجاع مبلغ العميل بعد استقطاع ضريبة القيمة المضافة إلى حسابه البنكي أو محفظته الإلكترونية.",
+    "لا تخضع المشتريات التي تمت بالقسائم الشرائية أو رموز الخصم لسياسة الاسترجاع بأي حال من الأحوال.",
+    "لا تخضع العروض والباقات الخاصة للاسترجاع، ويُتاح الاستبدال بباقة مماثلة أو أعلى مع سداد فرق السعر.",
+    "تُعد هذه السياسة جزءًا لا يتجزأ من عقد الخدمة، وإتمام الدفع يُعد قبولًا صريحًا لجميع بنودها.",
   ],
   itemsEn: [
-    "The customer may request a refund before the vehicle is handed over; no refund is allowed after the service is performed. Refunds are returned to the customer's account within 15 business days of the request.",
-    "The customer may exchange the service for another before the vehicle is handed over; if the new service is of higher value, the difference is paid.",
-    "The booking is valid for 3 months from the payment date. If the vehicle is not handed over for the service within this period, the amount is refunded to the customer after deducting VAT.",
-    "Vouchers and discount codes are non-refundable.",
-    "This policy is considered part of the service contract.",
+    "A refund of the paid amount may be requested within 7 business days from the payment date, provided the request is made before the service is performed.",
+    "No refund request is accepted after the service is performed or after the stated refund period ends, regardless of the reason.",
+    "The due amount is returned to the customer via the original payment method within no more than 15 business days from the date the request is accepted.",
+    "The customer may exchange the booked service for another before the vehicle is handed over; if the alternative service is of higher price, the customer pays the difference.",
+    "The booking is valid for 3 months from the payment date. If the period lapses without the service being performed, the amount is refunded — after deducting VAT — to the customer's bank account or e-wallet.",
+    "Purchases made with vouchers or discount codes are not subject to the refund policy under any circumstances.",
+    "Special offers and packages are non-refundable; exchange is available for an equal or higher package with payment of the price difference.",
+    "This policy is an integral part of the service contract, and completing payment is an explicit acceptance of all its terms.",
   ],
 };
 
@@ -157,17 +165,17 @@ function zatcaQrBase64(totalInclVat: number, vatAmount: number): string {
   } catch { return ""; }
 }
 
-/* شعار: صورة لو متوفّرة، وإلا نص فخم احتياطي. */
-function logoLight() {
+/* شعار أبيض (على خلفية غامقة): صورة لو متوفّرة، وإلا نص فخم احتياطي. */
+function logoLight(height = 48) {
   const fallback = `<div style="line-height:1;">
       <div style="font:700 26px Georgia,serif;letter-spacing:1.5px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div>
       <div style="font-size:9px;letter-spacing:7px;color:#cbcdcd;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
     </div>`;
   if (!LOGO_LIGHT_SRC) return fallback;
   const fb = JSON.stringify(fallback).replace(/"/g, "&quot;");
-  return `<img src="${LOGO_LIGHT_SRC}" alt="ABH AUTO" style="height:48px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
+  return `<img src="${LOGO_LIGHT_SRC}" alt="ABH AUTO" style="height:${height}px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
 }
-/* لوجو أسود للإيصال — أكبر وبدون كونتينر. */
+/* لوجو أسود للإيصال — أكبر وبدون كونتينر (على خلفية بيضاء). */
 function logoDark(height = 62) {
   const fallback = `<div style="line-height:1;text-align:center;">
       <div style="font:800 30px Georgia,serif;letter-spacing:1.5px;color:#000;">ABH<span style="color:#000;">.</span></div>
@@ -330,10 +338,12 @@ function a4Html(b: InvoiceBooking, isAr: boolean, ccy: string) {
   </div>`;
 }
 
-/* ═════════════════ إيصال 80mm (فاتورة ضريبية مبسّطة، كروت مبرزة) ═════════════════ */
+/* ═════════════════ إيصال 80mm (فاتورة ضريبية مبسّطة — كروت بهوية الـPDF) ═════════════════ */
 function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   const T = (a: string, e: string) => (isAr ? a : e);
   const dir = isAr ? "rtl" : "ltr";
+  const sA = isAr ? "right" : "left";
+  const eA = isAr ? "left" : "right";
   const services = (b.services || []).filter((s) => s && s.name);
   const pay = payInfo(b.payment, isAr);
   const issued = new Date().toLocaleString(isAr ? "ar-EG" : "en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -342,31 +352,43 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   const { total, net, vat } = vatBreakdown(b.total);
   const qr = inv.issued ? zatcaQrBase64(total, vat) : "";
 
-  // كرت الإيصال — بروز واضح بحدود سوداء صريحة (تبان على الطابعة الحرارية)
-  const card = (inner: string, mt = 8) =>
-    `<div style="border:2px solid #000;border-radius:10px;padding:8px 10px;margin-top:${mt}px;background:#fff;">${inner}</div>`;
-  const cardTitle = (t: string) =>
-    `<div style="font-size:12px;font-weight:800;color:#000;letter-spacing:1px;margin-bottom:5px;text-align:center;background:#000;color:#fff;padding:3px 0;border-radius:5px;">${esc(t)}</div>`;
-  const line = (l: string, v: string, big = false) =>
-    `<div style="display:flex;justify-content:space-between;gap:8px;font-size:${big ? 18 : 14}px;font-weight:${big ? 800 : 600};margin:3px 0;color:#000;line-height:1.4;"><span>${esc(l)}</span><span dir="ltr">${v}</span></div>`;
+  const gold = "#c2a04e";
 
-  const items = services.length === 0
-    ? `<div style="text-align:center;color:#000;font-size:13px;font-weight:600;">${T("لا توجد خدمات", "No services")}</div>`
+  // كرت بعنوان ذهبي (نفس هوية الـA4)
+  const cardOpen = (title: string) => `
+    <div style="border:1px solid #e7e3d8;border-radius:12px;overflow:hidden;background:#fff;margin-top:8px;box-shadow:0 1px 0 #f2efe6;">
+      <div style="background:linear-gradient(90deg,#faf8f2,#fff);border-bottom:1px solid #efe9db;padding:6px 10px;display:flex;align-items:center;gap:6px;">
+        <span style="height:7px;width:7px;border-radius:99px;background:${gold};display:inline-block;"></span>
+        <span style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:${gold};font-weight:700;">${esc(title)}</span>
+      </div>
+      <div style="padding:9px 11px;">`;
+  const cardClose = `</div></div>`;
+
+  // سطر معلومة (label يسار خافت / value يمين غامق)
+  const info = (l: string, v: string, ltr = false) =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;margin:4px 0;font-size:11.5px;line-height:1.5;"><span style="color:#6c7077;">${esc(l)}</span><span ${ltr ? 'dir="ltr"' : ""} style="color:#15161a;font-weight:700;text-align:${eA};">${esc(v || "—")}</span></div>`;
+
+  // صفوف جدول الخدمات (صف رأس أسود زي A4)
+  const rows = services.length === 0
+    ? `<tr><td colspan="2" style="padding:12px;text-align:center;color:#6c7077;font-size:11px;">${T("لا توجد خدمات", "No services")}</td></tr>`
     : services.map((s, i) => {
         const gift = !!s.isGift;
-        const price = gift && (Number(s.price) || 0) === 0 ? T("مجانية", "Free") : (Number(s.price) > 0 ? `${money(s.price)}` : T("حسب الطلب", "On req."));
-        return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600;margin:4px 0;color:#000;line-height:1.4;${i ? "border-top:1px dashed #bbb;padding-top:4px;" : ""}">
-          <span style="max-width:44mm;">${esc(s.name)}${gift ? ` <b>(${T("هدية", "Gift")})</b>` : ""}</span>
-          <span dir="ltr">${price}</span>
-        </div>`;
+        const price = gift && (Number(s.price) || 0) === 0
+          ? `<b style="color:${gold};">${T("مجانية", "Free")}</b>`
+          : (Number(s.price) > 0 ? `${money(s.price)} <span style="color:#9a9ea4;font-size:9px;">${esc(ccy)}</span>` : T("حسب الطلب", "On req."));
+        const chip = gift ? ` <span style="padding:1px 6px;border-radius:99px;font-size:8px;color:${gold};background:#f3ead0;border:1px solid ${gold}55;">${T("هدية", "Gift")}</span>` : "";
+        return `<tr style="background:${i % 2 ? "#faf9f6" : "#fff"};">
+          <td style="padding:7px 10px;font-size:11px;color:#15161a;text-align:${sA};border-bottom:1px solid #ece9e1;font-weight:600;">${esc(s.name)}${chip}</td>
+          <td style="padding:7px 10px;font-size:11px;color:#15161a;text-align:${eA};white-space:nowrap;border-bottom:1px solid #ece9e1;">${price}</td>
+        </tr>`;
       }).join("");
 
   const policyItems = (isAr ? RETURN_POLICY.itemsAr : RETURN_POLICY.itemsEn)
-    .map((p) => `<li style="margin-bottom:4px;">${esc(p)}</li>`).join("");
+    .map((p) => `<li style="margin-bottom:5px;">${esc(p)}</li>`).join("");
 
   return `
-  <div style="width:76mm;margin:0 auto;background:#fff;color:#000;font-family:'Helvetica Neue',Arial,'Tahoma','Segoe UI',sans-serif;direction:${dir};padding:3mm 1.5mm;">
-    <!-- لوجو أسود كبير بدون كونتينر -->
+  <div style="width:76mm;margin:0 auto;background:#fff;color:#15161a;font-family:'Helvetica Neue',Arial,'Tahoma','Segoe UI',sans-serif;direction:${dir};padding:3mm 2mm;">
+    <!-- ═══ الهيدر (كما هو: لوجو أسود بلا كونتينر) ═══ -->
     <div style="text-align:center;margin-bottom:6px;">${logoDark(64)}</div>
 
     <!-- بيانات الشركة -->
@@ -376,68 +398,92 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
       <div>${T("الرقم الضريبي", "VAT No.")}: <b dir="ltr">${esc(COMPANY.vatNumber)}</b></div>
     </div>
 
-    <div style="text-align:center;font-size:12px;font-weight:800;color:#fff;background:#000;letter-spacing:1px;margin-top:8px;padding:5px 0;border-radius:6px;">${proforma ? T("فاتورة مبدئية", "PRO-FORMA INVOICE") : T("فاتورة ضريبية مبسّطة", "SIMPLIFIED TAX INVOICE")}</div>
+    <!-- شريط العنوان + فاصل ذهبي (هوية الـPDF) -->
+    <div style="text-align:center;font-size:12px;font-weight:800;color:#fff;background:#0c0d0e;letter-spacing:1px;margin-top:8px;padding:6px 0;border-radius:7px 7px 0 0;">${proforma ? T("فاتورة مبدئية", "PRO-FORMA INVOICE") : T("فاتورة ضريبية مبسّطة", "SIMPLIFIED TAX INVOICE")}</div>
+    <div style="height:3px;background:linear-gradient(90deg,#c2a04e,#f3ead0,#c2a04e);border-radius:0 0 3px 3px;"></div>
 
-    <!-- كرت المرجع -->
-    ${card(`
+    <!-- ═══ الكروت (بهوية الـPDF) ═══ -->
+
+    <!-- كرت بيانات الحجز -->
+    ${cardOpen(T("بيانات الحجز", "Booking"))}
       ${inv.issued
-        ? line(T("رقم الفاتورة", "Invoice"), esc(inv.no))
-        : line(T("الحالة", "Status"), T("غير ضريبية — تُصدر بعد الدفع", "Non-tax — after payment"))}
-      ${line(T("رقم الحجز", "Ref"), esc(b.reference))}
-      ${line(T("التاريخ", "Date"), esc(issued))}
-    `)}
+        ? info(T("رقم الفاتورة", "Invoice No."), `#${inv.no}`, true)
+        : info(T("الحالة", "Status"), T("غير ضريبية — تُصدر بعد الدفع", "Non-tax — after payment"))}
+      ${info(T("رقم الحجز", "Reference"), b.reference || "—", true)}
+      ${info(T("التاريخ", "Date"), issued, true)}
+    ${cardClose}
 
     <!-- كرت العميل -->
-    ${card(`
-      ${line(T("العميل", "Customer"), esc(b.customer || "—"))}
-      ${b.phone ? line(T("التليفون", "Phone"), esc(b.phone)) : ""}
-    `)}
+    ${cardOpen(T("بيانات العميل", "Customer"))}
+      ${info(T("الاسم", "Name"), b.customer || "—")}
+      ${b.phone ? info(T("التليفون", "Phone"), b.phone, true) : ""}
+    ${cardClose}
 
-    <!-- كرت السيارة -->
-    ${card(`
-      ${b.vehicle ? line(T("السيارة", "Vehicle"), esc(b.vehicle)) : ""}
-      ${b.plate ? line(T("اللوحة", "Plate"), esc(b.plate)) : ""}
-      ${b.branch ? line(T("الفرع", "Branch"), esc(b.branch)) : ""}
-      ${(b.date || b.time) ? line(T("الموعد", "When"), esc(`${fmtDate(b.date, isAr)} ${b.time || ""}`.trim())) : ""}
-    `)}
+    <!-- كرت السيارة والموعد -->
+    ${cardOpen(T("السيارة والموعد", "Vehicle & schedule"))}
+      ${b.vehicle ? info(T("السيارة", "Vehicle"), b.vehicle) : ""}
+      ${b.plate ? info(T("اللوحة", "Plate"), b.plate, true) : ""}
+      ${b.branch ? info(T("الفرع", "Branch"), b.branch) : ""}
+      ${(b.date || b.time) ? info(T("الموعد", "When"), `${fmtDate(b.date, isAr)} ${b.time || ""}`.trim()) : ""}
+    ${cardClose}
 
-    <!-- كرت الخدمات -->
-    <div style="border:2px solid #000;border-radius:10px;padding:8px 10px;margin-top:8px;background:#fff;">
-      ${cardTitle(T("الخدمات", "SERVICES"))}
-      ${items}
+    <!-- كرت الخدمات (جدول بصف رأس أسود) -->
+    <div style="border:1px solid #e7e3d8;border-radius:12px;overflow:hidden;background:#fff;margin-top:8px;box-shadow:0 1px 0 #f2efe6;">
+      <div style="background:linear-gradient(90deg,#faf8f2,#fff);border-bottom:1px solid #efe9db;padding:6px 10px;display:flex;align-items:center;gap:6px;">
+        <span style="height:7px;width:7px;border-radius:99px;background:${gold};display:inline-block;"></span>
+        <span style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:${gold};font-weight:700;">${T("تفاصيل الخدمات", "Services")}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#0c0d0e;">
+          <th style="padding:6px 10px;font-size:8.5px;letter-spacing:1px;color:#fff;text-align:${sA};font-weight:700;">${T("الخدمة", "Service")}</th>
+          <th style="padding:6px 10px;font-size:8.5px;letter-spacing:1px;color:#fff;text-align:${eA};font-weight:700;">${T("السعر", "Price")}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
 
-    <!-- كرت الإجمالي مع تفكيك الضريبة -->
-    <div style="border:2px solid #000;border-radius:10px;padding:8px 10px;margin-top:8px;background:#fff;">
-      ${line(T("الإجمالي قبل الضريبة", "Subtotal (excl. VAT)"), `${money2(net)} ${esc(ccy)}`)}
-      ${line(`${T("ض.ق.م", "VAT")} (${VAT_RATE * 100}%)`, `${money2(vat)} ${esc(ccy)}`)}
-      <div style="border-top:2px solid #000;margin:6px 0;"></div>
-      ${line(T("الإجمالي شامل الضريبة", "TOTAL (incl. VAT)"), `${money2(total)} ${esc(ccy)}`, true)}
-      <div style="text-align:center;font-size:10px;color:#000;margin-top:4px;">${T(`الأسعار شاملة ض.ق.م ${VAT_RATE * 100}%`, `Prices incl. ${VAT_RATE * 100}% VAT`)}</div>
+    <!-- صندوق الإجمالي (تفكيك الضريبة + صف أسود) -->
+    <div style="border:1px solid #e7e3d8;border-radius:12px;overflow:hidden;margin-top:8px;">
+      <div style="display:flex;justify-content:space-between;padding:8px 11px;font-size:11.5px;color:#6c7077;background:#fff;"><span>${T("الإجمالي قبل الضريبة", "Total (excl. VAT)")}</span><span dir="ltr" style="color:#15161a;font-weight:700;">${money2(net)} ${esc(ccy)}</span></div>
+      ${Number(b.towing) > 0 ? `<div style="display:flex;justify-content:space-between;padding:0 11px 8px;font-size:10px;color:#9a9ea4;"><span>${T("منها النقل", "incl. towing")}</span><span dir="ltr">${money(b.towing)} ${esc(ccy)}</span></div>` : ""}
+      <div style="display:flex;justify-content:space-between;padding:8px 11px;font-size:11.5px;color:#6c7077;border-top:1px solid #f0ede4;background:#faf9f6;"><span>${T("ض.ق.م", "VAT")} (${VAT_RATE * 100}%)</span><span dir="ltr" style="color:#15161a;font-weight:700;">${money2(vat)} ${esc(ccy)}</span></div>
+      <div style="background:#0c0d0e;display:flex;justify-content:space-between;align-items:baseline;padding:11px;">
+        <span style="font-size:9px;letter-spacing:1px;color:#cbcdcd;">${T("الإجمالي شامل الضريبة", "TOTAL (incl. VAT)")}</span>
+        <span dir="ltr" style="font-size:18px;font-weight:800;color:#fff;">${money2(total)} <span style="font-size:9px;color:#e4c979;">${esc(ccy)}</span></span>
+      </div>
     </div>
+    <div style="text-align:center;font-size:8.5px;color:#9a9ea4;margin-top:5px;">${T(`الأسعار شاملة ض.ق.م ${VAT_RATE * 100}%`, `Prices incl. ${VAT_RATE * 100}% VAT`)}</div>
 
-    <!-- شارة الدفع -->
-    <div style="text-align:center;margin-top:8px;">
-      <span style="display:inline-block;padding:5px 16px;border:2px solid #000;border-radius:6px;font-size:14px;color:#000;font-weight:800;">${esc(pay.label)}</span>
-    </div>
+    <!-- كرت الدفع (شارة ملوّنة زي A4) -->
+    ${cardOpen(T("الدفع", "Payment"))}
+      <div style="text-align:center;">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:99px;background:${pay.bg};color:${pay.color};font-size:11.5px;font-weight:700;"><span style="height:7px;width:7px;border-radius:99px;background:${pay.color};"></span>${esc(pay.label)}</span>
+      </div>
+      <div style="margin-top:9px;font-size:11px;color:#6c7077;line-height:1.9;text-align:center;">
+        ${T("طريقة الدفع", "Method")}: <b style="color:#15161a;">${esc(payMethodLabel(b.paymentMethod, isAr))}</b><br/>
+        ${T("حالة الحجز", "Status")}: <b style="color:#15161a;">${esc(statusLabel(b.status, isAr))}</b>
+      </div>
+    ${cardClose}
 
-    ${qr ? `<div style="text-align:center;margin-top:10px;">
-      <div id="zatca-qr" style="width:118px;height:118px;margin:0 auto;"></div>
-      <div style="font-size:9.5px;color:#000;margin-top:4px;font-weight:600;">${T("امسح للتحقّق — متوافق مع ZATCA", "Scan to verify — ZATCA compliant")}</div>
+    ${qr ? `<!-- QR ZATCA -->
+    <div style="text-align:center;margin-top:10px;border:1px solid #e7e3d8;border-radius:12px;padding:11px;background:#fff;">
+      <div id="zatca-qr" style="width:120px;height:120px;margin:0 auto;"></div>
+      <div style="font-size:9px;color:#6c7077;margin-top:6px;font-weight:600;line-height:1.5;">${T("امسح للتحقّق من الفاتورة الضريبية", "Scan to verify this tax invoice")}<br/>${T("متوافق مع هيئة الزكاة والضريبة (ZATCA)", "ZATCA compliant")}</div>
     </div>` : ""}
 
+    ${b.status === "cancelled" && b.cancelReason ? `<div style="margin-top:8px;border:1px solid #f0c6c0;background:#fdeeec;border-radius:12px;padding:9px 11px;font-size:10.5px;color:#a23b30;"><b>${T("سبب الإلغاء", "Cancellation reason")}:</b> ${esc(b.cancelReason)}</div>` : ""}
+
     <!-- كرت سياسة الاسترجاع -->
-    <div style="border:2px solid #000;border-radius:10px;padding:8px 10px;margin-top:8px;background:#fff;">
-      ${cardTitle(isAr ? RETURN_POLICY.titleAr : RETURN_POLICY.titleEn)}
-      <ol style="margin:0;padding-inline-start:16px;font-size:9.5px;line-height:1.55;color:#000;font-weight:500;text-align:${isAr ? "right" : "left"};">
+    ${cardOpen(isAr ? RETURN_POLICY.titleAr : RETURN_POLICY.titleEn)}
+      <ol style="margin:0;padding-inline-start:16px;font-size:9px;line-height:1.6;color:#4a4d52;text-align:${sA};font-weight:500;">
         ${policyItems}
       </ol>
-    </div>
+    ${cardClose}
 
     <!-- الفوتر -->
-    <div style="text-align:center;margin-top:10px;font-size:11.5px;font-weight:700;color:#000;line-height:1.7;">
-      ${T("شكرًا لاختيارك ABH AUTO", "Thank you for choosing ABH AUTO")}
-      <div dir="ltr" style="font-size:11px;font-weight:600;">${esc(COMPANY.website)}</div>
+    <div style="text-align:center;margin-top:12px;padding-top:10px;border-top:1px dashed #d8d3c6;">
+      <div style="font-size:11.5px;font-weight:700;color:#15161a;">${T("شكرًا لاختيارك ABH AUTO", "Thank you for choosing ABH AUTO")}</div>
+      <a href="${esc(COMPANY.website)}" dir="ltr" style="font-size:11px;font-weight:700;color:#c2a04e;text-decoration:none;letter-spacing:.5px;">${esc(COMPANY.website)}</a>
     </div>
   </div>`;
 }

@@ -198,10 +198,15 @@ export default function NewBookingClient({
   const [busy, setBusy] = useState(false);
 
   const total = useMemo(() => {
-    let svc = 0; let onReq = false;
+    let svc = 0; let svcOriginal = 0; let saved = 0; let onReq = false;
     for (const s of chosenServices) {
       if (s.onRequest) { onReq = true; continue; }
-      svc += s.prices[size] ?? s.prices.large ?? 0;
+      const price = s.prices[size] ?? s.prices.large ?? 0;
+      const oldP = s.oldPrices[size] ?? s.oldPrices.large ?? 0;
+      const discounted = oldP > price;           // خصم حقيقي (أصل السعر أعلى)
+      svc += price;
+      svcOriginal += discounted ? oldP : price;
+      if (discounted) saved += oldP - price;
     }
     const tow = towMode ? (towing.find((t) => t.code === towMode)?.cost ?? 0) : 0;
     const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
@@ -212,7 +217,9 @@ export default function NewBookingClient({
       ? Math.min(promoInfo.discount || 0, beforePromo)
       : 0;
     const grand = Math.max(0, beforePromo - promoCut) + giftsCharge + customTotal;
-    return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, grand, onReq };
+    // الإجمالي قبل أي خصم (أصل الأسعار) — عشان نبيّن «قبل الخصم» و«وفّرت» زي الموقع.
+    const originalTotal = svcOriginal + tow + giftsCharge + customTotal;
+    return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, grand, onReq, saved, originalTotal };
   }, [chosenServices, size, towMode, towing, gifts, customItems, promoInfo]);
 
   /* ── منطق كود الخصم ── */
@@ -721,29 +728,54 @@ export default function NewBookingClient({
               )}
             </div>
 
-            {/* سطر كود الخصم / هدية الكود في الملخّص */}
-            {promoInfo && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed rgba(255,255,255,.1)" }}>
-                {promoInfo.kind === "gift_service" ? (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GIFT_GOLD, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{giftIco(11)}{promoInfo.giftServiceName || T("هدية الكود", "Code gift")}</span>
-                    <span dir="ltr" className="abh-num" style={{ color: GIFT_GOLD, flexShrink: 0 }}>{T("مجانًا", "Free")}</span>
-                  </div>
-                ) : total.promoCut > 0 ? (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tagIco(12)}{T("خصم الكود", "Promo")} ({promoInfo.code})</span>
-                    <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", flexShrink: 0 }}>−{EGP(total.promoCut)}</span>
-                  </div>
-                ) : null}
-              </div>
-            )}
+            {/* التفاصيل المالية — نفس ترتيب الموقع: قبل الخصم ← وفّرت ← خصم الكود ← المستحق */}
+            {(() => {
+              const showOriginal = total.originalTotal > total.grand && (total.saved > 0 || total.promoCut > 0);
+              return (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed rgba(255,255,255,.1)" }}>
+                  {/* الإجمالي قبل الخصم (مشطوب) */}
+                  {showOriginal && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, marginBottom: 8 }}>
+                      <span style={{ color: "var(--abh-steel)" }}>{T("الإجمالي قبل الخصم", "Subtotal")}</span>
+                      <span dir="ltr" className="abh-num" style={{ color: "var(--abh-steel)", textDecoration: "line-through", opacity: .8 }}>{EGP(total.originalTotal)} {ccy}</span>
+                    </div>
+                  )}
+                  {/* وفّرت */}
+                  {total.saved > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, marginBottom: 8 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#e7b4b4" }}><Ic.check s={12} />{T("وفّرت", "You save")}</span>
+                      <span dir="ltr" className="abh-num" style={{ color: "#e7b4b4" }}>−{EGP(total.saved)} {ccy}</span>
+                    </div>
+                  )}
+                  {/* خصم الكود / هدية الكود */}
+                  {promoInfo && (promoInfo.kind === "gift_service" ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GIFT_GOLD, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{giftIco(11)}{promoInfo.giftServiceName || T("هدية الكود", "Code gift")}</span>
+                      <span dir="ltr" className="abh-num" style={{ color: GIFT_GOLD, flexShrink: 0 }}>{T("مجانًا", "Free")}</span>
+                    </div>
+                  ) : total.promoCut > 0 ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tagIco(12)}{T("خصم الكود", "Promo")} ({promoInfo.code})</span>
+                      <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", flexShrink: 0 }}>−{EGP(total.promoCut)}</span>
+                    </div>
+                  ) : null)}
+                </div>
+              );
+            })()}
 
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.1)" }}>
-              <div style={{ fontSize: 10, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{T("الإجمالي التقديري", "Estimated total")}</div>
+              <div style={{ fontSize: 10, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{T("الإجمالي المستحق", "Total due")}</div>
+              {!(total.onReq && total.grand === 0) && (
+                <div style={{ fontSize: 10.5, color: "var(--abh-steel)", opacity: .8, marginTop: 3 }}>({T("شامل ضريبة القيمة المضافة", "incl. VAT")})</div>
+              )}
               <div className="abh-num" dir="ltr" style={{ fontSize: 30, color: "var(--abh-ivory)", lineHeight: 1.1, marginTop: 6 }}>
                 {total.onReq && total.grand === 0 ? T("حسب الطلب", "On request") : <>{EGP(total.grand)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></>}
               </div>
               <div style={{ fontSize: 10, color: "var(--abh-steel)", marginTop: 6 }}>{T("الخصم/الكود يُحسب نهائيًا في الخادم", "Promo computed on the server")}</div>
+              {/* ملاحظة الضريبة */}
+              <div style={{ fontSize: 10.5, color: "var(--abh-steel)", opacity: .85, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)", textAlign: "center", lineHeight: 1.6 }}>
+                {T("جميع الأسعار شاملة ضريبة القيمة المضافة (15%)", "All prices are inclusive of VAT (15%)")}
+              </div>
             </div>
 
             <div style={{ marginTop: 18 }}>

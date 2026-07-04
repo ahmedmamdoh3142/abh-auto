@@ -274,7 +274,12 @@ export function StepConfirm({
               )}
 
               <div className="flex items-end justify-between">
-                <span className="text-[0.6rem] uppercase tracking-[0.26em] text-steel">{total.onReq && total.grand === 0 ? t('step4.estimate') : t('step4.total')}</span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[0.6rem] uppercase tracking-[0.26em] text-steel">{total.onReq && total.grand === 0 ? t('step4.estimate') : t('step4.total')}</span>
+                  {!(total.onReq && total.grand === 0) && (
+                    <span className="text-[0.56rem] normal-case tracking-normal text-steel/70">({isAr ? 'شامل ضريبة القيمة المضافة' : 'incl. VAT'})</span>
+                  )}
+                </span>
                 <span className="flex items-baseline gap-1.5">
                   {total.onReq && total.grand === 0 ? (
                     <span className="font-display text-2xl text-ivory">{t('onRequest')}</span>
@@ -286,6 +291,11 @@ export function StepConfirm({
                   )}
                 </span>
               </div>
+
+              {/* (جديد) ملاحظة الضريبة — كل الأسعار شاملة ض.ق.م */}
+              <p className="mt-4 border-t border-white/[0.06] pt-3 text-center text-[0.62rem] leading-relaxed text-steel/70">
+                {isAr ? 'جميع الأسعار شاملة ضريبة القيمة المضافة (15%)' : 'All prices are inclusive of VAT (15%)'}
+              </p>
 
             </div>
 
