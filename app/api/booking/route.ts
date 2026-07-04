@@ -54,9 +54,8 @@ export async function POST(request: Request) {
     const whatsappOptIn = body.whatsappOptIn === true;
     const whatsappOptInText = body.whatsappOptInText ? String(body.whatsappOptInText).trim() : null;
 
-    if (services.length === 0) {
-      return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
-    }
+    // ملاحظة: لا نرفض هنا لو مفيش خدمات — لأن كود الهدية (gift_service) يسمح
+    // بالحجز لوحده. الرفض النهائي بعد التحقق من الكود (تحت).
 
     // ════════════ التقاط العميل للاستهداف (لا يغيّر ملكية الحجز) ════════════
     const digits = onlyDigits(customerPhone);
@@ -185,6 +184,12 @@ export async function POST(request: Request) {
           }
         }
       }
+    }
+
+    // ── الرفض النهائي: لازم خدمة مدفوعة واحدة على الأقل، أو كود هدية صالح ──
+    // (كود الهدية giftCouponServiceId يتحدّد فوق فقط لو الكود صحيح واجتاز الحد الأدنى.)
+    if (items.length === 0 && !giftCouponServiceId) {
+      return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
     }
 
     // ── خصم الولاء — على حسابك أنت صاحب الحجز (كما هو الأصل) ──

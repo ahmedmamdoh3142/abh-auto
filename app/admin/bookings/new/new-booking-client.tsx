@@ -12,6 +12,12 @@
  * (عروض) نفس فكرة الموقع: الخدمات المؤهِّلة لهدية تتعلّم بشارة، ولمّا تختار
  *   ما يكفي منها يظهر بانر «فتحت هدية» تفتح منه مودال اختيار الهدية. الهدية
  *   تتضاف للملخّص والإجمالي وتترسل للسيرفر اللي بيسجّلها.
+ *
+ * (جديد) كود الخصم يتأكّد فعليًا زي الموقع عبر /api/promo/validate:
+ *   • الكود العادي (نسبة/مبلغ/خدمات) يبان خصمه في الملخّص ويُخصم من الإجمالي.
+ *   • كود الهدية (gift_service) يضيف الخدمة المجانية للملخّص.
+ *   • السيرفر يعيد حساب الخصم نهائيًا وقت الإنشاء (لا نثق بأي قيمة من الواجهة).
+ *   • أي تغيير في الخدمات يعيد التحقق من الكود تلقائيًا (بصمت).
  */
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -40,7 +46,15 @@ type Opt = { code: string; label: string };
 type ColorOpt = { key: string; hex: string; light: boolean; name: string };
 type TowOpt = { code: string; label: string; cost: number };
 type UserLite = { id: string; name: string; email: string; phone?: string; city?: string };
-
+/* نتيجة التحقق من كود الخصم (مطابقة لرد /api/promo/validate). */
+type PromoInfo = {
+  code: string;
+  kind: string;                    // percentage | fixed | service_* | gift_service
+  discount: number;                // قيمة الخصم (0 للهدية)
+  discountPercent: number;
+  giftServiceSlug: string | null;  // لكود الهدية
+  giftServiceName: string | null;
+};
 const SIZE_LABEL: Record<SizeCode, { ar: string; en: string }> = {
   small: { ar: "صغيرة", en: "Small" },
   medium: { ar: "متوسطة", en: "Medium" },
@@ -53,6 +67,12 @@ const giftIco = (s = 12) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <path d="M20 12v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9" /><path d="M2 7h20v5H2z" /><path d="M12 22V7" />
     <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+  </svg>
+);
+/* أيقونة تاج صغيرة (لكود الخصم) */
+const tagIco = (s = 13) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M20.6 13.4 12 22l-9-9V3h10l8 8a2 2 0 0 1-.4 2.4z" /><path d="M7 7h.01" />
   </svg>
 );
 
@@ -90,7 +110,6 @@ export default function NewBookingClient({
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
   const [touched, setTouched] = useState(false);
-
   useEffect(() => {
     if (mode !== "registered") return;
     let alive = true; setSearching(true);
@@ -119,7 +138,6 @@ export default function NewBookingClient({
   const brand = brands.find((b) => b.id === brandId);
   const modelObj = brand?.models.find((m) => m.name === model);
   const size: SizeCode = modelObj?.size ?? "large";
-
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const grouped = useMemo(() => {
     const g = new Map<string, Service[]>();
@@ -168,7 +186,13 @@ export default function NewBookingClient({
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [payment, setPayment] = useState(payments.find((p) => p.code === "cash")?.code ?? payments[0]?.code ?? "");
-  const [promo, setPromo] = useState("");
+
+  // ── كود الخصم (يتأكّد فعليًا زي الموقع) ──
+  const [promo, setPromo] = useState("");              // نص الكود المُدخَل
+  const [promoInfo, setPromoInfo] = useState<PromoInfo | null>(null);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
   const [waOptIn, setWaOptIn] = useState(true); // موافقة الواتساب (افتراضيًا مفعّلة في الداشبورد)
 
   const [busy, setBusy] = useState(false);
@@ -182,8 +206,97 @@ export default function NewBookingClient({
     const tow = towMode ? (towing.find((t) => t.code === towMode)?.cost ?? 0) : 0;
     const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
     const customTotal = customItems.reduce((s, c) => s + (c.price || 0), 0);
-    return { svc, tow, giftsCharge, customTotal, grand: svc + tow + giftsCharge + customTotal, onReq };
-  }, [chosenServices, size, towMode, towing, gifts, customItems]);
+    const beforePromo = svc + tow;
+    // خصم الكود (لا يُطبّق لكود الهدية) — محسوب من السيرفر، ويعاد التأكّد نهائيًا وقت الإنشاء.
+    const promoCut = promoInfo && promoInfo.kind !== "gift_service"
+      ? Math.min(promoInfo.discount || 0, beforePromo)
+      : 0;
+    const grand = Math.max(0, beforePromo - promoCut) + giftsCharge + customTotal;
+    return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, grand, onReq };
+  }, [chosenServices, size, towMode, towing, gifts, customItems, promoInfo]);
+
+  /* ── منطق كود الخصم ── */
+  const promoErr = (e: string) => {
+    if (isAr) return e === "not_found" ? "كود غير صحيح"
+      : e === "expired" ? "انتهت صلاحية الكود"
+      : e === "not_started" ? "الكود لسه ما اشتغلش"
+      : e === "used_up" || e === "inactive" ? "الكود مش متاح"
+      : e === "per_user" ? "العميل استخدم الكود ده قبل كده"
+      : e === "min_order" ? "الكود يتطلّب حد أدنى للطلب"
+      : e === "no_match" ? "الكود لا ينطبق على الخدمات المختارة"
+      : "تعذّر التحقق، حاول تاني";
+    return e === "not_found" ? "Invalid code"
+      : e === "expired" ? "Code expired"
+      : e === "not_started" ? "Code not active yet"
+      : e === "used_up" || e === "inactive" ? "Code no longer available"
+      : e === "per_user" ? "Customer already used this code"
+      : e === "min_order" ? "Order below the code minimum"
+      : e === "no_match" ? "Not applicable to selected services"
+      : "Could not verify, try again";
+  };
+
+  const buildPromoLines = () => chosenServices
+    .filter((s) => !s.onRequest)
+    .map((s) => ({ serviceId: s.id, unit: s.prices[size] ?? s.prices.large ?? 0 }));
+
+  const applyPromo = async (raw?: string) => {
+    const c = (raw ?? promo).trim();
+    if (!c) return;
+    setPromoChecking(true); setPromoError(null);
+    try {
+      const lines = buildPromoLines();
+      const subtotal = lines.reduce((s, l) => s + l.unit, 0) + total.tow;
+      const j = await fetch("/api/promo/validate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: c, lines, subtotal }),
+      }).then((r) => r.json());
+      if (j?.ok) {
+        if (j.kind === "gift_service") {
+          const gn = j.giftService
+            ? ((isAr ? j.giftService.name?.ar : j.giftService.name?.en) || j.giftService.name?.ar || j.giftService.name?.en || T("هدية", "Gift"))
+            : T("هدية", "Gift");
+          setPromoInfo({ code: j.code, kind: j.kind, discount: 0, discountPercent: 0, giftServiceSlug: j.giftService?.slug ?? null, giftServiceName: gn });
+        } else {
+          setPromoInfo({ code: j.code, kind: j.kind, discount: Number(j.discount) || 0, discountPercent: Number(j.discountPercent) || 0, giftServiceSlug: null, giftServiceName: null });
+        }
+        setPromo(c);
+        setPromoError(null);
+      } else {
+        setPromoInfo(null);
+        setPromoError(promoErr(j?.error ?? "server_error"));
+      }
+    } catch {
+      setPromoInfo(null);
+      setPromoError(promoErr("server_error"));
+    } finally { setPromoChecking(false); }
+  };
+
+  const clearPromo = () => { setPromoInfo(null); setPromo(""); setPromoError(null); };
+
+  // إعادة التحقق تلقائيًا (بصمت) لما تتغيّر الخدمات/الحجم/النقل وكود مطبّق موجود.
+  useEffect(() => {
+    if (!promoInfo || promoInfo.kind === "gift_service") return;
+    let alive = true;
+    (async () => {
+      try {
+        const lines = buildPromoLines();
+        const subtotal = lines.reduce((s, l) => s + l.unit, 0) + total.tow;
+        const j = await fetch("/api/promo/validate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: promoInfo.code, lines, subtotal }),
+        }).then((r) => r.json());
+        if (!alive) return;
+        if (j?.ok && j.kind !== "gift_service") {
+          setPromoInfo((p) => p ? { ...p, discount: Number(j.discount) || 0, discountPercent: Number(j.discountPercent) || 0 } : p);
+        } else if (!j?.ok) {
+          setPromoInfo(null);
+          setPromoError(promoErr(j?.error ?? "no_match"));
+        }
+      } catch { /* تجاهل أخطاء الشبكة */ }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen, size, towMode]);
 
   const phoneOk = !phone.trim() || isValidPhone(phone);
   const customerOk = mode === "registered" ? !!userId : (!!name.trim() && !!phone.trim() && phoneOk);
@@ -207,7 +320,7 @@ export default function NewBookingClient({
           services: Array.from(chosen),
           customItems: customItems.map((c) => ({ name: c.name, price: c.price })),
           gifts: gifts.map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
-          promoCode: promo.trim() || null,
+          promoCode: promoInfo?.code ?? null, // نبعت الكود المتحقّق فقط؛ السيرفر يعيد حسابه
           whatsappOptIn: waOptIn,
         }),
       });
@@ -215,7 +328,8 @@ export default function NewBookingClient({
       if (!j.ok) throw new Error(j.error || "fail");
       toast(T(`تم إنشاء الحجز ${j.reference}`, `Booking ${j.reference} created`));
       setChosen(new Set()); setGifts([]); setCustomItems([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
-      setDate(""); setTime(""); setPromo(""); setTowMode(""); setTowAddress("");
+      setDate(""); setTime(""); setTowMode(""); setTowAddress("");
+      clearPromo();
       if (mode === "guest") { setName(""); setPhone(""); setEmail(""); setCity(""); }
       setUserId(""); setTouched(false);
     } catch {
@@ -257,7 +371,6 @@ export default function NewBookingClient({
                 );
               })}
             </div>
-
             {mode === "registered" && (
               userId ? (
                 // عميل مختار — القائمة اتقفلت ونعرض كرت مختصر مع زر «تغيير»
@@ -323,7 +436,6 @@ export default function NewBookingClient({
               </div>
             </div>
           </div>
-
           {/* 2) السيارة */}
           <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("2", T("السيارة", "Vehicle"))}
@@ -354,7 +466,6 @@ export default function NewBookingClient({
                 <span style={{ color: "var(--abh-steel)" }}>· {T("يحدّد أسعار الخدمات", "drives prices")}</span>
               </div>
             )}
-
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1.4fr 1fr", gap: 14 }}>
               <Field label={T("اللون", "Color")}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -447,7 +558,6 @@ export default function NewBookingClient({
                 <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: ".06em", color: GIFT_GOLD }}>{gifts.length > 0 ? T("تغيير", "Change") : T("اختر", "Choose")}</span>
               </button>
             )}
-
             {/* خدمة مؤقتة — تُكتب يدويًا لهذا الحجز فقط (لا تُحفظ كخدمة دائمة) */}
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
               <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 4 }}>{T("خدمة مؤقتة (اختياري)", "Custom service (optional)")}</div>
@@ -461,7 +571,6 @@ export default function NewBookingClient({
                   {Ic.plus({ s: 15 })}{T("إضافة", "Add")}
                 </button>
               </div>
-
               {customItems.length > 0 && (
                 <div className="abh-col" style={{ gap: 8, marginTop: 12 }}>
                   {customItems.map((c) => (
@@ -490,7 +599,6 @@ export default function NewBookingClient({
               )}
             </div>
           </div>
-
           {/* 4) الموعد والدفع */}
           <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("4", T("الموعد والدفع", "Schedule & payment"))}
@@ -523,12 +631,18 @@ export default function NewBookingClient({
                 </Field>
               </div>
             </div>
+            {/* كود الخصم — يتأكّد فعليًا زي الموقع */}
             <div style={{ marginTop: 14 }}>
-              <Field label={T("كود خصم (اختياري)", "Promo code (optional)")}>
-                <input value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase().replace(/\s+/g, ""))} dir="ltr" style={{ ...inp, textAlign: "left" }} placeholder="SUMMER25" />
-              </Field>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
+                <span style={{ color: "var(--abh-steel)" }}>{tagIco(14)}</span>{T("كود خصم (اختياري)", "Promo code (optional)")}
+              </div>
+              <PromoBox
+                isAr={isAr} T={T} ccy={ccy} inp={inp}
+                info={promoInfo} code={promo} setCode={setPromo}
+                checking={promoChecking} error={promoError}
+                onApply={() => applyPromo()} onClear={clearPromo}
+              />
             </div>
-
             {/* موافقة الواتساب */}
             <label style={{ marginTop: 16, display: "flex", alignItems: "flex-start", gap: 11, cursor: "pointer", borderRadius: 12, border: `1px solid ${waOptIn ? "rgba(159,212,176,.3)" : "rgba(255,255,255,.08)"}`, background: waOptIn ? "rgba(159,212,176,.06)" : "rgba(255,255,255,.02)", padding: "13px 15px", transition: "all .2s" }}>
               <span style={{ display: "grid", placeItems: "center", height: 22, width: 22, flexShrink: 0, borderRadius: 7, marginTop: 1, border: waOptIn ? "none" : "1px solid rgba(255,255,255,.25)", background: waOptIn ? "linear-gradient(135deg,#9fd4b0,#7ec594)" : "transparent", color: "#0c0d0e" }}>{waOptIn && <Ic.check s={14} />}</span>
@@ -607,6 +721,23 @@ export default function NewBookingClient({
               )}
             </div>
 
+            {/* سطر كود الخصم / هدية الكود في الملخّص */}
+            {promoInfo && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed rgba(255,255,255,.1)" }}>
+                {promoInfo.kind === "gift_service" ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GIFT_GOLD, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{giftIco(11)}{promoInfo.giftServiceName || T("هدية الكود", "Code gift")}</span>
+                    <span dir="ltr" className="abh-num" style={{ color: GIFT_GOLD, flexShrink: 0 }}>{T("مجانًا", "Free")}</span>
+                  </div>
+                ) : total.promoCut > 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tagIco(12)}{T("خصم الكود", "Promo")} ({promoInfo.code})</span>
+                    <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", flexShrink: 0 }}>−{EGP(total.promoCut)}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.1)" }}>
               <div style={{ fontSize: 10, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{T("الإجمالي التقديري", "Estimated total")}</div>
               <div className="abh-num" dir="ltr" style={{ fontSize: 30, color: "var(--abh-ivory)", lineHeight: 1.1, marginTop: 6 }}>
@@ -626,7 +757,6 @@ export default function NewBookingClient({
           </div>
         </aside>
       </div>
-
       {/* مودال اختيار الهدية */}
       {giftBundle && (
         <GiftPickerAdmin bundle={giftBundle} services={services} size={size} isAr={isAr}
@@ -635,6 +765,55 @@ export default function NewBookingClient({
       )}
 
       <style>{NB_CSS}</style>
+    </div>
+  );
+}
+
+/* ─── صندوق كود الخصم (تحقّق فعلي + عرض المطبَّق) ─── */
+function PromoBox({ isAr, T, ccy, inp, info, code, setCode, checking, error, onApply, onClear }: {
+  isAr: boolean;
+  T: (ar: string, en: string) => string;
+  ccy: string;
+  inp: React.CSSProperties;
+  info: PromoInfo | null;
+  code: string;
+  setCode: (v: string) => void;
+  checking: boolean;
+  error: string | null;
+  onApply: () => void;
+  onClear: () => void;
+}) {
+  const isGift = info?.kind === "gift_service";
+  return (
+    <div>
+      {info ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 12, border: `1px solid ${isGift ? "rgba(217,178,95,.45)" : "rgba(62,205,142,.4)"}`, background: isGift ? "rgba(217,178,95,.07)" : "rgba(62,205,142,.07)", padding: "11px 14px" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, fontSize: 13, color: "var(--abh-ivory)" }}>
+            <span style={{ color: isGift ? GIFT_GOLD : "#3ecd8e", display: "inline-flex", flexShrink: 0 }}>{isGift ? giftIco(15) : <Ic.check s={15} />}</span>
+            <span dir="ltr" className="abh-num" style={{ letterSpacing: ".08em", flexShrink: 0 }}>{info.code}</span>
+            <span style={{ color: isGift ? GIFT_GOLD : "var(--abh-platinum)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {isGift
+                ? T(`· هدية: ${info.giftServiceName ?? "خدمة"} مجانًا`, `· Gift: ${info.giftServiceName ?? "service"} free`)
+                : `· −${EGP(info.discount)} ${ccy}`}
+            </span>
+          </span>
+          <button onClick={onClear} aria-label="remove" style={{ display: "grid", placeItems: "center", height: 28, width: 28, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "var(--abh-steel)", cursor: "pointer" }}>
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={code} dir="ltr"
+            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onApply(); } }}
+            placeholder="SUMMER25" style={{ ...inp, textAlign: "left", letterSpacing: ".08em" }} />
+          <button onClick={onApply} disabled={checking || !code.trim()}
+            style={{ flexShrink: 0, borderRadius: 12, border: `1px solid ${checking || !code.trim() ? "rgba(255,255,255,.1)" : "rgba(203,205,205,.4)"}`, background: checking || !code.trim() ? "rgba(255,255,255,.02)" : "rgba(203,205,205,.1)", color: checking || !code.trim() ? "var(--abh-steel)" : "var(--abh-ivory)", padding: "11px 18px", fontSize: 12.5, fontWeight: 600, cursor: checking || !code.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {checking ? T("جارٍ…", "…") : T("تحقّق", "Apply")}
+          </button>
+        </div>
+      )}
+      {error && <Err>{error}</Err>}
     </div>
   );
 }
@@ -660,7 +839,6 @@ function AdminSearchSelect({ value, options, placeholder, searchPlaceholder, onC
     const term = q.trim().toLowerCase();
     return term ? options.filter((o) => o.label.toLowerCase().includes(term)) : options;
   }, [q, options]);
-
   const updateRect = () => { const r = btnRef.current?.getBoundingClientRect(); if (r) setRect(r); };
   useEffect(() => {
     if (!open) return;
@@ -716,7 +894,6 @@ function AdminSearchSelect({ value, options, placeholder, searchPlaceholder, onC
     </>
   );
 }
-
 /* ─── مودال اختيار الهدية (Portal، يتمركز في الشاشة) ─── */
 function GiftPickerAdmin({ bundle, services, size, isAr, chosen, onConfirm, onClose }: {
   bundle: Bundle; services: Service[]; size: SizeCode; isAr: boolean;
@@ -747,7 +924,6 @@ function GiftPickerAdmin({ bundle, services, size, isAr, chosen, onConfirm, onCl
     });
     onConfirm(out);
   };
-
   const title = (isAr ? bundle.title?.ar : bundle.title?.en) || T("اختر هديتك", "Pick your gift");
   const limit = bundle.maxGifts > 1 ? T(`اختر حتى ${bundle.maxGifts} هدايا`, `Up to ${bundle.maxGifts} gifts`) : T("اختر هدية واحدة", "Choose one gift");
 
@@ -806,7 +982,6 @@ function GiftPickerAdmin({ bundle, services, size, isAr, chosen, onConfirm, onCl
     document.body
   );
 }
-
 function SummaryRow({ label, value, isAr, ltr }: { label: string; value: string; isAr: boolean; ltr?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, padding: "6px 0" }}>

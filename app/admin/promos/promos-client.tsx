@@ -1,25 +1,32 @@
 "use client";
 /**
- * app/admin/promos/promos-client.tsx — أكواد الخصم (CLIENT) · v1
+ * app/admin/promos/promos-client.tsx — أكواد الخصم (CLIENT) · v2
  *
  * 5 أنواع كوبونات:
  *   percentage      — نسبة % على إجمالي الطلب
  *   fixed           — مبلغ ثابت على إجمالي الطلب
  *   service_percent — خدمات محددة، نسبة موحّدة
  *   service_each    — خدمات محددة، لكل خدمة قيمتها (% أو مبلغ)
+ *   gift_service    — كود هدية (خدمة مجانية) — عادةً من عجلة الحظ
  * ضوابط: حد أدنى للطلب، حد كلّي، حد لكل عميل، تاريخ بداية/نهاية، تفعيل/إيقاف.
  * إحصائيات لكل كود: استخدام/متبقّي، إيرادات/خصومات، رسم زمني، سجل المستخدمين.
+ *
+ * ── (جديد v2) الأكواد الموجّهة لشخص بعينه ──────────────────────────────────
+ *  الكود اللي رايح لعميل محدّد (عجلة الحظ / ريفيرال / حملة) يبان في الكرت من
+ *  برّه: اسم العميل + تليفونه + زر واتساب مباشر + حالة (استخدم/لسه). وفي مودال
+ *  الإحصائيات يظهر قسم كامل ببيانات المستلِم وهل فعّل الكود.
  *
  * الاسم (code) يكتبه الأدمن بنفسه. تصميم مونوكروم فاخر (بلاتيني/أبيض).
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Pill, Ghost, IconBtn, Toggle, Field, Input, Selectbox, Chip, Modal, Confirm, useToast, Ic, EGP, PageHeader } from "@/components/admin/ui";
+
 import { CampaignsSection } from "./campaigns";
 
 /* ───────────── الأنواع ───────────── */
-/* ───────────── الأنواع ───────────── */
 type PromoKind = "percentage" | "fixed" | "service_percent" | "service_each" | "gift_service";
 type SvcRule = { serviceId: number; amountMode: "percent" | "fixed"; value: number };
+type Recipient = { id: string; name: string | null; phone: string | null; email: string | null };
 type Promo = {
   id: string; code: string; kind: PromoKind; label: string | null; description: string | null;
   discountPercent: number; fixedAmount: number; minOrder: number;
@@ -27,6 +34,9 @@ type Promo = {
   isActive: boolean; startsAt: string | null; expiresAt: string | null; createdAt: string;
   redemptions: number; totalDiscount: number; totalRevenue: number; lastUsedAt: string | null;
   services: SvcRule[];
+  recipient: Recipient | null;      // ← (جديد) الكود موجّه لهذا الشخص
+  campaignId: string | null;        // ← (جديد) من حملة؟
+  campaignLabel: string | null;     // ← (جديد) اسم الحملة
 };
 type ServiceLite = { id: number; name: string; category: string; onRequest: boolean };
 
@@ -37,6 +47,17 @@ const KIND_META: Record<PromoKind, { ar: string; en: string; icon: keyof typeof 
   service_each:    { ar: "خدمات — لكل خدمة قيمتها", en: "Services — per item", icon: "sparkle", desc: ["قيمة مستقلة لكل خدمة", "Per-service value"] },
   gift_service:    { ar: "هدية — خدمة مجانية", en: "Gift — free service", icon: "sparkle", desc: ["كود يضيف خدمة مجانًا", "Code adds a free service"] },
 };
+
+/** تنظيف رقم للواتساب: أرقام فقط، وتحويل بادئة 0 السعودية إلى 966. */
+function waNumber(phone: string | null): string | null {
+  if (!phone) return null;
+  let d = phone.replace(/[^0-9]/g, "");
+  if (!d) return null;
+  if (d.startsWith("00")) d = d.slice(2);
+  else if (d.startsWith("0")) d = "966" + d.slice(1);
+  else if (d.length === 9) d = "966" + d; // رقم محلي بدون صفر
+  return d;
+}
 
 export default function PromosClient({ services, locale }: { services: ServiceLite[]; locale: string }) {
   const isAr = locale !== "en";
@@ -49,7 +70,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
   const [list, setList] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "paused" | "expired">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "paused" | "expired" | "targeted">("all");
   const [editing, setEditing] = useState<Promo | null>(null);
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<Promo | null>(null);
@@ -78,10 +99,13 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
   const shown = useMemo(() => {
     let l = list.filter((p) => !q
       || p.code.toLowerCase().includes(q.toLowerCase())
-      || (p.label ?? "").toLowerCase().includes(q.toLowerCase()));
+      || (p.label ?? "").toLowerCase().includes(q.toLowerCase())
+      || (p.recipient?.name ?? "").toLowerCase().includes(q.toLowerCase())
+      || (p.recipient?.phone ?? "").includes(q));
     if (filter === "active") l = l.filter((p) => p.isActive && !isExpired(p));
     else if (filter === "paused") l = l.filter((p) => !p.isActive);
     else if (filter === "expired") l = l.filter((p) => isExpired(p));
+    else if (filter === "targeted") l = l.filter((p) => !!p.recipient);
     return l;
   }, [list, q, filter]);
 
@@ -113,6 +137,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
   const filters: { id: typeof filter; label: string; n: number }[] = [
     { id: "all", label: T("الكل", "All"), n: list.length },
     { id: "active", label: T("نشطة", "Active"), n: list.filter((p) => p.isActive && !isExpired(p)).length },
+    { id: "targeted", label: T("موجّهة لعميل", "Targeted"), n: list.filter((p) => !!p.recipient).length },
     { id: "paused", label: T("موقوفة", "Paused"), n: list.filter((p) => !p.isActive).length },
     { id: "expired", label: T("منتهية", "Expired"), n: list.filter((p) => isExpired(p)).length },
   ];
@@ -162,7 +187,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
           </div>
           <div className="abh-promo-search" style={{ position: "relative", flex: "1 1 220px", maxWidth: 320 }}>
             <span style={{ position: "absolute", insetInlineStart: 14, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)", pointerEvents: "none", display: "inline-flex" }}><Ic.search s={15} /></span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالكود أو الاسم…", "Search code or label…")}
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالكود أو الاسم أو التليفون…", "Search code, name or phone…")}
               style={{ width: "100%", borderRadius: 13, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", padding: "11px 14px", paddingInlineStart: 38, fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
           </div>
         </div>
@@ -218,14 +243,12 @@ function KpiCard({ label, value, unit, sub, icon: Icon, hi, tone, isAr }: any) {
     </div>
   );
 }
-
 const PROMO_CSS = `
 .abh-promo-kpis{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
 .abh-promo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:18px; }
 @media (max-width:1100px){ .abh-promo-kpis{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:860px){
   .abh-promo-toolbar{ flex-direction:column; align-items:stretch; }
-  /* في الوضع العمودي flex-basis بيأثّر على الارتفاع — نلغّيه عشان الأيقونة تفضل جوّه الإنبوت */
   .abh-promo-search{ flex:0 0 auto !important; max-width:none !important; width:100%; }
 }
 @media (max-width:560px){ .abh-promo-kpis{ grid-template-columns:1fr; } .abh-promo-grid{ grid-template-columns:1fr; } }
@@ -241,16 +264,21 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
   const KindIcon = Ic[meta.icon];
   const align = isAr ? "right" : "left";
   const usagePct = p.maxUses ? Math.min(100, Math.round((p.usedCount / p.maxUses) * 100)) : 0;
+  const rec = p.recipient;
+  const wa = waNumber(rec?.phone ?? null);
+  const recUsed = p.usedCount > 0; // للأكواد الموجّهة (حد لكل عميل غالبًا 1) = استخدمه
 
   // عرض قيمة الخصم حسب النوع
   const valueLabel = p.kind === "fixed"
     ? `${EGP(p.fixedAmount)} ${ccy}`
-    : p.kind === "service_each"
-      ? T(`${p.services.length} خدمة`, `${p.services.length} svc`)
-      : `${p.discountPercent}%`;
+    : p.kind === "gift_service"
+      ? T("هدية", "Gift")
+      : p.kind === "service_each"
+        ? T(`${p.services.length} خدمة`, `${p.services.length} svc`)
+        : `${p.discountPercent}%`;
 
   return (
-    <div className="abh-lift" style={{ position: "relative", overflow: "hidden", borderRadius: 20, border: `1px solid ${expired ? "rgba(231,180,180,.25)" : p.isActive ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.06)"}`, background: "rgba(255,255,255,.02)", padding: 20, opacity: p.isActive && !expired ? 1 : 0.72, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
+    <div className="abh-lift" style={{ position: "relative", overflow: "hidden", borderRadius: 20, border: `1px solid ${rec ? "rgba(203,205,205,.28)" : expired ? "rgba(231,180,180,.25)" : p.isActive ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.06)"}`, background: rec ? "linear-gradient(160deg,rgba(203,205,205,.05),rgba(255,255,255,.015))" : "rgba(255,255,255,.02)", padding: 20, opacity: p.isActive && !expired ? 1 : 0.72, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
       {/* زخرفة الزاوية */}
       <span aria-hidden style={{ position: "absolute", insetInlineEnd: -30, top: -30, height: 90, width: 90, borderRadius: 999, background: "radial-gradient(circle,rgba(203,205,205,.1),transparent 70%)", pointerEvents: "none" }} />
 
@@ -275,6 +303,33 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
           <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginTop: 3 }}>{T("الخصم", "Discount")}</div>
         </div>
       </div>
+
+      {/* ── (جديد) شارة المستلِم: مين الكود رايحله ── */}
+      {rec && (
+        <div style={{ marginTop: 16, borderRadius: 14, border: "1px solid rgba(203,205,205,.22)", background: "rgba(203,205,205,.05)", padding: "12px 13px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
+              <Ic.users s={12} />{p.campaignLabel || T("موجّه لعميل", "Targeted")}
+            </span>
+            {recUsed
+              ? <Chip tone="ok" dot>{T("استخدمه", "Redeemed")}</Chip>
+              : <Chip tone="bad">{T("لسه ما استخدمش", "Not yet")}</Chip>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, color: "var(--abh-ivory)", textAlign: align, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rec.name || T("عميل", "Customer")}</div>
+              {rec.phone && <div dir="ltr" className="abh-num" style={{ fontSize: 11.5, color: "var(--abh-steel)", textAlign: align, marginTop: 2 }}>{rec.phone}</div>}
+            </div>
+            {wa && (
+              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title={T("تواصل واتساب", "WhatsApp")}
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.1)", padding: "7px 12px", fontSize: 11.5, color: "#9fd4b0", textDecoration: "none", whiteSpace: "nowrap" }}>
+                <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 01-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 4.54 0 8.23 3.69 8.23 8.23s-3.69 8.24-8.24 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.31-.02-.47-.02-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z" /></svg>
+                {T("واتساب", "Chat")}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* شريط الاستخدام */}
       <div style={{ marginTop: 16 }}>
@@ -361,6 +416,7 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
   const valid = code.trim().length > 0
     && (kind === "percentage" || kind === "service_percent" ? discountPercent > 0
       : kind === "fixed" ? fixedAmount > 0
+      : kind === "gift_service" ? true
       : Object.keys(svcMap).length > 0);
 
   const toggleSvc = (id: number) => {
@@ -404,11 +460,11 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
   return (
     <Modal title={promo ? T("تعديل كود", "Edit code") : T("كود جديد", "New code")} onClose={onClose} wide>
       <div className="abh-col" style={{ gap: 18 }}>
-        {/* النوع — اختيار بصري */}
+        {/* النوع — اختيار بصري (نستبعد gift_service من الإنشاء اليدوي) */}
         <div>
           <div style={{ fontSize: 10.5, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{T("نوع الكود", "Code type")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(155px,1fr))", gap: 10 }}>
-            {(Object.keys(KIND_META) as PromoKind[]).map((k) => {
+            {(Object.keys(KIND_META) as PromoKind[]).filter((k) => k !== "gift_service" || kind === "gift_service").map((k) => {
               const m = KIND_META[k]; const KI = Ic[m.icon]; const on = kind === k;
               return (
                 <button key={k} onClick={() => setKind(k)} style={{ textAlign: "start", borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.08)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: 13, cursor: "pointer", transition: "all .2s" }}>
@@ -444,6 +500,11 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
             <input type="number" min={0} value={fixedAmount || ""} onChange={(e) => setFixedAmount(Math.max(0, +e.target.value))} dir="ltr" style={inp} />
           </Field>
         )}
+        {kind === "gift_service" && (
+          <div style={{ borderRadius: 12, border: "1px solid rgba(217,178,95,.3)", background: "rgba(217,178,95,.06)", padding: 14, fontSize: 12.5, color: "#e8d6a8", lineHeight: 1.7 }}>
+            {T("كود الهدية يضيف خدمة مجانية للعميل. الخدمة المُهداة تُحدَّد من مصدر الكود (عجلة الحظ) — التعديل هنا للضوابط فقط.", "Gift codes add a free service. The gifted service is set by the code source (spin wheel) — edit rules only here.")}
+          </div>
+        )}
 
         {/* اختيار الخدمات */}
         {isService && (
@@ -466,7 +527,6 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
                               {on && <Ic.check s={13} />}
                             </button>
                             <span style={{ flex: 1, fontSize: 13, color: on ? "var(--abh-ivory)" : "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
-                            {/* للنوع service_each: حقول لكل خدمة */}
                             {on && kind === "service_each" && (
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                                 <select value={rule.amountMode} onChange={(e) => setSvcCell(s.id, "amountMode", e.target.value)}
@@ -547,13 +607,13 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
     return () => { alive = false; };
   }, [promoId, isAr]);
 
-  // حماية: حوّل أي قيمة (نص أو object {ar,en}) إلى نص آمن للعرض.
   const txt = (v: any): string => (!v ? "" : typeof v === "string" ? v : (v[isAr ? "ar" : "en"] ?? v.ar ?? v.en ?? ""));
-
   const align = isAr ? "right" : "left";
   const fmtDT = (iso: string | null) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(+d) ? "—" : d.toLocaleDateString(loc, { day: "numeric", month: "short" }) + " · " + d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); };
 
   const title = data?.promo ? data.promo.code : T("إحصائيات", "Stats");
+  const rec = data?.recipient;
+  const wa = waNumber(rec?.phone ?? null);
 
   return (
     <Modal title={title} onClose={onClose} wide>
@@ -563,6 +623,39 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
         <div style={{ padding: 70, textAlign: "center", color: "var(--abh-steel)" }}>{T("تعذّر التحميل.", "Could not load.")}</div>
       ) : (
         <div className="abh-col" style={{ gap: 20 }}>
+          {/* ── (جديد) بطاقة المستلِم: الكود رايح لمين + استخدمه ولا لسه ── */}
+          {rec && (
+            <div style={{ borderRadius: 18, border: "1px solid rgba(203,205,205,.25)", background: "linear-gradient(160deg,rgba(203,205,205,.06),rgba(255,255,255,.015))", padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
+                  <Ic.users s={13} />{data.promo.campaignLabel || T("كود موجّه لعميل", "Targeted code")}
+                </span>
+                {rec.used
+                  ? <Chip tone="ok" dot>{T("استخدم الكود", "Redeemed")}</Chip>
+                  : <Chip tone="bad">{T("لسه ما استخدمش", "Not used yet")}</Chip>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 18, color: "var(--abh-ivory)", textAlign: align }}>{rec.name || T("عميل", "Customer")}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6 }}>
+                    {rec.phone && <span dir="ltr" className="abh-num" style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{rec.phone}</span>}
+                    {rec.email && <span dir="ltr" style={{ fontSize: 12, color: "var(--abh-steel)" }}>{rec.email}</span>}
+                  </div>
+                  {rec.used && rec.lastUsedAt && (
+                    <div style={{ fontSize: 11, color: "#9fd4b0", marginTop: 8, textAlign: align }}>{T("استخدمه في", "Redeemed on")} {fmtDT(rec.lastUsedAt)}</div>
+                  )}
+                </div>
+                {wa && (
+                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"
+                    style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 12, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.1)", padding: "10px 16px", fontSize: 13, color: "#9fd4b0", textDecoration: "none" }}>
+                    <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 01-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 4.54 0 8.23 3.69 8.23 8.23s-3.69 8.24-8.24 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.31-.02-.47-.02-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z" /></svg>
+                    {T("تواصل واتساب", "WhatsApp")}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* 1) الاستخدام + المتبقّي */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 12 }}>
             <StatBox label={T("مرات الاستخدام", "Redemptions")} value={String(data.summary.redemptions)} isAr={isAr} />

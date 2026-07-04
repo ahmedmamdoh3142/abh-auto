@@ -10,10 +10,14 @@
  *    2) نفس العمود بيمدّد، فالكرت الكبير بياخد العرض الضخم ده مش عرض الشاشة.
  *  إضافة min-w-0 على خلايا الجريد (والحاويات الداخلية) بتحل الاتنين معًا:
  *  الكروت الصغيّرة بترجع تعمل سكرول، والكرت الكبير بياخد عرض الشاشة الصح.
+ *
+ * (تعديل) التنقّل على الموبايل: بدّلنا النقط (dots) تحت الكرت الكبير بسهمين
+ *  «السابق/التالي» + عدّاد. اتجاه السهم يتظبط تلقائيًا حسب اللغة (RTL/LTR).
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLocale } from 'next-intl';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { ServiceCardLarge } from './service-card-large';
 import { ServiceCardCompact } from './service-card-compact';
@@ -77,6 +81,8 @@ export function ServiceShowcase({ services, categorySlug }: Props) {
 
   const safeIndex = Math.min(activeIndex, services.length - 1);
   const featured = services[safeIndex];
+  const atStart = safeIndex === 0;
+  const atEnd = safeIndex === services.length - 1;
 
   // قناع التلاشي الرأسي (ديسكتوب فقط)
   const maskImage = !edge.scrollable
@@ -159,17 +165,56 @@ export function ServiceShowcase({ services, categorySlug }: Props) {
           </motion.div>
         </div>
 
-        {/* dots */}
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-          className="mt-10 flex items-center justify-center gap-2 lg:hidden"
-        >
-          {services.map((_, i) => (
-            <button key={i} onClick={() => setActiveIndex(i)} data-cursor="hover" aria-label={`Service ${i + 1}`} className="group relative h-8 w-8 rounded-full">
-              <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 ${i === safeIndex ? 'h-3 w-3 bg-ivory shadow-[0_0_20px_rgba(255,255,255,0.5)]' : 'h-1.5 w-1.5 bg-platinum/30 group-hover:bg-platinum/60'}`} />
+        {/* ── تنقّل الموبايل: سهم السابق/التالي + عدّاد (بدل النقط) ── */}
+        {services.length > 1 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+            className="mt-10 flex items-center justify-center gap-5 lg:hidden"
+          >
+            {/* السابق */}
+            <button
+              type="button"
+              onClick={() => move(-1)}
+              disabled={atStart}
+              data-cursor="hover"
+              aria-label={isAr ? 'الخدمة السابقة' : 'Previous service'}
+              className={`group flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-300 ${
+                atStart
+                  ? 'cursor-not-allowed border-white/[0.06] text-platinum/20'
+                  : 'border-white/[0.12] bg-white/[0.03] text-platinum/70 hover:border-platinum/40 hover:bg-white/[0.06] hover:text-ivory active:scale-95'
+              }`}
+            >
+              {isAr
+                ? <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" strokeWidth={1.8} />
+                : <ChevronLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" strokeWidth={1.8} />}
             </button>
-          ))}
-        </motion.div>
+
+            {/* العدّاد */}
+            <span dir="ltr" className="min-w-[76px] select-none text-center font-mono text-[0.72rem] tabular-nums tracking-[0.22em]">
+              <span className="text-ivory">{String(safeIndex + 1).padStart(2, '0')}</span>
+              <span className="mx-1.5 text-platinum/30">/</span>
+              <span className="text-platinum/50">{String(services.length).padStart(2, '0')}</span>
+            </span>
+
+            {/* التالي */}
+            <button
+              type="button"
+              onClick={() => move(1)}
+              disabled={atEnd}
+              data-cursor="hover"
+              aria-label={isAr ? 'الخدمة التالية' : 'Next service'}
+              className={`group flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-300 ${
+                atEnd
+                  ? 'cursor-not-allowed border-white/[0.06] text-platinum/20'
+                  : 'border-white/[0.12] bg-white/[0.03] text-platinum/70 hover:border-platinum/40 hover:bg-white/[0.06] hover:text-ivory active:scale-95'
+              }`}
+            >
+              {isAr
+                ? <ChevronLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" strokeWidth={1.8} />
+                : <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" strokeWidth={1.8} />}
+            </button>
+          </motion.div>
+        )}
       </div>
 
       <style>{`

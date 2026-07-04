@@ -14,6 +14,12 @@
  * تلقائيًا) لتفادي تحميل صورتين/تبديل يضر بالـLCP. لم نَعُد نحتاج preload يدوي.
  *
  * باقي الاستراتيجية كما هي: الفيديو على اللاب فقط فوق الـposter؛ ونص الهيرو CSS.
+ *
+ * ── (تعديل تصميمي) ─────────────────────────────────────────────────────────
+ *  • تصغير الـwordmark (اسم الشركة) ليبقى أنيقًا دون تغطية الصورة.
+ *  • زر «استكشف العروض» بإطار أبيض واضح ومحدَّد.
+ *  • تخفيف التظليل العام لإظهار تصميم العروض في الخلفية بوضوح، مع سكرين
+ *    مركزي خفيف (radial) خلف النص فقط للحفاظ على وضوح القراءة.
  */
 import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -82,8 +88,9 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
   return (
     <section data-section="hero" className="relative h-[100svh] w-full overflow-hidden bg-obsidian">
-      {/* ── الـ poster: عنصر LCP — next/image responsive + priority ── */}
-      <div aria-hidden className="absolute inset-0" style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}>
+      {/* ── الـ poster: عنصر LCP — next/image responsive + priority ──
+           (تفتيح الصورة قليلًا وتقليل الرمادي لإظهار تصميم العروض) */}
+      <div aria-hidden className="absolute inset-0" style={{ filter: 'grayscale(0.06) brightness(0.96) contrast(1.04)' }}>
         <Image
           src={isDesktop === false ? posterMobile : posterDesktop}
           alt=""
@@ -96,12 +103,12 @@ export function Hero({ media }: { media?: HeroMedia }) {
         />
       </div>
 
-      {/* ── الفيديو: على اللاب فقط، فوق الـ poster ── */}
+      {/* ── الفيديو: على اللاب فقط, فوق الـ poster ── */}
       {showVideo && (
         <video
           ref={videoRef}
           className="absolute inset-0 h-full w-full object-cover"
-          style={{ filter: 'grayscale(0.18) brightness(0.82) contrast(1.05)' }}
+          style={{ filter: 'grayscale(0.06) brightness(0.96) contrast(1.04)' }}
           autoPlay muted loop playsInline preload="auto"
           poster={videoPoster}
         >
@@ -110,18 +117,26 @@ export function Hero({ media }: { media?: HeroMedia }) {
         </video>
       )}
 
-      {/* ══════════════ الغمامة السينمائية ══════════════ */}
-      <div aria-hidden className="absolute inset-0 bg-obsidian/25" />
-      <div aria-hidden className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-obsidian/75 via-obsidian/20 to-transparent" />
-      <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-obsidian via-obsidian/55 to-transparent" />
-      <div aria-hidden className="absolute inset-0" style={{ background: 'radial-gradient(120% 90% at 50% 42%, transparent 38%, rgba(0,0,0,0.5) 100%)' }} />
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-60"
+      {/* ══════════════ الغمامة السينمائية (مخفّفة لإظهار الخلفية) ══════════════ */}
+      {/* حجاب عام خفيف جدًا */}
+      <div aria-hidden className="absolute inset-0 bg-obsidian/10" />
+      {/* تدرّج علوي خفيف (لوضوح النافبار) */}
+      <div aria-hidden className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-obsidian/55 via-obsidian/10 to-transparent" />
+      {/* تدرّج سفلي (يثبّت الأزرار وتلميح السكرول) */}
+      <div aria-hidden className="absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-obsidian/85 via-obsidian/25 to-transparent" />
+      {/* فينييت خفيف على الأطراف */}
+      <div aria-hidden className="absolute inset-0" style={{ background: 'radial-gradient(125% 95% at 50% 45%, transparent 55%, rgba(0,0,0,0.30) 100%)' }} />
+      {/* سكرين مركزي خفيف خلف النص فقط — يبقي القراءة واضحة والعروض تبان حواليه */}
+      <div aria-hidden className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(62% 52% at 50% 48%, rgba(0,0,0,0.50) 0%, rgba(0,0,0,0.26) 42%, transparent 74%)' }} />
+      {/* توهّج ناعم */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50"
         style={{ background: 'radial-gradient(60% 50% at 50% 55%, rgba(203,205,205,0.05), transparent 70%)' }} />
 
       {/* noise veil */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] opacity-[0.07] mix-blend-overlay"
+        className="pointer-events-none absolute inset-0 z-[1] opacity-[0.05] mix-blend-overlay"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
@@ -137,7 +152,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
           <span
             dir="ltr"
             className="text-[0.62rem] font-medium uppercase tracking-[0.5em] text-platinum/85"
-            style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)' }}
+            style={{ textShadow: '0 4px 30px rgba(0,0,0,0.55)' }}
           >
             {t('eyebrow')}
           </span>
@@ -147,7 +162,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
         <h1 dir="ltr" className="relative">
           <bdi
             className="flex items-center justify-center font-display font-normal uppercase leading-[0.9]"
-            style={{ fontSize: 'clamp(4rem, 12vw, 10rem)', letterSpacing: '0.12em' }}
+            style={{ fontSize: 'clamp(2.9rem, 8.5vw, 7rem)', letterSpacing: '0.12em' }}
           >
             {wordmark.map((ch, i) => (
               <span
@@ -158,7 +173,7 @@ export function Hero({ media }: { media?: HeroMedia }) {
                     : 'anim-letter inline-block bg-gradient-to-b from-ivory via-platinum to-ivory bg-clip-text text-transparent'
                 }
                 style={{
-                  textShadow: ch === ' ' ? 'none' : '0 4px 30px rgba(0,0,0,0.5)',
+                  textShadow: ch === ' ' ? 'none' : '0 4px 30px rgba(0,0,0,0.55)',
                   animationDelay: `${0.05 + i * 0.05}s`,
                 }}
               >
@@ -170,14 +185,14 @@ export function Hero({ media }: { media?: HeroMedia }) {
 
         <p
           className="anim-rise mt-8 font-editorial font-normal italic leading-tight text-platinum/85"
-          style={{ fontSize: 'clamp(1.4rem, 2.6vw, 2rem)', textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.18s' }}
+          style={{ fontSize: 'clamp(1.4rem, 2.6vw, 2rem)', textShadow: '0 4px 30px rgba(0,0,0,0.55)', animationDelay: '0.18s' }}
         >
           {t('tagline')}
         </p>
 
         <p
           className="anim-rise mt-6 max-w-[40ch] text-[1.05rem] leading-relaxed text-platinum/70"
-          style={{ textShadow: '0 4px 30px rgba(0,0,0,0.5)', animationDelay: '0.28s' }}
+          style={{ textShadow: '0 4px 30px rgba(0,0,0,0.55)', animationDelay: '0.28s' }}
         >
           {t('subline')}
         </p>
@@ -247,10 +262,12 @@ function PrimaryCTA({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
+/* زر «استكشف العروض» — إطار أبيض واضح ومحدَّد */
 function GhostCTA({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link href={href} data-cursor="hover"
-      className="group relative inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.04] px-9 py-4 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-ivory backdrop-blur-md transition-all duration-500 hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.08]"
+      className="group relative inline-flex items-center gap-2.5 rounded-full border-[1.5px] border-white/80 bg-white/[0.06] px-9 py-4 text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-ivory backdrop-blur-md transition-all duration-500 hover:-translate-y-0.5 hover:border-white hover:bg-white/[0.12]"
+      style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 14px 40px -18px rgba(0,0,0,0.65)' }}
     >
       {children}
       <ArrowUpRight className="h-4 w-4 transition-transform duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.8} />

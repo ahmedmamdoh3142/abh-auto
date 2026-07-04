@@ -1,11 +1,18 @@
 "use client";
 /**
- * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v3
+ * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v4
  *
  * • فلتر «بانتظار الدفع» مضاف للتابات (يفلتر حسب حالة الدفع لا حالة الحجز).
  * • نظام ألوان احترافي موحّد: مدفوع=أخضر، بانتظار الدفع=كهرماني فاقع، مُسترَد=رمادي.
  * • تصدير فاتورة PDF فاخرة بهوية ABH AUTO (شعار + ألوان الشركة) لكل حجز.
  * • عرضان: Grid (كروت سينمائية) + List (صفوف كثيفة) + بحث/فرز/CSV + مودال تفاصيل.
+ *
+ * (تعديل v4)
+ *  • زرار «تقدّم» في الكرت ظاهر من أول لحظة طول ما الحجز مش ملغي/مكتمل. لو الحجز
+ *    لسه «قادم» يظهر كـ«ابدأ» وأول ضغطة تبدأ العمل (المرحلة 0 = تم الاستلام) وتنقله
+ *    «قيد التنفيذ» ويبان البروجرس. بعدها بيكمّل المراحل عادي.
+ *  • الإلغاء + إعادة الجدولة يختفوا لما يتم الدفع ويبدأ العمل معًا (paid && active).
+ *  • كود الخصم وتفاصيله (الكود + قيمة الخصم) يظهروا في مودال تفاصيل الحجز.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -81,8 +88,8 @@ const I = {
   rows: (s = 14) => mini(["M3 5h18", "M3 12h18", "M3 19h18"], s),
   sort: (s = 14) => mini(["M3 6h12", "M3 12h9", "M3 18h6", "M17 6v12", "M14 15l3 3 3-3"], s),
   download: (s = 14) => mini(["M12 3v12", "M7 11l5 5 5-5", "M5 21h14"], s),
+  play: (s = 14) => mini(["M6 4l14 8-14 8z"], s),
 };
-
 /* ═════════════════ بايبلاين المراحل (تفاعلي) ═════════════════ */
 function StagePipeline({ stage, onSet, busy, isAr }: any) {
   const pct = (Math.max(0, Math.min(3, stage)) / (STAGES.length - 1)) * 100;
@@ -115,7 +122,6 @@ function StagePipeline({ stage, onSet, busy, isAr }: any) {
     </div>
   );
 }
-
 /* ═════════════════ تقويم مصغّر ═════════════════ */
 function MiniCalendar({ value, onPick, isAr }: any) {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -180,7 +186,6 @@ function TimeGrid({ value, onPick, isAr }: any) {
     </div>
   );
 }
-
 const qBtn = (primary?: boolean): React.CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "8px 14px", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", cursor: "pointer", border: primary ? "none" : "1px solid rgba(255,255,255,.2)", color: primary ? "#000" : "var(--abh-ivory)", background: primary ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 const qIcon = (color?: string): React.CSSProperties => ({ display: "grid", placeItems: "center", height: 34, width: 34, borderRadius: 999, cursor: "pointer", border: `1px solid ${color ? color : "rgba(255,255,255,.2)"}`, color: color || "var(--abh-ivory)", background: "rgba(255,255,255,.06)", backdropFilter: "blur(8px)" });
 
@@ -195,7 +200,11 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
+  const isUpcoming = b.status === "upcoming";
   const isCancelled = b.status === "cancelled";
+  const isCompleted = b.status === "completed";
+  // زرار «تقدّم» ظاهر طول ما الحجز مش ملغي/مكتمل. «ابدأ» لو لسه قادم.
+  const canAdvance = !isCancelled && !isCompleted;
   const [hover, setHover] = useState(false);
   const touch = useMediaQuery("(hover: none)");
   const reveal = hover || touch;
@@ -219,7 +228,6 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.96) 8%, rgba(8,9,11,.5) 44%, rgba(8,9,11,.1) 72%, rgba(8,9,11,.35) 100%)" }} />
       <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${st.color}, transparent)`, zIndex: 4 }} />
-
       {/* أعلى: شارات */}
       <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, padding: 16, zIndex: 2 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, padding: "6px 12px", fontSize: 10.5, letterSpacing: ".08em", fontWeight: 600, color: st.color, background: "rgba(0,0,0,.55)", border: `1px solid ${st.color}`, backdropFilter: "blur(8px)" }}>
@@ -251,7 +259,6 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           )}
         </div>
       </div>
-
       {/* ═══ دوسيه الهوفر ═══ */}
       <div style={{ position: touch ? "relative" : "absolute", inset: touch ? "auto" : 0, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, background: touch ? "linear-gradient(to top, rgba(6,7,9,.97) 62%, rgba(6,7,9,.78))" : "linear-gradient(to top, rgba(6,7,9,.97) 30%, rgba(6,7,9,.86) 60%, rgba(6,7,9,.55))", backdropFilter: "blur(3px)", opacity: reveal ? 1 : 0, transform: reveal ? "translateY(0)" : "translateY(14px)", pointerEvents: reveal ? "auto" : "none", transition: "opacity .4s var(--abh-ease), transform .45s var(--abh-ease)" }}>
         <h3 className="abh-display" style={{ margin: "0 0 3px", fontSize: 23, lineHeight: 1.05, color: "#fff", textTransform: "uppercase" }}>{b.vehicle}</h3>
@@ -277,7 +284,6 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
             {b.services.length > 4 && <span style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "var(--abh-platinum)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>+{b.services.length - 4}</span>}
           </div>
         )}
-
         {/* تقدّم */}
         {isActive && (
           <div style={{ marginBottom: 11 }}>
@@ -298,12 +304,17 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           <div className="abh-num" dir="ltr" style={{ fontSize: 24, color: "#fff" }}>{EGP(b.total)} <span style={{ fontSize: 11, color: "rgba(203,205,205,.7)" }}>{ccy}</span></div>
           {!isCancelled && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.45)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>}
         </div>
-
         {/* أكشنز سريعة */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
           {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
-          {isActive && <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>{Ic.check({ s: 14 })}{isAr ? "تقدّم" : "Advance"}</button>}
+          {/* زرار «تقدّم» ظاهر من الأول — «ابدأ» لو الحجز لسه قادم (يبدأ أول مرحلة) */}
+          {canAdvance && (
+            <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>
+              {isUpcoming ? I.play(14) : Ic.check({ s: 14 })}
+              {isUpcoming ? (isAr ? "ابدأ" : "Start") : (isAr ? "تقدّم" : "Advance")}
+            </button>
+          )}
           <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
           {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
           {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
@@ -337,7 +348,6 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
     </div>
   );
 }
-
 /* ═════════════════ مودال التفاصيل ═════════════════ */
 function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
@@ -345,12 +355,19 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const live = b.status === "upcoming" || b.status === "active";
+  // الإلغاء وإعادة الجدولة يتاحوا طول ما الحجز حيّ، إلا لو بدأ العمل والدفع تم معًا.
+  const workStarted = b.status === "active";
+  const isPaid = b.payment === "paid";
+  const locked = isPaid && workStarted;   // مدفوع + قيد التنفيذ → أُقفلت التعديلات
+  const canModify = live && !locked;
   const [rDate, setRDate] = useState(b.date);
   const [rTime, setRTime] = useState(b.time);
   const [reason, setReason] = useState("");
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const servicesTotal = b.services.reduce((s: number, x: any) => s + (Number(x.price) || 0), 0);
   const payMethod = PAY_METHOD[b.paymentMethod] ? (isAr ? PAY_METHOD[b.paymentMethod].ar : PAY_METHOD[b.paymentMethod].en) : (b.paymentMethod || "—");
+  const promoDiscount = Number(b.promoDiscount) || 0;
+  const isGiftCode = b.promoKind === "gift_service";
 
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
@@ -370,7 +387,6 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           <span dir="ltr" className="abh-num" style={{ fontSize: 13, color: "var(--abh-platinum)", background: "rgba(0,0,0,.45)", borderRadius: 999, padding: "6px 12px" }}>{b.reference}</span>
         </div>
       </div>
-
       {mode === "view" && (
         <div className="abh-scale-in">
           <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
@@ -414,16 +430,27 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
               </div>
             </>
           )}
-
           <div style={{ borderRadius: 16, border: "1px solid rgba(203,205,205,.2)", background: "linear-gradient(180deg,rgba(203,205,205,.06),rgba(255,255,255,.01))", padding: "14px 16px", marginBottom: 18 }}>
             <Line k={T("إجمالي الخدمات", "Services subtotal")} v={`${EGP(servicesTotal || b.subtotal)} ${ccy}`} />
             {b.towing > 0 && <Line k={T("السطحة / النقل", "Towing")} v={`${EGP(b.towing)} ${ccy}`} />}
+            {/* خصم كود الخصم — لو الكود بخصم مبلغ/نسبة */}
+            {promoDiscount > 0 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>
+                  {I.tag(13)}{T("خصم الكود", "Promo")}{b.promoCode ? ` (${b.promoCode})` : ""}
+                </span>
+                <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(promoDiscount)} {ccy}</span>
+              </div>
+            )}
             <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "10px 0" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الإجمالي", "Total")}</span>
               <span dir="ltr" className="abh-num" style={{ fontSize: mobile ? 22 : 26, color: "var(--abh-ivory)" }}>{EGP(b.total)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></span>
             </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>{T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>
+              {T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}
+              {b.promoCode ? ` · ${T("كود", "Code")}: ${b.promoCode}${isGiftCode ? ` (${T("هدية", "Gift")})` : ""}` : ""}
+            </div>
           </div>
 
           {b.status !== "cancelled" && (
@@ -443,12 +470,18 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
             <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onMutate(b.id, { action: "confirm_pay" })}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
-            {live && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
-            {live && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
+            {canModify && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
+            {canModify && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
           </div>
+          {/* ملاحظة عند قفل التعديلات (بدأ التنفيذ + الدفع تم) */}
+          {locked && (
+            <p style={{ margin: "12px 2px 0", fontSize: 11.5, color: "var(--abh-steel)", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+              <span style={{ color: "#3ecd8e", display: "inline-flex" }}>{Ic.check({ s: 13 })}</span>
+              {T("بدأ التنفيذ والدفع تم — لا يمكن الإلغاء أو إعادة الجدولة.", "Work started and payment received — cancel/reschedule are locked.")}
+            </p>
+          )}
         </div>
       )}
-
       {mode === "reschedule" && (
         <div className="abh-scale-in">
           <PanelHead title={T("إعادة جدولة الموعد", "Reschedule")} sub={T("اختر تاريخ ووقت جديد للحجز.", "Pick a new date and time.")} onBack={() => setMode("view")} isAr={isAr} />
@@ -489,7 +522,6 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
     </Modal>
   );
 }
-
 function SectionLabel({ children }: any) {
   return <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11, fontSize: 10.5, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--abh-platinum)" }}><span style={{ display: "inline-flex" }}>{children}</span></div>;
 }
@@ -542,7 +574,6 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     const d = new Date(iso); if (isNaN(+d)) return iso;
     return d.toLocaleDateString(isAr ? "ar-EG" : "en-US", { weekday: "short", day: "numeric", month: "long" });
   };
-
   const tabs: [string, string][] = [["all", T("الكل", "All")], ["upcoming", T("قادمة", "Upcoming")], ["active", T("قيد التنفيذ", "In progress")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
@@ -584,7 +615,10 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     } catch { toast(T("فشل التنفيذ", "Action failed"), "bad"); }
     finally { setBusy(false); }
   }
-  const advance = (b: any) => mutate(b.id, { stage: Math.min(3, (b.stage || 0) + 1) });
+  // «تقدّم»: لو الحجز لسه قادم → أول ضغطة تبدأ العمل عند المرحلة الحالية (0 = تم الاستلام)
+  // وتنقله «قيد التنفيذ». لو شغّال بالفعل → يتقدّم مرحلة (بحد أقصى 3 = مكتمل).
+  const advance = (b: any) =>
+    mutate(b.id, { stage: b.status === "upcoming" ? Math.max(0, Math.min(3, b.stage || 0)) : Math.min(3, (b.stage || 0) + 1) });
   const confirmPay = (b: any) => mutate(b.id, { action: "confirm_pay" });
   const call = (phone: string) => { window.location.href = `tel:${phone}`; };
   const whats = (phone: string) => { const p = String(phone).replace(/[^\d]/g, ""); window.open(`https://wa.me/${p}`, "_blank"); };
@@ -679,7 +713,6 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-
       {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} />}
 
       <style>{`

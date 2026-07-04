@@ -1,7 +1,8 @@
 /**
  * app/admin/bookings/page.tsx — قائمة الحجوزات (SERVER).
  * تجلب الحجوزات + بيانات العميل (بيانات الحجز لها الأولوية، ثم المستخدم المسجّل)
- * + الدفع + الخدمات بالأسعار + علم «هدية» لكل عنصر + الفروع/الألوان، وتمرّرها لـ BookingsClient.
+ * + الدفع + الخدمات بالأسعار + علم «هدية» لكل عنصر + الفروع/الألوان + بيانات
+ * كود الخصم (الكود/القيمة/النوع) لعرضها في التفاصيل، وتمرّرها لـ BookingsClient.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -22,6 +23,7 @@ export default async function BookingsPage() {
             b.scheduled_date, b.scheduled_time,
             b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
             b.payment_method_code, b.payment_status, b.cancel_reason, b.notes,
+            b.promo_code, b.promo_discount, b.promo_kind, b.invoice_number,
             b.created_at,
             -- بيانات العميل المُدخَلة في الحجز لها الأولوية (تدعم «احجز لصاحبك»)،
             -- ونرجع لبيانات المستخدم المسجّل فقط لو الحجز ما فيهوش بيانات عميل.
@@ -87,6 +89,12 @@ export default async function BookingsPage() {
     payment: b.payment_status,
     cancelReason: b.cancel_reason || "",
     notes: b.notes || "",
+    // كود الخصم — لعرض تفاصيله في مودال الحجز (زي الموقع).
+    promoCode: b.promo_code || "",
+    promoDiscount: Number(b.promo_discount) || 0,
+    promoKind: b.promo_kind || "",
+    // رقم الفاتورة المتسلسل (يُصرَف من الداتابيز عند تأكيد الدفع) — للطباعة.
+    invoiceNumber: b.invoice_number != null ? Number(b.invoice_number) : undefined,
     services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,

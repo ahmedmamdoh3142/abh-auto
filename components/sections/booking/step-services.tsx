@@ -6,22 +6,23 @@
  * ── إصلاح تعليق الموبايل ───────────────────────────────────────────────────
  *  • وضع fx-lite (لمس/شاشة صغيرة/تقليل الحركة): يُلغى backdrop-filter والشيمر
  *    والظلال/التحويلات الثقيلة.
- *  • على lite: تبديل الكاتيجوري يصبح فوريًا (بدون AnimatePresence mode="wait"
- *    ولا أنيميشن دخول لكل كرت) — كان اندفاع framer + فك تشفير الصور دفعة واحدة
- *    يسبّب التعليق عند تغيير التصنيف.
- *  • على lite: تُلغى أنيميشن layout في قائمة الـdock (تسبّب reflow).
- *  • أوربة blur-3xl تُخفى على lite (طبقة GPU ثقيلة).
+ *  • على lite: تبديل الكاتيجوري يصبح فوريًا (بدون AnimatePresence mode="wait").
+ *  • على lite: تُلغى أنيميشن layout في قائمة الـdock.
  *
- * ملاحظة: تعطيل backdrop-filter على كلاس glass الأب يتم في booking-flow عبر
- * media query (لأن glass خارج جذر هذا المكوّن).
+ * ── (جديد) كود الخصم داخل خطوة الخدمات ─────────────────────────────────────
+ *  • حقل PromoInline: العميل يطبّق كوده هنا. كود الهدية (gift_service) يضيف
+ *    الخدمة المجانية مباشرة وتظهر في الدوك؛ الكود العادي يُحفظ لخطوة الدفع.
+ *  • قاعدة العبور (canNext): يكفي كود هدية صالح لوحده، أو خدمة مدفوعة واحدة+.
  *
- * (عروض) أُضيفت تذكرة الكود التلقائي BookingPromoTicket أعلى الكروت.
+ * ── (جديد) تنظيف هدية البندل ────────────────────────────────────────────────
+ *  • أي هدية بندل مرتبطة بخدمة trigger اتشالت → تُزال تلقائيًا (بصمت، كالمواقع
+ *    العالمية) عبر effect يقارن الهدايا بالبندلات المفتوحة الحالية.
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import {
-  Check, X, Star, Shield, Layers, Sun, Lock, Sparkles, Truck, Clock, ArrowUpRight, Gift,
+  Check, X, Star, Shield, Layers, Sun, Lock, Sparkles, Truck, Clock, ArrowUpRight, Gift, Tag, Loader2,
 } from 'lucide-react';
 
 import {
@@ -94,6 +95,15 @@ export function StepServices({
   const openBundles = unlockedBundles(bundles, selectedIds);
   const gifts = data.gifts ?? [];
 
+  // ── تنظيف هدية البندل: أي هدية بندلها لم يعُد «مفتوحًا» تُزال تلقائيًا (بصمت) ──
+  useEffect(() => {
+    if (!gifts.length || !bundles.length) return;
+    const openIds = new Set(openBundles.map((b) => b.id));
+    const kept = gifts.filter((g) => openIds.has(g.bundleId));
+    if (kept.length !== gifts.length) set({ gifts: kept });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.services, bundles]);
+
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
   const list = SERVICES.filter((s) => s.cat === data.activeCat);
@@ -106,8 +116,12 @@ export function StepServices({
       ? data.services.filter((s) => s !== slug)
       : [...data.services, slug] });
 
+  // خدمة هدية الكود (gift_service) — تظهر في الدوك كبند مجاني.
+  const hasGiftCode = data.promoKind === 'gift_service' && !!data.giftServiceSlug;
+
   const towingValid = !data.towing || (!!data.towingMode && data.towingAddress.trim().length > 2);
-  const canNext = data.services.length > 0 && towingValid;
+  // قاعدة العبور: خدمة مدفوعة واحدة على الأقل، أو كود هدية صالح لوحده.
+  const canNext = (data.services.length > 0 || hasGiftCode) && towingValid;
 
   // ── كرت خدمة واحد — على lite يكون button عادي بلا أنيميشن (يمنع الاندفاع) ──
   const renderCard = (sv: DbServiceMeta, i: number) => {
@@ -116,13 +130,13 @@ export function StepServices({
     const price = dbPriceFor(sv, data.size);
     const oldPrice = dbOldPriceFor(sv, data.size);
     const off = dbDiscountPct(sv, data.size);
-    const Tag: any = lite ? 'button' : motion.button;
+    const Tag2: any = lite ? 'button' : motion.button;
     const anim = lite ? {} : {
       initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 },
       transition: { delay: i * 0.06, duration: 0.5, ease: EASE },
     };
     return (
-      <Tag
+      <Tag2
         key={sv.slug}
         {...anim}
         data-cursor="hover"
@@ -195,7 +209,7 @@ export function StepServices({
             </span>
           </div>
         </div>
-      </Tag>
+      </Tag2>
     );
   };
 
@@ -317,7 +331,7 @@ export function StepServices({
             </AnimatePresence>
           )}
 
-          {data.services.length === 0 && (
+          {data.services.length === 0 && !hasGiftCode && (
             <p className="mt-4 text-[0.7rem] text-steel">{t('step2.selectAtLeast')}</p>
           )}
 
@@ -410,7 +424,7 @@ export function StepServices({
             </div>
             <div className="mt-4 flex max-h-[300px] flex-col gap-3 overflow-y-auto">
               <AnimatePresence mode="popLayout">
-                {data.services.length === 0 && !data.towing && (
+                {data.services.length === 0 && !data.towing && !hasGiftCode && (
                   <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-sm text-steel">{t('step2.noServices')}</motion.p>
                 )}
                 {data.services.map((sl) => {
@@ -434,6 +448,14 @@ export function StepServices({
                     <span className="w-[22px]" />
                   </motion.div>
                 )}
+                {/* هدية الكود (gift_service) — بند مجاني */}
+                {hasGiftCode && (
+                  <motion.div key="gift-code" {...(lite ? {} : { layout: true })} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5 text-sm">
+                    <span className="flex-1 inline-flex items-center gap-1.5 text-[#e8d6a8]"><Gift className="h-3 w-3" strokeWidth={1.8} />{data.giftServiceName || (isAr ? 'هدية' : 'Gift')}</span>
+                    <span dir="ltr" className="font-display text-[#e8d6a8] tabular-nums">{isAr ? 'مجانًا' : 'Free'}</span>
+                    <span className="w-[22px]" />
+                  </motion.div>
+                )}
                 {gifts.map((g) => {
                   const m = SERVICES.find((s) => s.slug === g.slug);
                   return (
@@ -449,6 +471,10 @@ export function StepServices({
                 })}
               </AnimatePresence>
             </div>
+
+            {/* ── (جديد) كود الخصم داخل خطوة الخدمات ── */}
+            <PromoInline t={t} isAr={isAr} data={data} set={set} services={SERVICES} />
+
             <div className="my-[18px] h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
             <div className="flex items-end justify-between">
               <span className="text-[0.6rem] uppercase tracking-[0.24em] text-steel">{total.onReq && total.grand === 0 ? t('step4.estimate') : t('step2.total')}</span>
@@ -482,6 +508,148 @@ export function StepServices({
             onConfirm={(g) => { set({ gifts: g }); setGiftBundle(null); }} />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ═══════════ كود الخصم داخل خطوة الخدمات ═══════════
+   يطبّق الكود بدري. كود الهدية (gift_service) يضيف الخدمة المجانية للدوك.
+   الكود العادي يُحفظ في الحالة ويصل لخطوة الدفع مطبّقًا. */
+function PromoInline({ t, isAr, data, set, services }: {
+  t: ReturnType<typeof useTranslations>; isAr: boolean;
+  data: BookingState; set: (p: Partial<BookingState>) => void; services: DbServiceMeta[];
+}) {
+  const [open, setOpen] = useState(!!data.promoCode);
+  const [code, setCode] = useState(data.promoCode ?? '');
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isGift = data.promoKind === 'gift_service';
+  const applied = !!data.promoCode && (data.promoDiscount > 0 || isGift);
+
+  const errMsg = (e: string) => {
+    if (isAr) return e === 'not_found' ? 'كود غير صحيح'
+      : e === 'expired' ? 'انتهت صلاحية الكود'
+      : e === 'not_started' ? 'الكود لسه ما اشتغلش'
+      : e === 'used_up' || e === 'inactive' ? 'الكود مش متاح'
+      : e === 'per_user' ? 'استخدمت الكود ده قبل كده'
+      : e === 'min_order' ? 'الكود يتطلّب حد أدنى للطلب'
+      : e === 'no_match' ? 'الكود لا ينطبق على الخدمات المختارة'
+      : 'تعذّر التحقق، حاول تاني';
+    return e === 'not_found' ? 'Invalid code'
+      : e === 'expired' ? 'Code expired'
+      : e === 'not_started' ? 'Code not active yet'
+      : e === 'used_up' || e === 'inactive' ? 'Code no longer available'
+      : e === 'per_user' ? 'You already used this code'
+      : e === 'min_order' ? 'Order below the code minimum'
+      : e === 'no_match' ? 'Not applicable to selected services'
+      : 'Could not verify, try again';
+  };
+
+  const buildLines = () => data.services
+    .map((slug) => {
+      const meta = services.find((s) => s.slug === slug);
+      if (!meta || meta.onRequest) return null;
+      return { serviceId: meta.id, unit: dbPriceFor(meta, data.size) };
+    })
+    .filter(Boolean) as { serviceId: number; unit: number }[];
+
+  const run = async (raw: string) => {
+    const c = raw.trim();
+    if (!c) return;
+    setChecking(true); setError(null);
+    try {
+      const lines = buildLines();
+      const subtotal = lines.reduce((s, l) => s + l.unit, 0) + (data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0);
+      const res = await fetch('/api/promo/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: c, lines, subtotal }),
+      });
+      const j = await res.json();
+      if (j?.ok) {
+        if (j.kind === 'gift_service') {
+          const gn = j.giftService
+            ? ((isAr ? j.giftService.name?.ar : j.giftService.name?.en) || j.giftService.name?.ar || j.giftService.name?.en || (isAr ? 'هدية' : 'Gift'))
+            : (isAr ? 'هدية' : 'Gift');
+          set({
+            promoCode: j.code, promoKind: j.kind,
+            promoPercent: 0, promoDiscount: 0,
+            promoServiceIds: [], promoPerService: {},
+            giftServiceSlug: j.giftService?.slug ?? null,
+            giftServiceName: gn,
+          });
+        } else {
+          set({
+            promoCode: j.code, promoKind: j.kind,
+            promoPercent: Number(j.discountPercent) || 0,
+            promoDiscount: Number(j.discount) || 0,
+            promoServiceIds: j.matchedServiceIds ?? [],
+            promoPerService: j.perService ?? {},
+            giftServiceSlug: null, giftServiceName: null,
+          });
+        }
+        setError(null);
+      } else {
+        set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {}, giftServiceSlug: null, giftServiceName: null });
+        setError(errMsg(j?.error ?? 'server_error'));
+      }
+    } catch {
+      set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {}, giftServiceSlug: null, giftServiceName: null });
+      setError(errMsg('server_error'));
+    } finally { setChecking(false); }
+  };
+
+  const clear = () => {
+    set({ promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0, promoServiceIds: [], promoPerService: {}, giftServiceSlug: null, giftServiceName: null });
+    setCode(''); setError(null);
+  };
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-4">
+      {applied ? (
+        <div className={`flex items-center justify-between gap-2 rounded-2xl border px-3.5 py-2.5 ${isGift ? 'border-[#d9b25f]/40 bg-[#d9b25f]/[0.07]' : 'border-platinum/40 bg-platinum/[0.07]'}`}>
+          <span className="inline-flex min-w-0 items-center gap-2 text-[0.8rem] text-ivory">
+            {isGift ? <Gift className="h-3.5 w-3.5 flex-none text-[#e8d6a8]" strokeWidth={2} /> : <Check className="h-3.5 w-3.5 flex-none text-platinum" strokeWidth={2.4} />}
+            <span className="truncate font-display tracking-[0.1em]">{data.promoCode}</span>
+            <span className={`truncate text-[0.72rem] ${isGift ? 'text-[#e8d6a8]' : 'text-platinum/80'}`}>
+              {isGift
+                ? (isAr ? `· ${data.giftServiceName ?? 'هدية'} مجانًا` : `· ${data.giftServiceName ?? 'Gift'} free`)
+                : `· −${currencyFmt(data.promoDiscount)} ${t('currency')}`}
+            </span>
+          </span>
+          <button data-cursor="hover" onClick={clear} aria-label="remove"
+            className="grid h-6 w-6 flex-none place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
+            <X className="h-3 w-3" strokeWidth={1.8} />
+          </button>
+        </div>
+      ) : open ? (
+        <div>
+          <div className="flex gap-2">
+            <input
+              value={code} dir="ltr" autoFocus
+              onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/\s+/g, '')); setError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') run(code); }}
+              placeholder={isAr ? 'اكتب الكود' : 'Enter code'}
+              className="w-full rounded-xl border border-white/12 bg-white/[0.03] px-3.5 py-2.5 font-display text-sm tracking-[0.12em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+            <button data-cursor="hover" onClick={() => run(code)} disabled={checking || !code.trim()}
+              className={`inline-flex flex-none items-center gap-1.5 rounded-xl border px-4 py-2.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] transition-all duration-300 ${
+                checking || !code.trim()
+                  ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-steel/50'
+                  : 'border-platinum/40 bg-platinum/[0.08] text-ivory hover:border-platinum/70 hover:bg-platinum/[0.14]'
+              }`}>
+              {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <Check className="h-3.5 w-3.5" strokeWidth={2.4} />}
+              {isAr ? 'تطبيق' : 'Apply'}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
+        </div>
+      ) : (
+        <button data-cursor="hover" onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/70 transition-colors hover:border-platinum/40 hover:text-ivory">
+          <Tag className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {isAr ? 'معايا كود خصم' : 'I have a promo code'}
+        </button>
+      )}
     </div>
   );
 }

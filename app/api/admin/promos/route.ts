@@ -1,4 +1,6 @@
 // app/api/admin/promos/route.ts — إدارة أكواد الخصم (admin CRUD).
+// (جديد) يرجّع بيانات المستلِم (recipient) للأكواد الموجّهة لشخص بعينه —
+//   اسم + تليفون + إيميل + هل الكود من حملة — عشان يبان في الكرت مين الكود رايحله.
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -9,7 +11,7 @@ async function ensureAdmin() {
   return user;
 }
 
-/** GET — قائمة كل الأكواد + ملخّص استخدام لكل كود. */
+/** GET — قائمة كل الأكواد + ملخّص استخدام لكل كود + بيانات المستلِم لو موجّه. */
 export async function GET() {
   if (!(await ensureAdmin())) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   try {
@@ -18,11 +20,18 @@ export async function GET() {
               COALESCE(p.discount_percent,0) AS discount_percent,
               p.fixed_amount, p.min_order, p.max_uses, p.used_count,
               p.per_user_limit, p.is_active, p.starts_at, p.expires_at, p.created_at,
+              p.recipient_user_id, p.campaign_id,
+              ru.name  AS recipient_name,
+              ru.phone AS recipient_phone,
+              ru.email AS recipient_email,
+              c.label  AS campaign_label,
               COALESCE(r.redemptions,0)      AS redemptions,
               COALESCE(r.total_discount,0)   AS total_discount,
               COALESCE(r.total_revenue,0)    AS total_revenue,
               r.last_used_at
        FROM promo_codes p
+       LEFT JOIN users ru ON ru.id = p.recipient_user_id
+       LEFT JOIN promo_campaigns c ON c.id = p.campaign_id
        LEFT JOIN (
          SELECT promo_id,
                 count(*)            AS redemptions,
@@ -62,6 +71,15 @@ export async function GET() {
       totalRevenue: Number(p.total_revenue) || 0,
       lastUsedAt: p.last_used_at ? new Date(p.last_used_at).toISOString() : null,
       services: svcByPromo.get(p.id) ?? [],
+      // ── (جديد) المستلِم: لو الكود موجّه لشخص بعينه (عجلة الحظ/ريفيرال/حملة) ──
+      recipient: p.recipient_user_id ? {
+        id: String(p.recipient_user_id),
+        name: p.recipient_name ?? null,
+        phone: p.recipient_phone ?? null,
+        email: p.recipient_email ?? null,
+      } : null,
+      campaignId: p.campaign_id ?? null,
+      campaignLabel: p.campaign_label ?? null,
     }));
 
     return NextResponse.json({ ok: true, promos });

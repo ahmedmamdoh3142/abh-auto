@@ -4,6 +4,9 @@
  * StepDetails — act 03. Contact form + date/time popovers + موافقة الواتساب.
  * المواعيد كل ساعة من 10ص لـ 9م. المدن من القاعدة عبر /api/cities (fallback ستاتيك).
  *
+ * (جديد) الملاحظة بين قوسين بجانب «اسم العميل» و«رقم تليفون العميل» تظهر باللون
+ *   الأحمر الفاتح للتنبيه — عبر تمرير الـlabel كـReactNode (Field تقبل ReactNode).
+ *
  * إصلاحات فيو الموبايل في هذه النسخة:
  *  1) زرّا الرجوع/المتابعة جنب بعض (أزلنا flex-wrap الذي كان يكدّسهما رأسيًا).
  *  2) خلفية بوب-أب التاريخ/الوقت كانت /97 (قيمة opacity غير صالحة → شفافة).
@@ -54,6 +57,16 @@ function useCityOptions(isAr: boolean): { value: string; label: string }[] {
   return db ?? CITIES.map((c) => ({ value: c, label: cityLabel(c, isAr) }));
 }
 
+/* ملصق حقل مع ملاحظة تحذيرية حمراء بين قوسين (لاسم/تليفون العميل). */
+function LabelWithNote({ label, note }: { label: string; note: string }) {
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-1.5">
+      <span>{label}</span>
+      <span className="text-[#e7746e] normal-case tracking-normal">({note})</span>
+    </span>
+  );
+}
+
 export function StepDetails({
   t, isAr, data, set, onBack, onNext,
 }: {
@@ -96,12 +109,12 @@ export function StepDetails({
       <Heading index="03" label={t('steps.customer')} title={t('step3.heading')} sub={t('step3.subheading')} />
 
       <div className="mt-9 grid gap-x-6 gap-y-7 md:grid-cols-2">
-        <Field label={`${t('step3.fullName')} ${isAr ? '(اسم العميل)' : '(Customer name)'}`}>
+        <Field label={<LabelWithNote label={t('step3.fullName')} note={isAr ? 'اسم العميل' : 'Customer name'} />}>
           <IconInput icon={User} value={data.name} onChange={(v) => set({ name: v })}
             placeholder={t('step3.fullNamePlaceholder')} error={touched ? errors.name : null} />
         </Field>
 
-        <Field label={`${t('step3.phone')} ${isAr ? '(رقم تليفون العميل)' : '(Customer phone)'}`}>
+        <Field label={<LabelWithNote label={t('step3.phone')} note={isAr ? 'رقم تليفون العميل' : 'Customer phone'} />}>
           <PhoneField isAr={isAr} value={data.phone} onChange={(p) => set({ phone: p })}
             placeholder={t('step3.phonePlaceholder')} error={touched ? errors.phone : null} />
         </Field>

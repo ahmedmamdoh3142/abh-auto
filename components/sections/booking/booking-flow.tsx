@@ -11,11 +11,16 @@
  *     على كلاس glass الأب وكل عناصر backdrop-blur، وتُخفي البلور الثقيل
  *     (blur-3xl/2xl) على الموبايل — يمنع طرد طبقات GPU أثناء السكرول.
  *
+ * ── (جديد) كود الخصم في خطوة الخدمات ────────────────────────────────────────
+ *  • حقل الكود اتنقل لخطوة الخدمات (StepServices). العميل يقدر يطبّق كوده بدري.
+ *  • كود الهدية (gift_service): الخدمة المجانية تُضاف تلقائيًا وتظهر في الدوك.
+ *    giftServiceSlug + giftServiceName يُخزّنان لعرضها.
+ *  • قاعدة العبور: يكفي كود هدية صالح لوحده، أو خدمة مدفوعة واحدة على الأقل.
+ *
+ * ── (جديد) الإجمالي قبل الخصم ───────────────────────────────────────────────
+ *  • total.originalTotal = أصل الأسعار (قبل أي خصم إعلاني) — يظهر مشطوبًا فوق «وفرت».
+ *
  * ── تتبّع Google Analytics (قمع الحجز) ──────────────────────────────────────
- *  • trackBookingView عند فتح الصفحة.
- *  • أحداث كل خطوة عند الانتقال (go): vehicle → services → details.
- *  • trackBookingSubmit عند الضغط على تأكيد، ثم trackBookingSuccess عند نجاح
- *    الخادم (purchase) أو trackBookingError عند الفشل.
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
@@ -74,6 +79,9 @@ export interface BookingState {
   promoDiscount: number;
   promoServiceIds: number[];
   promoPerService: Record<number, number>;
+  /** (جديد) كود الهدية gift_service: slug واسم الخدمة المُهداة — لعرضها في الدوك. */
+  giftServiceSlug: string | null;
+  giftServiceName: string | null;
   whatsappOptIn: boolean | undefined;
   gifts: { slug: string; bundleId: string; unit: number }[];
 }
@@ -86,6 +94,7 @@ const INITIAL: BookingState = {
   payment: null, showBreakdown: false, calMonth: null,
   promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
   promoServiceIds: [], promoPerService: {},
+  giftServiceSlug: null, giftServiceName: null,
   whatsappOptIn: undefined,
   gifts: [],
 };
@@ -155,6 +164,8 @@ export function BookingFlow({
 
   const revalidatePromo = useCallback(async (state: BookingState) => {
     if (!state.promoCode) return;
+    // كود الهدية لا يحتاج إعادة حساب خصم (قيمته صفر) — نتركه كما هو.
+    if (state.promoKind === 'gift_service') return;
     const lines = state.services
       .map((slug) => {
         const meta = SERVICES.find((s) => s.slug === slug);
@@ -192,21 +203,25 @@ export function BookingFlow({
   const total = useMemo(() => {
     let onReq = false;
     let saved = 0;
+    let servicesOriginal = 0; // أصل الأسعار قبل أي خصم إعلاني
     const services = data.services.reduce((sum, slug) => {
       const meta = SERVICES.find((s) => s.slug === slug);
       if (!meta) return sum;
       if (meta.onRequest) { onReq = true; return sum; }
       const old = dbOldPriceFor(meta, data.size);
       const now = dbPriceFor(meta, data.size);
+      servicesOriginal += old || now; // أصل السعر (القديم لو موجود، وإلا الحالي)
       if (old) saved += old - now;
       return sum + now;
     }, 0);
     const tow = data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0;
     const beforePromo = services + tow;
-    const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
     const giftsCharge = (data.gifts ?? []).reduce((s, g) => s + (g.unit || 0), 0);
+    // الإجمالي قبل أي خصم = أصل أسعار الخدمات + النقل + هدايا البندل المدفوعة
+    const originalTotal = servicesOriginal + tow + giftsCharge;
+    const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
     const grand = Math.max(0, beforePromo - promoCut) + giftsCharge;
-    return { services, tow, beforePromo, promoCut, grand, onReq, saved };
+    return { services, tow, beforePromo, promoCut, grand, onReq, saved, originalTotal };
   }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, SERVICES]);
 
   // قائمة الخدمات المختارة بصيغة التتبّع (اسم + سعر)

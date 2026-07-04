@@ -267,7 +267,7 @@ function Cross() {
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+export function Field({ label, hint, children }: { label: React.ReactNode; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className="mb-2.5 flex items-baseline justify-between">

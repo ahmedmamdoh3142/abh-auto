@@ -1,4 +1,6 @@
 // app/api/admin/promos/[id]/route.ts — إحصائيات تفصيلية لكود واحد.
+// (جديد) يرجّع بيانات المستلِم (recipient) لو الكود موجّه لشخص بعينه — عشان
+//   تظهر تفاصيله في مودال الإحصائيات (مين الكود رايحله + هل استخدمه ولا لسه).
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -20,11 +22,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const locale = new URL(req.url).searchParams.get("locale") === "en" ? "en" : "ar";
 
     const pr = await query<any>(
-      `SELECT id, code, kind, label, description,
-              COALESCE(discount_percent,0) AS discount_percent,
-              fixed_amount, min_order, max_uses, used_count, per_user_limit,
-              is_active, starts_at, expires_at, created_at
-       FROM promo_codes WHERE id = $1 LIMIT 1`,
+      `SELECT p.id, p.code, p.kind, p.label, p.description,
+              COALESCE(p.discount_percent,0) AS discount_percent,
+              p.fixed_amount, p.min_order, p.max_uses, p.used_count, p.per_user_limit,
+              p.is_active, p.starts_at, p.expires_at, p.created_at,
+              p.recipient_user_id, p.campaign_id,
+              ru.name  AS recipient_name,
+              ru.phone AS recipient_phone,
+              ru.email AS recipient_email,
+              ru.city_code AS recipient_city,
+              ru.created_at AS recipient_since,
+              c.label  AS campaign_label
+       FROM promo_codes p
+       LEFT JOIN users ru ON ru.id = p.recipient_user_id
+       LEFT JOIN promo_campaigns c ON c.id = p.campaign_id
+       WHERE p.id = $1 LIMIT 1`,
       [id]
     );
     const p = pr[0];
@@ -74,6 +86,28 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       [id]
     );
 
+    // ── (جديد) لو الكود موجّه لشخص: هل استخدمه فعلًا؟ ──
+    let recipient: any = null;
+    if (p.recipient_user_id) {
+      const usedRows = await query<any>(
+        `SELECT count(*)::int AS uses, max(redeemed_at) AS last_used
+         FROM promo_redemptions WHERE promo_id = $1 AND user_id = $2`,
+        [id, p.recipient_user_id]
+      );
+      const u = usedRows[0] ?? {};
+      recipient = {
+        id: String(p.recipient_user_id),
+        name: p.recipient_name ?? null,
+        phone: p.recipient_phone ?? null,
+        email: p.recipient_email ?? null,
+        city: p.recipient_city ?? null,
+        since: p.recipient_since ? new Date(p.recipient_since).toISOString() : null,
+        used: Number(u.uses) > 0,
+        usedCount: Number(u.uses) || 0,
+        lastUsedAt: u.last_used ? new Date(u.last_used).toISOString() : null,
+      };
+    }
+
     return NextResponse.json({
       ok: true,
       promo: {
@@ -88,7 +122,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         startsAt: p.starts_at ? new Date(p.starts_at).toISOString() : null,
         expiresAt: p.expires_at ? new Date(p.expires_at).toISOString() : null,
         createdAt: new Date(p.created_at).toISOString(),
+        campaignId: p.campaign_id ?? null,
+        campaignLabel: p.campaign_label ?? null,
       },
+      recipient, // ← بيانات المستلِم + هل استخدم (أو null لو الكود عام)
       summary: {
         redemptions: Number(summary.redemptions) || 0,
         totalDiscount: Number(summary.total_discount) || 0,
