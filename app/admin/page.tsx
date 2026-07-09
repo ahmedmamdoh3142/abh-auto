@@ -5,8 +5,11 @@
  *   على وقت التحصيل الفعلي — من booking_status_history (سطر «تأكيد الدفع»)،
  *   ولو مفيش (مدفوع أونلاين وقت الحجز) بنرجع لـ created_at.
  * • تريند الإيراد المحصّل بقى على أساس وقت التحصيل كمان (متّسق مع الشارت).
+ * • (تعديل) لو المستخدم مالوش صلاحية النظرة العامة → يُوجَّه لأول صفحة مسموحة.
  */
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/guard";
+import { hasPerm, firstAllowedPage } from "@/lib/admin/permissions";
 import { query } from "@/lib/db";
 import { getLocale } from "next-intl/server";
 import { pick } from "@/lib/admin/i18n-json";
@@ -60,7 +63,13 @@ export default async function AdminOverviewPage({
 }: {
   searchParams: Promise<{ range?: string }>;
 }) {
-  await requireAdmin();
+  const me = await requireAdmin();
+  // لو مالوش صلاحية النظرة العامة، وجّهه لأول صفحة مسموحة (أو الرئيسية).
+  if (!hasPerm(me, "overview")) {
+    const first = firstAllowedPage(me);
+    redirect(first ? first.href : "/");
+  }
+
   const locale = (await getLocale()) as Locale;
   const sp = await searchParams;
   const range: RangeKey = (["day", "week", "month", "year"].includes(sp?.range || "")

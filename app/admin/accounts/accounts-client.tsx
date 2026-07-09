@@ -2,14 +2,16 @@
 /**
  * app/admin/accounts/accounts-client.tsx — إدارة الحسابات (CLIENT)
  * إنشاء/تعديل/حذف حسابات (member / staff / admin / partner).
- * عند اختيار دور «شركة» تظهر حقول اسم الشركة. الأدمن يكتب الباسوورد بنفسه.
  *
- * موبايل: حقول المودال (الاسم/الإيميل، الهاتف/المدينة) تنزل تحت بعض —
- *   لا سكروول أفقي. رمز الدولة يفضل جنب الرقم داخل PhoneInput.
+ * (تعديل) الدخول باسم المستخدم — لا إيميل في الفورم.
+ * (جديد) للموظّف/المدير: مسمّى وظيفي (نص حر) + صلاحيات صفحات (checkboxes).
+ *   الصلاحيات تحدّد الصفحات التي يراها ويدخلها. super admin يرى الكل دائمًا
+ *   (لا تظهر له الشبكة). العميل/الشركة لا مسمّى ولا صلاحيات.
  */
 import React, { useMemo, useState, useEffect } from "react";
 import { Pill, Ghost, IconBtn, Field, Input, Selectbox, Chip, Modal, Confirm, useToast, Ic, PageHeader } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
+import { ADMIN_PAGES, type PermKey } from "@/lib/admin/permissions";
 
 /* ───────── هوك media query (للتجاوب مع الموبايل) ───────── */
 function useMediaQuery(query: string) {
@@ -36,6 +38,7 @@ type Account = {
   id: string; name: string; email: string; phone: string; city: string;
   role: Role; since: string | null;
   partnerId: string | null; companyName: string; partnerActive: boolean | null;
+  jobTitle: string; permissions: string[]; isSuperAdmin: boolean;
 };
 type City = { code: string; label: string };
 
@@ -59,6 +62,13 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
   const [confirm, setConfirm] = useState<Account | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
   const [q, setQ] = useState("");
+
+  // أعداد كل دور (تُحسب من القائمة الكاملة، لا تتأثر بالبحث الحالي).
+  const counts = useMemo(() => {
+    const c: Record<Role | "all", number> = { all: list.length, member: 0, staff: 0, admin: 0, partner: 0 };
+    for (const a of list) c[a.role] = (c[a.role] ?? 0) + 1;
+    return c;
+  }, [list]);
 
   const filters: { id: Role | "all"; label: string }[] = [
     { id: "all", label: T("الكل", "All") },
@@ -86,19 +96,21 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
       const data = await res.json();
       if (!data.ok) {
         const msg: Record<string, string> = {
+          name_taken: T("اسم المستخدم مستخدم بالفعل", "Username already in use"),
           email_taken: T("الإيميل مستخدم بالفعل", "Email already in use"),
           weak_password: T("الباسوورد قصير (8 أحرف على الأقل)", "Password too short (min 8)"),
           company_name_required: T("اسم الشركة مطلوب", "Company name required"),
           missing_fields: T("بيانات ناقصة", "Missing fields"),
+          protected_super_admin: T("لا يمكن تعديل صلاحيات المدير الأعلى", "Cannot modify the super admin"),
         };
         throw new Error(msg[data.error] || T("فشل الحفظ", "Save failed"));
       }
-      // إعادة تحميل القائمة من السيرفر لضمان التزامن (partnerId الجديد..)
       const refreshed = await fetch("/api/admin/accounts").then((r) => r.json()).catch(() => null);
       if (refreshed?.ok) {
         setList(refreshed.accounts.map((u: any) => ({
           id: u.id, name: u.name, email: u.email, phone: u.phone, city: u.city,
           role: u.role, since: u.since, partnerId: u.partnerId, companyName: u.companyName ?? "", partnerActive: u.partnerActive,
+          jobTitle: u.jobTitle ?? "", permissions: u.permissions ?? [], isSuperAdmin: !!u.isSuperAdmin,
         })));
       }
       toast(isNew ? T("تم إنشاء الحساب", "Account created") : T("تم تحديث الحساب", "Account updated"));
@@ -121,7 +133,7 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
 
   return (
     <div className="abh-fade-up">
-      <PageHeader title={T("الحسابات", "Accounts")} subtitle={T("أنشئ وعدّل حسابات العملاء والموظّفين والمدراء والشركات. حسابات الشركات تُسعَّر من صفحة الخدمات.", "Create and edit members, staff, admins and partner companies. Partner pricing is set on the Services page.")} seed="accounts-hero"
+      <PageHeader title={T("الحسابات", "Accounts")} subtitle={T("أنشئ وعدّل حسابات العملاء والموظّفين والمدراء والشركات. صلاحيات الموظّفين والمدراء تُحدّد الصفحات التي يرونها.", "Create and edit members, staff, admins and partner companies. Staff/admin permissions control which pages they see.")} seed="accounts-hero"
         action={<Pill icon={Ic.plus} onClick={() => setAdding(true)}>{T("حساب جديد", "New account")}</Pill>} />
 
       <div className="abh-col" style={{ gap: 20 }}>
@@ -130,7 +142,16 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {filters.map((f) => {
               const on = roleFilter === f.id;
-              return <button key={f.id} onClick={() => setRoleFilter(f.id)} style={{ borderRadius: 999, padding: "8px 16px", fontSize: 11.5, border: `1px solid ${on ? "rgba(203,205,205,.4)" : "rgba(255,255,255,.1)"}`, color: on ? "var(--abh-ivory)" : "rgba(203,205,205,.65)", background: on ? "rgba(203,205,205,.08)" : "transparent", cursor: "pointer" }}>{f.label}</button>;
+              const n = counts[f.id] ?? 0;
+              return (
+                <button key={f.id} onClick={() => setRoleFilter(f.id)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "8px 10px 8px 16px", fontSize: 11.5, border: `1px solid ${on ? "rgba(203,205,205,.4)" : "rgba(255,255,255,.1)"}`, color: on ? "var(--abh-ivory)" : "rgba(203,205,205,.65)", background: on ? "rgba(203,205,205,.08)" : "transparent", cursor: "pointer", transition: "all .2s" }}>
+                  {f.label}
+                  <span className="abh-num" style={{ display: "inline-grid", placeItems: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, fontSize: 10.5, fontWeight: 600, lineHeight: 1, color: on ? "#000" : "var(--abh-platinum)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)", border: on ? "none" : "1px solid rgba(255,255,255,.08)" }}>
+                    {n}
+                  </span>
+                </button>
+              );
             })}
           </div>
           <div style={{ position: "relative", minWidth: 240, flex: "0 1 320px" }}>
@@ -144,6 +165,8 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
         <div style={{ borderRadius: 20, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
           {shown.map((a, i) => {
             const rm = ROLE_META[a.role];
+            const contactLine = a.email && !a.email.endsWith("@abh-auto.local") ? a.email : (a.phone || "—");
+            const isTeam = a.role === "admin" || a.role === "staff";
             return (
               <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent" }}>
                 <span style={{ display: "grid", placeItems: "center", height: 42, width: 42, borderRadius: 999, flexShrink: 0, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02))" }}>
@@ -153,10 +176,11 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 14.5, color: "var(--abh-ivory)" }}>{a.role === "partner" && a.companyName ? a.companyName : a.name}</span>
                     <Chip tone={rm.tone}>{isAr ? rm.ar : rm.en}</Chip>
+                    {a.isSuperAdmin && <Chip tone="warn">{T("مدير أعلى", "Super")}</Chip>}
                     {a.role === "partner" && a.partnerActive === false && <Chip tone="bad">{T("شراكة موقوفة", "Paused")}</Chip>}
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--abh-steel)", marginTop: 3, direction: "ltr", textAlign: isAr ? "right" : "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {a.email}{a.role === "partner" && a.companyName ? ` · ${a.name}` : ""}
+                    {isTeam && a.jobTitle ? `${a.jobTitle} · ` : ""}{contactLine}{a.role === "partner" && a.companyName ? ` · ${a.name}` : ""}
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: "var(--abh-steel)", whiteSpace: "nowrap" }} className="abh-desk">{fmtDate(a.since)}</div>
@@ -187,7 +211,6 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
 }) {
   const isNew = !acc;
   const mobile = useMediaQuery("(max-width: 640px)");
-  // عمود واحد على الموبايل، عمودين بـ minmax(0,..) على الديسكتوب (يمنع التمطّط)
   const twoCol = mobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)";
 
   const [f, setF] = useState({
@@ -199,17 +222,39 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
     role: (acc?.role ?? "member") as Role,
     companyName: acc?.companyName ?? "",
     password: "",
+    jobTitle: acc?.jobTitle ?? "",
+    permissions: (acc?.permissions ?? []) as string[],
   });
   const set = (p: Partial<typeof f>) => setF((s) => ({ ...s, ...p }));
   const [touched, setTouched] = useState(false);
   const isPartner = f.role === "partner";
+  const isTeam = f.role === "admin" || f.role === "staff"; // من يملك صلاحيات
+  const lockedSuper = !!acc?.isSuperAdmin; // المدير الأعلى: لا نعرض/نعدّل صلاحياته
 
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email);
   const passOk = isNew ? f.password.length >= 8 : (f.password === "" || f.password.length >= 8);
   const phoneOk = !f.phone.trim() || isValidPhone(f.phone);
-  const valid = f.name.trim() && emailOk && passOk && phoneOk && (!isPartner || f.companyName.trim());
+  const valid = f.name.trim() && passOk && phoneOk && (!isPartner || f.companyName.trim());
 
   const inputStyle = { textAlign: isAr ? "right" as const : "left" as const };
+
+  const togglePerm = (key: PermKey) => set({
+    permissions: f.permissions.includes(key)
+      ? f.permissions.filter((k) => k !== key)
+      : [...f.permissions, key],
+  });
+
+  // مجموعات الصفحات للعرض المنظّم
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof ADMIN_PAGES>();
+    for (const p of ADMIN_PAGES) {
+      const g = isAr ? p.group.ar : p.group.en;
+      const arr = map.get(g) ?? []; arr.push(p); map.set(g, arr);
+    }
+    return Array.from(map.entries());
+  }, [isAr]);
+
+  const allKeys = ADMIN_PAGES.map((p) => p.key);
+  const allOn = allKeys.every((k) => f.permissions.includes(k));
 
   return (
     <Modal title={isNew ? T("حساب جديد", "New account") : T("تعديل حساب", "Edit account")} onClose={onClose} wide>
@@ -232,18 +277,17 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
           </Field>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 16 }}>
-          <div style={{ minWidth: 0 }}>
-            <Field label={isPartner ? T("اسم مسؤول التواصل", "Contact person") : T("الاسم", "Name")}>
-              <Input value={f.name} onChange={(e: any) => set({ name: e.target.value })} style={inputStyle} />
-            </Field>
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <Field label={T("الإيميل (للدخول)", "Email (login)")}>
-              <Input dir="ltr" value={f.email} onChange={(e: any) => set({ email: e.target.value })} style={{ textAlign: "left" }} />
-            </Field>
-          </div>
-        </div>
+        {/* اسم المستخدم */}
+        <Field label={T("اسم المستخدم", "Username")} hint={T("يُستخدم لتسجيل الدخول.", "Used to sign in.")}>
+          <Input value={f.name} onChange={(e: any) => set({ name: e.target.value })} placeholder={T("اسم الدخول", "Login username")} style={inputStyle} />
+        </Field>
+
+        {/* المسمى الوظيفي — للموظّف/المدير فقط */}
+        {isTeam && (
+          <Field label={T("المسمى الوظيفي", "Job title")} hint={T("نص حر، مثال: مدير مالي، محاسب، خدمة عملاء.", "Free text, e.g. Finance Manager, Accountant.")}>
+            <Input value={f.jobTitle} onChange={(e: any) => set({ jobTitle: e.target.value })} placeholder={T("مثال: مدير مالي", "e.g. Finance Manager")} style={inputStyle} />
+          </Field>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 16 }}>
           <div style={{ minWidth: 0 }}>
@@ -269,14 +313,55 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
             placeholder={isNew ? "••••••••" : T("بدون تغيير", "unchanged")} style={{ textAlign: "left" }} />
         </Field>
 
+        {/* الصلاحيات — للموظّف/المدير فقط، وتختفي للمدير الأعلى */}
+        {isTeam && (
+          lockedSuper ? (
+            <div style={{ borderRadius: 14, border: "1px solid rgba(232,207,154,.35)", background: "rgba(232,207,154,.06)", padding: 14, fontSize: 12.5, color: "var(--abh-warn)" }}>
+              {T("هذا الحساب مدير أعلى — يملك كل الصلاحيات دائمًا ولا يمكن تقييده.", "This is a super admin — always has full access and can't be restricted.")}
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                <span style={{ fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الصلاحيات (الصفحات المسموح بها)", "Permissions (allowed pages)")}</span>
+                <button type="button" onClick={() => set({ permissions: allOn ? [] : allKeys })}
+                  style={{ borderRadius: 999, border: "1px solid rgba(203,205,205,.35)", background: "rgba(203,205,205,.08)", color: "var(--abh-ivory)", padding: "5px 12px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {allOn ? T("إلغاء الكل", "Clear all") : T("تحديد الكل", "Select all")}
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--abh-steel)", marginBottom: 12 }}>
+                {T("سيرى المستخدم الصفحات المحددة فقط، ويُوجَّه لأول صفحة مسموحة عند الدخول.", "The user sees only checked pages, and lands on the first allowed page on login.")}
+              </div>
+              <div className="abh-col" style={{ gap: 14 }}>
+                {groups.map(([label, pages]) => (
+                  <div key={label}>
+                    <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 8 }}>{label}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+                      {pages.map((p) => {
+                        const on = f.permissions.includes(p.key);
+                        return (
+                          <button key={p.key} type="button" onClick={() => togglePerm(p.key)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, borderRadius: 12, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.08)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "10px 12px", cursor: "pointer", textAlign: isAr ? "right" : "left" }}>
+                            <span style={{ display: "grid", placeItems: "center", height: 20, width: 20, flexShrink: 0, borderRadius: 6, border: on ? "none" : "1px solid rgba(255,255,255,.2)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", color: "#000" }}>{on && <Ic.check s={12} />}</span>
+                            <span style={{ fontSize: 13, color: on ? "var(--abh-ivory)" : "var(--abh-platinum)" }}>{isAr ? p.ar : p.en}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        )}
+
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 4 }}>
           <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
           <Pill onClick={() => { setTouched(true); if (valid) onSave(f, isNew); }}>{T("حفظ", "Save")}</Pill>
         </div>
         {!valid && (
           <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>
-            {T("أكمل الحقول المطلوبة (الاسم، إيميل صحيح، باسوورد 8+ أحرف، واسم الشركة للشركات).",
-               "Complete required fields (name, valid email, 8+ char password, company name for partners).")}
+            {T("أكمل الحقول المطلوبة (اسم المستخدم، باسوورد 8+ أحرف، واسم الشركة للشركات).",
+               "Complete required fields (username, 8+ char password, company name for partners).")}
           </p>
         )}
       </div>

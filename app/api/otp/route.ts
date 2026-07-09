@@ -1,12 +1,15 @@
 /**
- * app/api/otp/route.ts — إرسال + التحقق من رمز OTP عبر واتساب (للحجز بدون تسجيل دخول).
+ * app/api/otp/route.ts — إرسال + التحقق من رمز OTP عبر واتساب.
  *
- *   POST  { phone }                → يولّد رمزًا، يخزّنه (hash)، ويضيفه لطابور الواتساب.
- *   PUT   { phone, code }          → يتحقق من الرمز (hash + صلاحية + محاولات).
+ *   POST  { phone, purpose? }        → يولّد رمزًا، يخزّنه (hash)، ويضيفه لطابور الواتساب.
+ *   PUT   { phone, code, purpose? }  → يتحقق من الرمز (hash + صلاحية + محاولات).
+ *
+ * purpose: 'booking' (افتراضي) للحجز بدون تسجيل دخول، أو 'reset' لاستعادة كلمة
+ *   المرور. الفصل بينهما يمنع استخدام كود غرضٍ ما في غرض آخر.
  *
  * أمان:
  *   • لا نخزّن الرمز الخام أبدًا — فقط sha256(code + OTP_SECRET).
- *   • صلاحية 5 دقائق، 5 محاولات كحد أقصى، وحد معدّل (لا أكثر من رمز كل 60 ثانية).
+ *   • صلاحية 5 دقائق، 5 محاولات كحد أقصى، وحد معدّل (لا أكثر من رمز كل 60 ثانية لكل غرض).
  *   • قبل ربط المزوّد: الرمز يُسجَّل في الطابور لكن لا يُرسل فعليًا — للاختبار
  *     يمكن قراءة آخر رمز من جدول otp_codes (أو لوج الخادم) مؤقتًا.
  */
@@ -32,11 +35,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const phone = toE164(body.phone);
     if (!phone) return NextResponse.json({ ok: false, error: "invalid_phone" }, { status: 400 });
+    const purpose = body.purpose === "reset" ? "reset" : "booking";
 
-    // حد المعدّل: امنع طلبًا جديدًا خلال 60 ثانية
+    // حد المعدّل: امنع طلبًا جديدًا خلال 60 ثانية (لنفس الغرض)
     const recent = await query<any>(
-      `SELECT created_at FROM otp_codes WHERE phone = $1 ORDER BY created_at DESC LIMIT 1`,
-      [phone]
+      `SELECT created_at FROM otp_codes WHERE phone = $1 AND purpose = $2 ORDER BY created_at DESC LIMIT 1`,
+      [phone, purpose]
     );
     if (recent[0] && Date.now() - new Date(recent[0].created_at).getTime() < RESEND_COOLDOWN_MS) {
       return NextResponse.json({ ok: false, error: "too_soon" }, { status: 429 });
@@ -47,8 +51,8 @@ export async function POST(request: Request) {
 
     await query(
       `INSERT INTO otp_codes (phone, code_hash, purpose, expires_at)
-       VALUES ($1, $2, 'booking', $3)`,
-      [phone, hashCode(code), expiresAt]
+       VALUES ($1, $2, $3, $4)`,
+      [phone, hashCode(code), purpose, expiresAt]
     );
 
     // أضف للطابور (لا يُرسل فعليًا حتى يُفعَّل المزوّد)
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
 
     // قبل الربط فقط: اطبع الرمز في اللوج للاختبار. احذف هذا بعد الربط.
     if (process.env.NODE_ENV !== "production") {
-      console.log(`[OTP] ${phone} → ${code} (debug only)`);
+      console.log(`[OTP] ${phone} (${purpose}) → ${code} (debug only)`);
     }
 
     return NextResponse.json({ ok: true, expiresAt: expiresAt.toISOString() });
@@ -72,14 +76,15 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const phone = toE164(body.phone);
     const code = body.code ? String(body.code).trim() : "";
+    const purpose = body.purpose === "reset" ? "reset" : "booking";
     if (!phone || !code) return NextResponse.json({ ok: false, error: "missing" }, { status: 400 });
 
     const rows = await query<any>(
       `SELECT id, code_hash, attempts, max_attempts, expires_at, consumed_at
          FROM otp_codes
-        WHERE phone = $1 AND purpose = 'booking'
+        WHERE phone = $1 AND purpose = $2
         ORDER BY created_at DESC LIMIT 1`,
-      [phone]
+      [phone, purpose]
     );
     const otp = rows[0];
     if (!otp) return NextResponse.json({ ok: false, error: "not_found" }, { status: 400 });

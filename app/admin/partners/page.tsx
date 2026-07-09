@@ -7,11 +7,12 @@ import { query } from "@/lib/db";
 import { getLocale } from "next-intl/server";
 import type { Locale } from "@/lib/i18n";
 import PartnersClient from "./partners-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function PartnersPage() {
-  await requireAdmin();
+  await requirePermission("partners");
   const locale = (await getLocale()) as Locale;
 
   const rows = await query<any>(

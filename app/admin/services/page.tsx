@@ -9,6 +9,7 @@ import { getLocale } from "next-intl/server";
 import { toLoc, pick } from "@/lib/admin/i18n-json";
 import type { Locale } from "@/lib/i18n";
 import ServicesClient from "./services-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ const firstNum = (j: any): number => {
 };
 
 export default async function ServicesPage() {
-  await requireAdmin();
+  await requirePermission("services");
   const locale = (await getLocale()) as Locale;
 
   const services = await query<any>(

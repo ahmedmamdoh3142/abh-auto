@@ -1,24 +1,29 @@
 "use client";
 /**
  * app/admin/admin-shell.tsx — هيكل لوحة التحكم (sidebar + topbar + الحاوية).
- * - السايدبار يظهر يمينًا في العربي ويسارًا في الإنجليزي تلقائيًا (عبر dir على الحاوية + ترتيب طبيعي للعناصر).
- * - مسافات الكروت مضبوطة (gap أفقي ورأسي صريح في الكلاسات).
- *
- * تعديل نظام الشركاء: أضيفت مجموعة «الشركاء والحسابات» (الشركاء + الحسابات) لمصفوفة NAV.
+ * - السايدبار يظهر يمينًا في العربي ويسارًا في الإنجليزي تلقائيًا.
+ * - (تعديل) العناصر تُبنى من ADMIN_PAGES وتُفلتر حسب صلاحيات المستخدم — يشوف المسموح فقط.
  */
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Ic, IconBtn, ToastHost } from "@/components/admin/ui";
+import { ADMIN_PAGES, hasPerm, type PermKey } from "@/lib/admin/permissions";
 
 type NavItem = { href: string; label: string; icon: (p: any) => React.ReactNode; badge?: number };
 type NavGroup = { group: string; items: NavItem[] };
+
+const ICON_MAP: Record<PermKey, (x: any) => React.ReactNode> = {
+  overview: Ic.grid, bookings: Ic.calendar, bookings_new: Ic.plus,
+  partners: Ic.trending, accounts: Ic.users, content: Ic.type,
+  services: Ic.sliders, price_files: Ic.calendar, promos: Ic.clock, offers: Ic.sparkle,
+};
 
 export default function AdminShell({
   children, user, locale, dir, pending = 0, unread = 0,
 }: {
   children: React.ReactNode;
-  user: { name: string; email: string; role: string };
+  user: { name: string; email: string; role: string; permissions: string[]; isSuperAdmin: boolean };
   locale: "en" | "ar";
   dir: "rtl" | "ltr";
   pending?: number;
@@ -29,24 +34,23 @@ export default function AdminShell({
   const pathname = usePathname();
   const t = (ar: string, en: string) => (locale === "ar" ? ar : en);
 
-  const NAV: NavGroup[] = [
-    { group: t("الواجهة", "Overview"), items: [
-      { href: "/admin", label: t("نظرة عامة", "Overview"), icon: Ic.grid },
-      { href: "/admin/bookings", label: t("الحجوزات", "Bookings"), icon: Ic.calendar, badge: pending },
-      { href: "/admin/bookings/new", label: t("حجز جديد", "New booking"), icon: Ic.plus },
-    ]},
-    { group: t("الشركاء والحسابات", "Partners & accounts"), items: [
-      { href: "/admin/partners", label: t("الشركاء", "Partners"), icon: Ic.trending },
-      { href: "/admin/accounts", label: t("الحسابات", "Accounts"), icon: Ic.users },
-    ]},
-    { group: t("محتوى الموقع", "Site content"), items: [
-      { href: "/admin/content", label: t("نصوص الصفحات", "Page content"), icon: Ic.type },
-      { href: "/admin/services", label: t("الخدمات والأسعار", "Services & pricing"), icon: Ic.sliders },
-      { href: "/admin/price-files", label: t("ملفات الأسعار", "Price files"), icon: Ic.calendar },
-      { href: "/admin/promos", label: t("أكواد الخصم", "Promo codes"), icon: Ic.clock },
-      { href: "/admin/offers", label: t("العروض والولاء", "Offers & loyalty"), icon: Ic.sparkle },
-    ]},
-  ];
+  // شارات الصفحات (عدد الحجوزات القادمة على «الحجوزات»).
+  const BADGES: Partial<Record<PermKey, number>> = { bookings: pending };
+
+  // نبني المجموعات من الصفحات المسموحة فقط (super admin يرى الكل).
+  const permUser = { isSuperAdmin: user.isSuperAdmin, permissions: user.permissions };
+  const NAV: NavGroup[] = (() => {
+    const groups: NavGroup[] = [];
+    for (const p of ADMIN_PAGES) {
+      if (!hasPerm(permUser, p.key)) continue;
+      const label = locale === "ar" ? p.group.ar : p.group.en;
+      const itemLabel = locale === "ar" ? p.ar : p.en;
+      let g = groups.find((x) => x.group === label);
+      if (!g) { g = { group: label, items: [] }; groups.push(g); }
+      g.items.push({ href: p.href, label: itemLabel, icon: ICON_MAP[p.key] ?? Ic.grid, badge: BADGES[p.key] });
+    }
+    return groups;
+  })();
 
   const isActive = (href: string) => {
     if (href === "/admin") return pathname === "/admin";
@@ -78,6 +82,11 @@ export default function AdminShell({
             })}
           </div>
         ))}
+        {NAV.length === 0 && !collapsed && (
+          <div style={{ padding: "20px 12px", fontSize: 12, color: "var(--abh-steel)", textAlign: "center" }}>
+            {t("لا صلاحيات مُسندة بعد.", "No permissions assigned yet.")}
+          </div>
+        )}
       </nav>
       <div style={{ padding: collapsed ? "12px" : "16px", borderTop: "1px solid rgba(255,255,255,.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: collapsed ? "center" : "flex-start" }}>
@@ -94,7 +103,6 @@ export default function AdminShell({
       <div className="abh-admin" dir={dir}>
         <style>{ADMIN_CSS}</style>
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          {/* السايدبار أول عنصر → مع dir=rtl يطلع يمين، ومع dir=ltr يطلع شمال تلقائيًا */}
           <div className="abh-desk">{SidebarInner}</div>
 
           {mobileOpen && (
@@ -149,7 +157,6 @@ const ADMIN_CSS = `
 @keyframes abh-growX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .abh-admin .abh-fade-up{animation:abh-fadeUp .55s var(--abh-ease) both;}
 .abh-admin .abh-scale-in{animation:abh-scaleIn .4s var(--abh-ease) both;}
-/* الشبكات — مسافات أفقية ورأسية صريحة (إصلاح تلاصق الكروت) */
 .abh-admin .abh-grid-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:18px;row-gap:18px;}
 .abh-admin .abh-grid-2-1{display:grid;grid-template-columns:1.6fr 1fr;column-gap:24px;row-gap:24px;}
 .abh-admin .abh-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;row-gap:24px;}

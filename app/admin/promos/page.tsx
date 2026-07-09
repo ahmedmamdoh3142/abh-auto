@@ -1,15 +1,13 @@
 // app/admin/promos/page.tsx — صفحة أكواد الخصم (server).
 import { getLocale } from "next-intl/server";
-import { getCurrentUser } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { requirePermission } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
 import PromosClient from "./promos-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function PromosPage() {
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "admin" && user.role !== "staff")) redirect("/");
+  await requirePermission("promos");
 
   const locale = (await getLocale()) as "ar" | "en";
 

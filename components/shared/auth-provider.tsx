@@ -66,7 +66,7 @@ interface AuthContextValue {
   member: Member | null;
   hydrated: boolean;
   signIn: (name: string, password: string) => Promise<Member>;
-  register: (input: { name: string; email: string; phone: string; city: string; password: string }) => Promise<Member>;
+  register: (input: { name: string; email?: string; phone: string; city: string; password: string }) => Promise<Member>;
   signOut: () => void;
   updateProfile: (patch: Partial<Pick<Member, 'name' | 'email' | 'phone' | 'city'>>) => void;
   addVehicle: (v: Omit<Vehicle, 'id'>) => Vehicle;

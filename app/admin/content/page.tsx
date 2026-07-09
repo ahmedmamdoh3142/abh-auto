@@ -5,11 +5,12 @@ import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
 import { toLoc } from "@/lib/admin/i18n-json";
 import ContentClient from "./content-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function ContentPage() {
-  await requireAdmin();
+  await requirePermission("content");
   const rows = await query<any>(`SELECT key, value FROM content_blocks ORDER BY key`);
   return (
     <ContentClient

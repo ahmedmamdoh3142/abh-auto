@@ -9,11 +9,12 @@ import { getLocale } from "next-intl/server";
 import { toLoc, pick } from "@/lib/admin/i18n-json";
 import type { Locale } from "@/lib/i18n";
 import PriceFilesClient from "./price-files-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function PriceFilesPage() {
-  await requireAdmin();
+  await requirePermission("price_files");
   const locale = (await getLocale()) as Locale;
 
   // الخدمات + أسعارها العامة (نقطة البداية لأي ملف جديد)

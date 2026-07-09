@@ -1,15 +1,13 @@
 // app/admin/offers/page.tsx — هب العروض والولاء (SERVER guard + بيانات الخدمات للـpickers).
-import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
 import OffersHub from "./offers-hub";
 
 export const dynamic = "force-dynamic";
 
 export default async function OffersAdminPage() {
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "admin" && user.role !== "staff")) redirect("/");
+  await requirePermission("offers");
 
   const locale = (await getLocale()) as "ar" | "en";
   const svcRows = await query<any>(

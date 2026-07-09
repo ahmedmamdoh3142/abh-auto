@@ -10,11 +10,12 @@ import { getLocale } from "next-intl/server";
 import { pick } from "@/lib/admin/i18n-json";
 import type { Locale } from "@/lib/i18n";
 import BookingsClient from "./bookings-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function BookingsPage() {
-  await requireAdmin();
+  await requirePermission("bookings");
   const locale = (await getLocale()) as Locale;
 
   const rows = await query<any>(

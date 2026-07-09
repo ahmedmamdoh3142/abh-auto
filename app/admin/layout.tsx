@@ -1,7 +1,3 @@
-/**
- * app/admin/layout.tsx — حارس + هيكل لوحة التحكم (SERVER component).
- * يتحقق من الصلاحية، يقرأ اللغة من next-intl، ويحسب الشارات (حجوزات قادمة / رسائل جديدة).
- */
 import { requireAdmin } from "@/lib/admin/guard";
 import { getLocale } from "next-intl/server";
 import { query } from "@/lib/db";
@@ -30,7 +26,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <AdminShell user={{ name: user.name, email: user.email, role: user.role }} locale={locale} dir={dir} pending={pending} unread={unread}>
+    <AdminShell
+      user={{ name: user.name, email: user.email, role: user.role, permissions: user.permissions, isSuperAdmin: user.isSuperAdmin }}
+      locale={locale} dir={dir} pending={pending} unread={unread}
+    >
       {children}
     </AdminShell>
   );

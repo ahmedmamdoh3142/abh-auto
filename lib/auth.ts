@@ -49,6 +49,7 @@ export async function createSession(userId: string): Promise<void> {
 }
 
 // قراءة المستخدم الحالي من الكوكي (أو null لو مفيش جلسة صالحة)
+// (تعديل) نرجّع الآن job_title و permissions و is_super_admin لنظام الصلاحيات.
 export async function getCurrentUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
@@ -57,8 +58,10 @@ export async function getCurrentUser() {
   const rows = await query<{
     id: string; name: string; email: string; phone: string | null;
     city_code: string | null; role: string; member_since: string;
+    job_title: string | null; permissions: string[] | null; is_super_admin: boolean;
   }>(
-    `SELECT u.id, u.name, u.email, u.phone, u.city_code, u.role, u.member_since
+    `SELECT u.id, u.name, u.email, u.phone, u.city_code, u.role, u.member_since,
+            u.job_title, u.permissions, u.is_super_admin
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token = $1 AND s.expires_at > now()

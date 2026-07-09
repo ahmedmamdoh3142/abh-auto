@@ -1,9 +1,12 @@
 /**
  * next-intl request config — SERVER ONLY.
  * الرسائل تأتي الآن من قاعدة البيانات (content_blocks) بدل ملفات messages/*.json.
+ *
+ * (تعديل) اللغة الافتراضية عربية: أول زيارة (بلا كوكي) تفتح عربي دائمًا،
+ *   ونحترم اختيار المستخدم بعد ذلك عبر كوكي NEXT_LOCALE (لا نعتمد على لغة المتصفح).
  */
 import { getRequestConfig } from 'next-intl/server';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { locales, defaultLocale, type Locale } from './locales';
 import { query } from './db';
 
@@ -34,11 +37,10 @@ async function loadMessages(locale: Locale): Promise<Record<string, any>> {
 
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
-  const headersList = await headers();
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
-  const headerLocale = headersList.get('accept-language')?.split(',')[0]?.split('-')[0];
 
-  const candidate = (cookieLocale ?? headerLocale ?? defaultLocale) as string;
+  // الأولوية: اختيار المستخدم (كوكي) ثم الافتراضي (عربي). لا نعتمد على لغة المتصفح.
+  const candidate = (cookieLocale ?? defaultLocale) as string;
   const locale: Locale = (locales as readonly string[]).includes(candidate)
     ? (candidate as Locale)
     : defaultLocale;

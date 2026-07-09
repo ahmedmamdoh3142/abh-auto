@@ -379,15 +379,14 @@ function RegisterForm({
   const { register } = useAuth();
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const [v, setV] = useState({ name: '', email: '', phone: '', city: '', password: '' });
+  const [v, setV] = useState({ name: '', phone: '', city: '', password: '' });
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const set = (patch: Partial<typeof v>) => setV((s) => ({ ...s, ...patch }));
 
   const errors = {
     name: v.name.trim() ? null : t('validation.nameRequired'),
-    email: !v.email.trim() ? t('validation.emailRequired')
-      : EMAIL_RE.test(v.email) ? null : t('validation.emailInvalid'),
     phone: !v.phone.trim() ? t('validation.phoneRequired')
       : isValidPhone(v.phone) ? null : t('validation.phoneInvalid'),
     city: v.city ? null : t('validation.cityRequired'),
@@ -397,10 +396,17 @@ function RegisterForm({
   const valid = Object.values(errors).every((e) => e === null);
 
   const submit = async () => {
+    setAuthError(null);
     if (!valid) { setTouched(true); return; }
     setBusy(true);
-    const m = await register(v);
-    onSuccess(m.name);
+    try {
+      const m = await register(v);
+      onSuccess(m.name);
+    } catch {
+      // غالبًا اسم المستخدم مكرّر (name_taken) أو خطأ سيرفر.
+      setAuthError(isAr ? 'اسم المستخدم مستخدم بالفعل أو تعذّر إنشاء الحساب' : 'Username already taken or sign-up failed');
+      setBusy(false);
+    }
   };
 
   return (
@@ -408,14 +414,9 @@ function RegisterForm({
       <Header t={t} title={t('registerTitle')} sub={t('registerSubtitle')} />
 
       <div className="mt-8 space-y-5">
-        <Field label={t('fullName')}>
+        <Field label={isAr ? 'اسم المستخدم' : 'Username'}>
           <TextInput icon={User} value={v.name} onChange={(x) => set({ name: x })}
-            placeholder={t('fullNamePlaceholder')} error={touched ? errors.name : null} />
-        </Field>
-
-        <Field label={t('email')}>
-          <TextInput icon={Mail} value={v.email} onChange={(x) => set({ email: x })} dir="ltr"
-            placeholder={t('emailPlaceholder')} error={touched ? errors.email : null} />
+            placeholder={isAr ? 'اسم الدخول' : 'Login username'} error={touched ? errors.name : null} />
         </Field>
 
         <div className="grid grid-cols-1 gap-5">
@@ -434,33 +435,91 @@ function RegisterForm({
             placeholder={t('createPasswordPlaceholder')} error={touched ? errors.password : null} onEnter={submit} />
         </Field>
 
+        <AnimatePresence>
+          {authError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="flex items-center gap-2.5 rounded-2xl border border-[#7c1a1a]/50 bg-[#2a1414]/40 px-4 py-3 text-[0.74rem] text-[#e7b4b4]"
+            >
+              <span className="grid h-4 w-4 flex-none place-items-center rounded-full border border-[#c98a8a]/50 text-[0.6rem]">!</span>
+              {authError}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <GoldButton onClick={submit} busy={busy} label={busy ? t('creating') : t('createAccount')} />
       </div>
     </div>
   );
 }
 
-/* ── forgot password ── */
+/* ── forgot password (phone + OTP) ── */
 function ForgotForm({
   t, onBack,
 }: { t: ReturnType<typeof useTranslations>; onBack: () => void }) {
-  const [email, setEmail] = useState('');
+  const locale = useLocale();
+  const isAr = locale === 'ar';
+  const [step, setStep] = useState<'phone' | 'reset'>('phone');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
-  const error = !email.trim() ? t('validation.emailRequired')
-    : EMAIL_RE.test(email) ? null : t('validation.emailInvalid');
+  const phoneErr = !phone.trim() ? (isAr ? 'رقم الهاتف مطلوب' : 'Phone required')
+    : isValidPhone(phone) ? null : (isAr ? 'رقم غير صحيح' : 'Invalid number');
+  const codeErr = code.trim().length === 6 ? null : (isAr ? 'الكود 6 أرقام' : 'Code is 6 digits');
+  const passErr = !password ? (isAr ? 'كلمة المرور مطلوبة' : 'Password required')
+    : password.length >= 8 ? null : (isAr ? '8 أحرف على الأقل' : 'At least 8 characters');
 
-  const submit = async () => {
-    if (error) { setTouched(true); return; }
-    setBusy(true);
-    await new Promise((r) => setTimeout(r, 900)); // simulate — wire to your API
-    setBusy(false);
-    setSent(true);
+  const apiErr = (e: string) => {
+    if (isAr) return e === 'too_soon' ? 'انتظر دقيقة قبل إعادة الإرسال'
+      : e === 'invalid_phone' ? 'رقم غير صحيح'
+      : e === 'wrong_code' ? 'الكود غير صحيح'
+      : e === 'too_many_attempts' ? 'محاولات كتير — اطلب كود جديد'
+      : e === 'invalid_or_expired' ? 'الكود غير صحيح أو انتهت صلاحيته'
+      : e === 'weak_password' ? 'كلمة المرور قصيرة (8 أحرف على الأقل)'
+      : 'حصل خطأ، حاول تاني';
+    return e === 'too_soon' ? 'Wait a minute before resending'
+      : e === 'invalid_phone' ? 'Invalid number'
+      : e === 'wrong_code' ? 'Wrong code'
+      : e === 'too_many_attempts' ? 'Too many attempts — request a new code'
+      : e === 'invalid_or_expired' ? 'Code is wrong or expired'
+      : e === 'weak_password' ? 'Password too short (min 8)'
+      : 'Something went wrong, try again';
   };
 
-  if (sent) {
+  const sendCode = async () => {
+    if (phoneErr) { setTouched(true); return; }
+    setBusy(true); setErr(null);
+    try {
+      const j = await fetch('/api/otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, purpose: 'reset' }),
+      }).then((r) => r.json());
+      if (!j.ok) { setErr(apiErr(j.error)); setBusy(false); return; }
+      setStep('reset'); setTouched(false);
+    } catch { setErr(apiErr('server_error')); }
+    setBusy(false);
+  };
+
+  const doReset = async () => {
+    if (codeErr || passErr) { setTouched(true); return; }
+    setBusy(true); setErr(null);
+    try {
+      const j = await fetch('/api/auth/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code: code.trim(), password }),
+      }).then((r) => r.json());
+      if (!j.ok) { setErr(apiErr(j.error)); setBusy(false); return; }
+      setDone(true);
+    } catch { setErr(apiErr('server_error')); }
+    setBusy(false);
+  };
+
+  if (done) {
     return (
       <div className="py-4 text-center">
         <motion.div
@@ -468,11 +527,13 @@ function ForgotForm({
           transition={{ duration: 0.6, ease: EASE }}
           className="mx-auto mb-6 grid h-16 w-16 place-items-center rounded-full border border-platinum/30 bg-platinum/[0.06]"
         >
-          <MailCheck className="h-7 w-7 text-platinum" strokeWidth={1.5} />
+          <ShieldCheck className="h-7 w-7 text-platinum" strokeWidth={1.5} />
         </motion.div>
-        <h2 className="font-display text-2xl font-light uppercase tracking-tight text-ivory">{t('forgotSuccessTitle')}</h2>
+        <h2 className="font-display text-2xl font-light uppercase tracking-tight text-ivory">
+          {isAr ? 'تم تغيير كلمة المرور' : 'Password changed'}
+        </h2>
         <p className="mx-auto mt-3 max-w-[34ch] text-sm leading-relaxed text-platinum/65">
-          {t('forgotSuccessCopy', { email })}
+          {isAr ? 'تقدر تسجّل الدخول الآن بكلمة المرور الجديدة.' : 'You can now sign in with your new password.'}
         </p>
         <button type="button" data-cursor="hover" onClick={onBack}
           className="mt-8 inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.18em] text-platinum/75 transition-colors hover:text-ivory">
@@ -485,13 +546,52 @@ function ForgotForm({
 
   return (
     <div>
-      <Header t={t} title={t('forgotTitle')} sub={t('forgotSubtitle')} />
+      <Header t={t} title={isAr ? 'استعادة الدخول' : 'Reset access'}
+        sub={step === 'phone'
+          ? (isAr ? 'اكتب رقم هاتفك ونبعتلك كود على واتساب.' : 'Enter your phone and we’ll send a WhatsApp code.')
+          : (isAr ? 'اكتب الكود اللي وصلك وكلمة المرور الجديدة.' : 'Enter the code you received and a new password.')} />
+
       <div className="mt-8 space-y-5">
-        <Field label={t('email')}>
-          <TextInput icon={Mail} value={email} onChange={setEmail} dir="ltr"
-            placeholder={t('emailPlaceholder')} error={touched ? error : null} onEnter={submit} />
-        </Field>
-        <GoldButton onClick={submit} busy={busy} label={busy ? t('forgotSending') : t('forgotSubmit')} />
+        {step === 'phone' ? (
+          <Field label={t('phone')}>
+            <PhoneField isAr={isAr} value={phone} onChange={setPhone}
+              placeholder={t('phonePlaceholder')} error={touched ? phoneErr : null} />
+          </Field>
+        ) : (
+          <>
+            <Field label={isAr ? 'كود التحقق' : 'Verification code'}>
+              <TextInput icon={ShieldCheck} value={code}
+                onChange={(x) => setCode(x.replace(/[^0-9]/g, '').slice(0, 6))} dir="ltr"
+                placeholder="••••••" error={touched ? codeErr : null} />
+            </Field>
+            <Field label={isAr ? 'كلمة المرور الجديدة' : 'New password'}>
+              <PasswordInput t={t} value={password} onChange={setPassword}
+                placeholder={t('createPasswordPlaceholder')} error={touched ? passErr : null} onEnter={doReset} />
+            </Field>
+            <button type="button" data-cursor="hover" onClick={sendCode} disabled={busy}
+              className="text-[0.7rem] tracking-wide text-platinum/70 transition-colors hover:text-ivory">
+              {isAr ? 'إعادة إرسال الكود' : 'Resend code'}
+            </button>
+          </>
+        )}
+
+        <AnimatePresence>
+          {err && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="flex items-center gap-2.5 rounded-2xl border border-[#7c1a1a]/50 bg-[#2a1414]/40 px-4 py-3 text-[0.74rem] text-[#e7b4b4]"
+            >
+              <span className="grid h-4 w-4 flex-none place-items-center rounded-full border border-[#c98a8a]/50 text-[0.6rem]">!</span>
+              {err}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <GoldButton onClick={step === 'phone' ? sendCode : doReset} busy={busy}
+          label={busy ? (isAr ? 'برجاء الانتظار…' : 'Please wait…')
+            : step === 'phone' ? (isAr ? 'إرسال الكود' : 'Send code')
+            : (isAr ? 'تعيين كلمة المرور' : 'Set password')} />
+
         <button type="button" data-cursor="hover" onClick={onBack}
           className="mx-auto flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.18em] text-platinum/70 transition-colors hover:text-ivory">
           <ArrowLeft className="reversible-icon h-3.5 w-3.5" strokeWidth={1.8} />

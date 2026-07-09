@@ -15,13 +15,14 @@ import { getLocale } from "next-intl/server";
 import { pick } from "@/lib/admin/i18n-json";
 import type { Locale } from "@/lib/i18n";
 import NewBookingClient from "./new-booking-client";
+import { requirePermission } from "@/lib/admin/guard";
 
 export const dynamic = "force-dynamic";
 
 type SizeCode = "small" | "medium" | "large";
 
 export default async function AdminNewBookingPage() {
-  await requireAdmin();
+  await requirePermission("bookings_new");
   const locale = (await getLocale()) as Locale;
 
   // ── الماركات + الموديلات + حجم كل موديل ──
