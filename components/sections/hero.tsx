@@ -61,8 +61,10 @@ export function Hero({ media, slides = [] }: { media?: HeroMedia; slides?: HeroS
   const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
   const [awake, setAwake] = useState(false);            // بعد الـ idle: نسمح برندرة باقي السلايدات
   const [mounted, setMounted] = useState<Set<number>>(new Set([0]));
-  const [paused, setPaused] = useState(false);
+  const [hoverPaused, setHoverPaused] = useState(false);   // hover على شريط المؤشرات فقط
+  const [tabVisible, setTabVisible] = useState(true);
   const [inView, setInView] = useState(true);
+  const [tick, setTick] = useState(0);                      // يعيد تصفير عدّاد الأوتوبلاي
 
   /* ── الجهاز ── */
   useEffect(() => {
@@ -71,6 +73,14 @@ export function Hero({ media, slides = [] }: { media?: HeroMedia; slides?: HeroS
     const on = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
+  }, []);
+
+  /* ── التاب ظاهر؟ (يوقف الأوتوبلاي ويرجّعه — مش يقتله) ── */
+  useEffect(() => {
+    const on = () => setTabVisible(!document.hidden);
+    on();
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
   }, []);
 
   /* ── إيقاظ السلايدر بعد ما الصفحة تهدأ (حماية الـ LCP) ── */
@@ -108,17 +118,24 @@ export function Hero({ media, slides = [] }: { media?: HeroMedia; slides?: HeroS
     return () => io.disconnect();
   }, [hasSlider]);
 
-  /* ── الأوتوبلاي ── */
-  const running = hasSlider && awake && inView && !paused && !reduce;
+  /* ── الأوتوبلاي ──
+   * مهم: مفيش hover-pause على الـ section — الهيرو بياخد الشاشة كلها (100svh)،
+   * فالماوس عملياً دايمًا جواه على الديسكتوب وكان بيقفل الأوتوبلاي للأبد.
+   * الـ pause اتنقل لشريط المؤشرات بس.
+   */
+  const running = hasSlider && awake && inView && tabVisible && !hoverPaused && !reduce;
+
   useEffect(() => {
     if (!running) return;
     const id = window.setInterval(() => setIndex((i) => (i + 1) % count), AUTOPLAY_MS);
-    const onVis = () => { if (document.hidden) clearInterval(id); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
-  }, [running, count, index]);
+    return () => clearInterval(id);
+  }, [running, count, index, tick]);   // tick → إعادة تصفير التايمر بعد تنقل يدوي
 
-  const goTo = useCallback((i: number) => setIndex(((i % count) + count) % count), [count]);
+  /** تنقّل يدوي: يروح للسلايد ويصفّر عدّاد الأوتوبلاي من الأول. */
+  const goTo = useCallback((i: number) => {
+    setIndex(((i % count) + count) % count);
+    setTick((t) => t + 1);
+  }, [count]);
 
   /* ── سحب بالإصبع + كيبورد ── */
   const touchX = useRef(0);
@@ -149,8 +166,6 @@ export function Hero({ media, slides = [] }: { media?: HeroMedia; slides?: HeroS
       ref={rootRef}
       data-section="hero"
       className="relative h-[100svh] w-full overflow-hidden bg-obsidian"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       aria-roledescription={hasSlider ? 'carousel' : undefined}
@@ -292,7 +307,13 @@ export function Hero({ media, slides = [] }: { media?: HeroMedia; slides?: HeroS
       {/* ══════════════ المؤشرات ══════════════ */}
       {hasSlider && (
         <div className="absolute inset-x-0 bottom-9 z-40 flex justify-center px-6">
-          <div className="flex items-center gap-2.5" role="tablist" aria-label="Hero slides">
+          <div
+            className="pointer-events-auto flex items-center gap-2.5"
+            role="tablist"
+            aria-label="Hero slides"
+            onMouseEnter={() => setHoverPaused(true)}
+            onMouseLeave={() => setHoverPaused(false)}
+          >
             {deck.map((s, i) => (
               <button
                 key={s.id}
