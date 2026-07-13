@@ -1,5 +1,11 @@
 import { query } from "@/lib/db";
 
+/* ══════════════════════════════════════════════════════════════════════
+ *  lib/hero-data.ts — ABH Auto
+ *  استبدال كامل للملف.
+ *  getHeroData بقيت زي ما هي بالظبط — الجديد هو getHeroSlides في الآخر.
+ * ══════════════════════════════════════════════════════════════════════ */
+
 /** مصدر فيديو واحد بصيغتين (WebM أخف، وMP4 توافق أوسع). */
 export interface HeroVideoSources {
   /** WebM (VP9) — أخف 30-50%، يُفضّله المتصفح لو دعمه. */
@@ -84,5 +90,59 @@ export async function getHeroData(): Promise<HeroData> {
   } catch (err) {
     console.error("getHeroData failed:", err);
     return FALLBACK;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  ⬇︎ جديد — سلايدر الهيرو
+ * ══════════════════════════════════════════════════════════════════════ */
+
+export interface HeroSlide {
+  id: number;
+  /** landscape — يُستخدم على ≥768px */
+  imageDesktop: string;
+  /** portrait — يُستخدم على <768px (يقع على الديسكتوب لو فاضي) */
+  imageMobile: string;
+  alt: { ar: string; en: string };
+  /** لينك اختياري عند الضغط على السلايد */
+  href: string | null;
+}
+
+/**
+ * يقرأ سلايدات الهيرو مرتّبة (hero_slides).
+ *
+ * السلايد رقم 0 (sort = 0) هي عنصر الـ LCP — الكومبوننت يرندرها وحدها
+ * في الـ HTML الأولي بـ priority، وباقي السلايدات لا تدخل الـ DOM إلا
+ * بعد requestIdleCallback.
+ *
+ * آمن ضد غياب الجدول (قبل تشغيل الميجريشن) → يرجّع [] فيشتغل الهيرو
+ * كصورة واحدة تمامًا زي ما هو دلوقتي.
+ */
+export async function getHeroSlides(): Promise<HeroSlide[]> {
+  try {
+    const rows = await query<{
+      id: number;
+      image_desktop: string;
+      image_mobile: string | null;
+      alt: { ar?: string; en?: string } | null;
+      href: string | null;
+    }>(
+      `SELECT id, image_desktop, image_mobile, alt, href
+         FROM hero_slides
+        WHERE is_active = true
+        ORDER BY sort ASC, id ASC
+        LIMIT 12`
+    );
+
+    return rows.map((r) => ({
+      id: r.id,
+      imageDesktop: r.image_desktop,
+      imageMobile: clean(r.image_mobile) ?? r.image_desktop,
+      alt: { ar: r.alt?.ar ?? "", en: r.alt?.en ?? "" },
+      href: clean(r.href),
+    }));
+  } catch (err) {
+    console.error("getHeroSlides failed:", err);
+    return [];
   }
 }

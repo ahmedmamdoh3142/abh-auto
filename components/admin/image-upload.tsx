@@ -11,9 +11,9 @@ import React, { useRef, useState } from "react";
 import { Ic, useToast } from "@/components/admin/ui";
 
 export default function ImageUpload({
-  value, onChange, nameHint = "", isAr = true,
+  value, onChange, nameHint = "", isAr = true, folder = "services-img",
 }: {
-  value: string; onChange: (path: string) => void; nameHint?: string; isAr?: boolean;
+  value: string; onChange: (path: string) => void; nameHint?: string; isAr?: boolean; folder?: string;
 }) {
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const toast = useToast();
@@ -34,12 +34,13 @@ export default function ImageUpload({
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("folder", folder);
       if (nameHint) fd.append("name", nameHint);
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!data.ok || !data.path) throw new Error(data.error || "fail");
       // لو فيه صورة قديمة مرفوعة عندنا، نمسحها من السيرفر
-      if (value && value.startsWith("/services-img/") && value !== data.path) {
+      if (value && value.startsWith(`/${folder}/`) && value !== data.path) {
         fetch(`/api/admin/upload?path=${encodeURIComponent(value)}`, { method: "DELETE" }).catch(() => {});
       }
       onChange(data.path);
@@ -55,7 +56,7 @@ export default function ImageUpload({
   }
 
   function remove() {
-    if (value && value.startsWith("/services-img/")) {
+    if (value && value.startsWith(`/${folder}/`)) {
       fetch(`/api/admin/upload?path=${encodeURIComponent(value)}`, { method: "DELETE" }).catch(() => {});
     }
     onChange("");

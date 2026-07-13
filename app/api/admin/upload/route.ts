@@ -22,7 +22,7 @@ import { promises as fs } from "fs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ALLOWED_FOLDERS = new Set(["services-img", "payouts-img"]);
+const ALLOWED_FOLDERS = new Set(["services-img", "payouts-img", "inspections", "signatures"]);
 
 // مجلد التخزين الثابت خارج المشروع (يطابق ما هيّأناه على السيرفر + nginx alias).
 // قابل للتعديل عبر متغيّر البيئة UPLOAD_DIR لو احتجت مسارًا مختلفًا.
@@ -86,10 +86,16 @@ export async function POST(request: Request) {
 
     try {
       const sharp = (await import("sharp")).default;
+      // صور الفحص كثيرة → ضغط أقوى (أبعاد أصغر + جودة أقل) لتوفير المساحة.
+      // التوقيعات → أبعاد صغيرة وجودة كافية للخط. الخدمات → جودة عالية كالمعتاد.
+      const preset =
+        folder === "inspections" ? { dim: 1280, q: 62 } :
+        folder === "signatures"  ? { dim: 700,  q: 80 } :
+                                   { dim: 1600, q: 82 };
       outBuf = await sharp(bytes)
         .rotate()
-        .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 82 })
+        .resize(preset.dim, preset.dim, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: preset.q })
         .toBuffer();
       usedSharp = true;
     } catch {

@@ -5,7 +5,7 @@
  *   • يُخفى البانر الترويجي وقسم العروض تمامًا.
  *   • قسم الخدمات يعرض أسعار الشركة.
  *
- *   1. Hero          → first impression, identity
+ *   1. Hero          → first impression, identity  (سلايدر 9 صور)
  *   2. Stats         → credibility
  *   3. Promo Banner  → (مخفي للشركاء)
  *   4. Offers        → (مخفي للشركاء)
@@ -35,8 +35,8 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Hero owns the viewport */}
-      <Hero media={home.hero} />
+      {/* Hero owns the viewport — سلايد ٠ هي عنصر الـ LCP */}
+      <Hero media={home.hero} slides={home.heroSlides} />
 
       {/* Stats live in the cool steel zone */}
       <div className="bg-zone-cool">

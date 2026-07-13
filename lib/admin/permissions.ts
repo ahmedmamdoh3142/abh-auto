@@ -13,6 +13,7 @@ export type PermKey =
   | "content"
   | "services"
   | "price_files"
+  | "inventory"
   | "promos"
   | "offers";
 
@@ -35,6 +36,7 @@ export const ADMIN_PAGES: AdminPage[] = [
   { key: "services",     href: "/admin/services",      ar: "الخدمات والأسعار", en: "Services & pricing", group: { ar: "محتوى الموقع", en: "Site content" } },
   { key: "price_files",  href: "/admin/price-files",   ar: "ملفات الأسعار",   en: "Price files",        group: { ar: "محتوى الموقع", en: "Site content" } },
   { key: "promos",       href: "/admin/promos",        ar: "أكواد الخصم",     en: "Promo codes",        group: { ar: "محتوى الموقع", en: "Site content" } },
+  { key: "inventory",    href: "/admin/inventory",     ar: "المخازن",         en: "Inventory",          group: { ar: "التشغيل", en: "Operations" } },
   { key: "offers",       href: "/admin/offers",        ar: "العروض والولاء",  en: "Offers & loyalty",   group: { ar: "محتوى الموقع", en: "Site content" } },
 ];
 

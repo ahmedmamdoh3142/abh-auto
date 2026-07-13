@@ -17,6 +17,7 @@ const ICON_MAP: Record<PermKey, (x: any) => React.ReactNode> = {
   overview: Ic.grid, bookings: Ic.calendar, bookings_new: Ic.plus,
   partners: Ic.trending, accounts: Ic.users, content: Ic.type,
   services: Ic.sliders, price_files: Ic.calendar, promos: Ic.clock, offers: Ic.sparkle,
+  inventory: Ic.grid,
 };
 
 export default function AdminShell({

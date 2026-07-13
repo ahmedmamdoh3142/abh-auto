@@ -1,6 +1,6 @@
 ﻿import { query } from "@/lib/db";
 import type { Locale } from "@/lib/locales";
-import { getHeroData } from "@/lib/hero-data";
+import { getHeroData, getHeroSlides } from "@/lib/hero-data";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 
 async function block(key: string, locale: Locale) {
@@ -18,6 +18,9 @@ async function block(key: string, locale: Locale) {
  *
  * صور الكروت (سكشن الخدمات + العروض): من العمود الموحّد services.card_image.
  * لو card_image فارغ → نمرّر "" (الواجهة تعرض placeholder، ولا ترجع لـ image).
+ *
+ * heroSlides: سلايدات الهيرو من جدول hero_slides. لو الجدول غير موجود
+ * (قبل الميجريشن) ترجع [] والهيرو يشتغل كصورة واحدة زي الأول.
  */
 export async function getHomeData(locale: Locale, userId?: string | null) {
   const partner = await getPartnerForUser(userId);
@@ -25,10 +28,12 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
 
   const [
     hero,
+    heroSlides,
     stats, discountedRaw, projects, testimonials, marquee, imagesRow,
     bannerCopy, bannerMetaRow, offersText, servicesText, servicesRaw, whyText, projectsText, testimonialsText,
   ] = await Promise.all([
     getHeroData(),
+    getHeroSlides(),
 
     query(`SELECT code, value, suffix, label->>$1 AS label FROM stats ORDER BY sort`, [locale]),
 
@@ -128,6 +133,7 @@ export async function getHomeData(locale: Locale, userId?: string | null) {
 
   return {
     hero,
+    heroSlides,
     stats,
     offers: discounted.slice(0, 3),
     offersAll: discounted,

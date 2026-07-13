@@ -54,6 +54,13 @@ const STAGES = [
   { ar: "فحص الجودة",    en: "Quality check" },
   { ar: "جاهزة للتسليم", en: "Ready" },
 ];
+/* مراحل أمر العمل (work_stage) — أدقّ من status، تعكس مكان السيارة في الورشة. */
+const WORK_STAGE: Record<string, { ar: string; en: string; color: string }> = {
+  received:      { ar: "مُستلمة",        en: "Received",      color: "#cbcdcd" },
+  in_service:    { ar: "قيد التشغيل",    en: "In service",    color: "#f5993d" },
+  quality_check: { ar: "فحص الجودة",     en: "Quality check", color: "#6ba8f5" },
+  ready:         { ar: "جاهزة للتسليم",  en: "Ready",         color: "#3ecd8e" },
+};
 const PAY_METHOD: Record<string, { ar: string; en: string }> = {
   cash: { ar: "نقدًا بالفرع", en: "Cash at branch" },
   applePay: { ar: "Apple Pay", en: "Apple Pay" },
@@ -196,15 +203,18 @@ function giftChipStyle(): React.CSSProperties {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConfirmPay, onCall, onWhats, onPrint }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onAdvance, onConfirmPay, onCall, onWhats, onPrint }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
   const isUpcoming = b.status === "upcoming";
   const isCancelled = b.status === "cancelled";
   const isCompleted = b.status === "completed";
-  // زرار «تقدّم» ظاهر طول ما الحجز مش ملغي/مكتمل. «ابدأ» لو لسه قادم.
-  const canAdvance = !isCancelled && !isCompleted;
+  const needsWorkOrder = !b.workOrderNo && !isCancelled && !isCompleted; // لسه ما اتستلمش
+  // مرحلة أمر العمل (أدقّ من status) — تُعرض بدلها لو موجودة.
+  const ws = b.workStage && !isCancelled && !isCompleted ? WORK_STAGE[b.workStage] : null;
+  // زرار «تقدّم» اليدوي: بس لو مفيش أمر عمل (النظام الجديد بيتحكّم في المراحل تلقائيًا).
+  const canAdvance = !isCancelled && !isCompleted && !b.workOrderNo;
   const [hover, setHover] = useState(false);
   const touch = useMediaQuery("(hover: none)");
   const reveal = hover || touch;
@@ -216,9 +226,9 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       onClick={() => onOpen(b.id)}
       style={{
         position: "relative", display: "flex", flexDirection: "column", minHeight: touch ? 0 : 392, borderRadius: 24, overflow: "hidden", cursor: "pointer",
-        border: `1.5px solid ${reveal ? st.color : st.soft}`,
+        border: needsWorkOrder ? `1.5px dashed ${reveal ? "#e8cf9a" : "rgba(232,207,154,.55)"}` : `1.5px solid ${reveal ? (ws ? ws.color : st.color) : (ws ? `${ws.color}80` : st.soft)}`,
         background: "#0b0c0e",
-        boxShadow: hover ? `0 30px 70px -28px ${st.glow}, 0 0 0 1px ${st.glow}` : "0 14px 36px -22px rgba(0,0,0,.7)",
+        boxShadow: hover ? `0 30px 70px -28px ${ws ? `${ws.color}52` : st.glow}, 0 0 0 1px ${ws ? `${ws.color}52` : st.glow}` : "0 14px 36px -22px rgba(0,0,0,.7)",
         transform: hover && !touch ? "translateY(-5px)" : "none",
         transition: "transform .5s var(--abh-ease), box-shadow .5s var(--abh-ease), border-color .4s var(--abh-ease)",
         animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both`,
@@ -227,14 +237,14 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
       {/* صورة السيارة خلفية الكرت بالكامل */}
       <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.96) 8%, rgba(8,9,11,.5) 44%, rgba(8,9,11,.1) 72%, rgba(8,9,11,.35) 100%)" }} />
-      <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${st.color}, transparent)`, zIndex: 4 }} />
+      <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${ws ? ws.color : st.color}, transparent)`, zIndex: 4 }} />
       {/* أعلى: شارات */}
       <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, padding: 16, zIndex: 2 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, padding: "6px 12px", fontSize: 10.5, letterSpacing: ".08em", fontWeight: 600, color: st.color, background: "rgba(0,0,0,.55)", border: `1px solid ${st.color}`, backdropFilter: "blur(8px)" }}>
-          {isActive
-            ? <span style={{ position: "relative", display: "flex", height: 7, width: 7 }}><span style={{ position: "absolute", inset: 0, borderRadius: 999, background: st.color, opacity: .7, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} /><span style={{ position: "relative", height: 7, width: 7, borderRadius: 999, background: st.color }} /></span>
-            : <span style={{ height: 7, width: 7, borderRadius: 999, background: st.color }} />}
-          {isAr ? st.ar : st.en}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, padding: "6px 12px", fontSize: 10.5, letterSpacing: ".08em", fontWeight: 600, color: ws ? ws.color : st.color, background: "rgba(0,0,0,.55)", border: `1px solid ${ws ? ws.color : st.color}`, backdropFilter: "blur(8px)" }}>
+          {(ws?.color === "#f5993d" || (!ws && isActive))
+            ? <span style={{ position: "relative", display: "flex", height: 7, width: 7 }}><span style={{ position: "absolute", inset: 0, borderRadius: 999, background: ws ? ws.color : st.color, opacity: .7, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} /><span style={{ position: "relative", height: 7, width: 7, borderRadius: 999, background: ws ? ws.color : st.color }} /></span>
+            : <span style={{ height: 7, width: 7, borderRadius: 999, background: ws ? ws.color : st.color }} />}
+          {ws ? (isAr ? ws.ar : ws.en) : (isAr ? st.ar : st.en)}
         </span>
         <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
       </div>
@@ -285,7 +295,7 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
           </div>
         )}
         {/* تقدّم */}
-        {isActive && (
+        {isActive && !ws && (
           <div style={{ marginBottom: 11 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(230,230,230,.9)", marginBottom: 5 }}>
               <span>{isAr ? STAGES[Math.min(b.stage, 3)].ar : STAGES[Math.min(b.stage, 3)].en}</span><span>{Math.min(b.stage + 1, 4)}/{STAGES.length}</span>
@@ -308,13 +318,41 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onAdvance, onConf
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
           {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
-          {/* زرار «تقدّم» ظاهر من الأول — «ابدأ» لو الحجز لسه قادم (يبدأ أول مرحلة) */}
+          {/* لسه ما اتستلمش → زرّ الاستلام */}
+          {needsWorkOrder && (
+            <button onClick={(e) => stop(e, () => onReceive(b.id))} style={qBtn(true)}>
+              {I.play(14)}{isAr ? "استلام السيارة" : "Receive"}
+            </button>
+          )}
+          {/* اتستلم بس لسه ما اتخصّصش → زرّ أمر العمل (التخصيص) */}
+          {b.workOrderNo && b.workStage === "received" && !isCancelled && !isCompleted && (
+            <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(true)}>
+              {Ic.sliders({ s: 14 })}{isAr ? "أمر العمل" : "Work order"}
+            </button>
+          )}
+          {/* قيد التشغيل / فحص الجودة / جاهزة → زرّ متابعة (بنص حسب المرحلة) */}
+          {["in_service", "quality_check", "ready"].includes(b.workStage) && !isCancelled && (
+            <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(b.workStage === "quality_check")}>
+              {Ic.sliders({ s: 14 })}
+              {b.workStage === "quality_check" ? (isAr ? "فحص الجودة" : "Quality check")
+                : b.workStage === "ready" ? (isAr ? "التسليم" : "Deliver")
+                : (isAr ? "متابعة العمل" : "Track")}
+            </button>
+          )}
+          {/* حجوزات قديمة بدون أمر عمل → زرّ «تقدّم» اليدوي */}
           {canAdvance && (
             <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>
               {isUpcoming ? I.play(14) : Ic.check({ s: 14 })}
               {isUpcoming ? (isAr ? "ابدأ" : "Start") : (isAr ? "تقدّم" : "Advance")}
             </button>
           )}
+          {/* حجز مكتمل بأمر عمل → التقرير النهائي */}
+          {isCompleted && b.workOrderNo && (
+            <button onClick={(e) => stop(e, () => onReport(b.id))} style={qBtn(true)}>
+              {I.pdf(14)}{isAr ? "التقرير النهائي" : "Final report"}
+            </button>
+          )}
+          <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
           <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
           {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
           {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
@@ -557,6 +595,9 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const toast = useToast();
   const [list, setList] = useState(initial);
   const router = useRouter();
+  const goReceive = (id: string) => router.push(`/admin/bookings/${id}`);
+  const goWorkOrder = (id: string) => router.push(`/admin/bookings/${id}/work-order`);
+  const goReport = (id: string) => router.push(`/admin/bookings/${id}/report`);
   // أول ما الصفحة تفتح: هات أحدث الحجوزات من السيرفر (يتخطّى كاش الراوتر)
   useEffect(() => { router.refresh(); }, [router]);
   // زامن القائمة مع بيانات السيرفر كل ما توصل نسخة جديدة
@@ -574,11 +615,18 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     const d = new Date(iso); if (isNaN(+d)) return iso;
     return d.toLocaleDateString(isAr ? "ar-EG" : "en-US", { weekday: "short", day: "numeric", month: "long" });
   };
-  const tabs: [string, string][] = [["all", T("الكل", "All")], ["upcoming", T("قادمة", "Upcoming")], ["active", T("قيد التنفيذ", "In progress")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
+  const tabs: [string, string][] = [["all", T("الكل", "All")], ["needs_intake", T("بانتظار الاستلام", "Needs intake")], ["needs_assign", T("بانتظار التخصيص", "Needs assign")], ["in_service", T("قيد التشغيل", "In service")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
-    for (const [k] of tabs) if (k !== "all" && k !== "unpaid") c[k] = list.filter((b) => b.status === k).length;
     c.unpaid = list.filter((b) => b.payment !== "paid" && b.status !== "cancelled").length;
+    // بانتظار الاستلام = لسه ملوش رقم أمر عمل (ما اتستلمش)
+    c.needs_intake = list.filter((b) => !b.workOrderNo && b.status !== "cancelled" && b.status !== "completed").length;
+    // بانتظار التخصيص = اتستلم (عنده WO) بس لسه ما بدأش التشغيل
+    c.needs_assign = list.filter((b) => b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed").length;
+    // قيد التشغيل = بدأ الشغل
+    c.in_service = list.filter((b) => ["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled").length;
+    c.completed = list.filter((b) => b.status === "completed").length;
+    c.cancelled = list.filter((b) => b.status === "cancelled").length;
     return c;
   }, [list]);
 
@@ -589,6 +637,9 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     let r = list.filter((b) => {
       const matchTab = tab === "all" ? true
         : tab === "unpaid" ? (b.payment !== "paid" && b.status !== "cancelled")
+        : tab === "needs_intake" ? (!b.workOrderNo && b.status !== "cancelled" && b.status !== "completed")
+        : tab === "needs_assign" ? (b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed")
+        : tab === "in_service" ? (["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled")
         : b.status === tab;
       const matchQ = q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase());
       return matchTab && matchQ;
@@ -705,7 +756,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} />
           ))}
         </div>
       ) : (

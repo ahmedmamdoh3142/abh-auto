@@ -15,7 +15,7 @@ import { getAdminOrNull } from "@/lib/admin/guard";
 import { hashPassword } from "@/lib/auth";
 import { ALL_PERM_KEYS } from "@/lib/admin/permissions";
 
-const ROLES = ["member", "staff", "admin", "partner"] as const;
+const ROLES = ["member", "staff", "admin", "technician", "partner"] as const;
 type Role = (typeof ROLES)[number];
 
 function genInternalEmail(name: string): string {
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     const role: Role = ROLES.includes(b.role) ? b.role : "member";
     const password = String(b.password ?? "");
     const companyName = b.companyName ? String(b.companyName).trim() : null;
-    const jobTitle = (role === "admin" || role === "staff") && b.jobTitle ? String(b.jobTitle).trim() : null;
+    const jobTitle = (role === "admin" || role === "staff" || role === "technician") && b.jobTitle ? String(b.jobTitle).trim() : null;
     const permissions = sanitizePermissions(b.permissions, role);
 
     if (!name) return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 400 });

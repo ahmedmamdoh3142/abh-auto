@@ -17,6 +17,7 @@ export default function HideOnAdmin({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   // بيشيل البريفكس بتاع اللغة (/ar/admin أو /en/admin) ويتأكد من /admin
   const isAdmin = /(^|\/)admin(\/|$)/.test(pathname || "");
-  if (isAdmin) return null;
+  const isMyWork = /(^|\/)my-work(\/|$)/.test(pathname || "");
+  if (isAdmin || isMyWork) return null;
   return <>{children}</>;
 }

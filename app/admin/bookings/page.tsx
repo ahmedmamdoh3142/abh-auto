@@ -19,7 +19,7 @@ export default async function BookingsPage() {
   const locale = (await getLocale()) as Locale;
 
   const rows = await query<any>(
-    `SELECT b.id, b.reference, b.status, b.stage,
+    `SELECT b.id, b.reference, b.status, b.stage, b.work_order_no, b.work_stage,
             b.vehicle_label, b.plate, b.brand_id, b.size_code, b.color_code, b.branch_code,
             b.scheduled_date, b.scheduled_time,
             b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
@@ -68,6 +68,8 @@ export default async function BookingsPage() {
     reference: b.reference,
     status: b.status,
     stage: b.stage ?? 0,
+    workOrderNo: b.work_order_no ?? null,
+    workStage: b.work_stage || null,
     vehicle: b.vehicle_label || "—",
     plate: b.plate || "",
     brandId: b.brand_id || "",

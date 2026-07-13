@@ -33,7 +33,7 @@ const PHONE_FIX_CSS = `
 .abh-phone-wrap input{ min-width:0 !important; }
 `;
 
-type Role = "member" | "staff" | "admin" | "partner";
+type Role = "member" | "staff" | "admin" | "partner" | "technician";
 type Account = {
   id: string; name: string; email: string; phone: string; city: string;
   role: Role; since: string | null;
@@ -47,6 +47,7 @@ const ROLE_META: Record<Role, { ar: string; en: string; tone: any }> = {
   staff: { ar: "موظّف", en: "Staff", tone: "platinum" },
   admin: { ar: "مدير", en: "Admin", tone: "warn" },
   partner: { ar: "شركة", en: "Partner", tone: "ok" },
+  technician: { ar: "فني", en: "Technician", tone: "platinum" },
 };
 
 export default function AccountsClient({ accounts: initial, cities, locale }: {
@@ -65,7 +66,7 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
 
   // أعداد كل دور (تُحسب من القائمة الكاملة، لا تتأثر بالبحث الحالي).
   const counts = useMemo(() => {
-    const c: Record<Role | "all", number> = { all: list.length, member: 0, staff: 0, admin: 0, partner: 0 };
+    const c: Record<Role | "all", number> = { all: list.length, member: 0, staff: 0, admin: 0, partner: 0, technician: 0 };
     for (const a of list) c[a.role] = (c[a.role] ?? 0) + 1;
     return c;
   }, [list]);
@@ -76,6 +77,7 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
     { id: "member", label: T("العملاء", "Members") },
     { id: "admin", label: T("المدراء", "Admins") },
     { id: "staff", label: T("الموظّفون", "Staff") },
+    { id: "technician", label: T("الفنيون", "Technicians") },
   ];
 
   const shown = useMemo(
@@ -166,7 +168,7 @@ export default function AccountsClient({ accounts: initial, cities, locale }: {
           {shown.map((a, i) => {
             const rm = ROLE_META[a.role];
             const contactLine = a.email && !a.email.endsWith("@abh-auto.local") ? a.email : (a.phone || "—");
-            const isTeam = a.role === "admin" || a.role === "staff";
+            const isTeam = a.role === "admin" || a.role === "staff" || a.role === "technician";
             return (
               <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent" }}>
                 <span style={{ display: "grid", placeItems: "center", height: 42, width: 42, borderRadius: 999, flexShrink: 0, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02))" }}>
@@ -228,7 +230,9 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
   const set = (p: Partial<typeof f>) => setF((s) => ({ ...s, ...p }));
   const [touched, setTouched] = useState(false);
   const isPartner = f.role === "partner";
-  const isTeam = f.role === "admin" || f.role === "staff"; // من يملك صلاحيات
+  const isTeam = f.role === "admin" || f.role === "staff"; // من يملك صلاحيات صفحات
+  const isTech = f.role === "technician";                  // فني: مسمّى بلا صلاحيات
+  const hasJobTitle = isTeam || isTech;                    // من يظهر له حقل المسمّى
   const lockedSuper = !!acc?.isSuperAdmin; // المدير الأعلى: لا نعرض/نعدّل صلاحياته
 
   const passOk = isNew ? f.password.length >= 8 : (f.password === "" || f.password.length >= 8);
@@ -267,6 +271,7 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
               { value: "partner", label: T("شركة (أسعار خاصة)", "Partner (private pricing)") },
               { value: "staff", label: T("موظّف", "Staff") },
               { value: "admin", label: T("مدير", "Admin") },
+              { value: "technician", label: T("فني", "Technician") }
             ]} placeholder={T("اختر", "Select")} />
         </Field>
 
@@ -282,10 +287,10 @@ function AccountModal({ acc, cities, isAr, T, onClose, onSave }: {
           <Input value={f.name} onChange={(e: any) => set({ name: e.target.value })} placeholder={T("اسم الدخول", "Login username")} style={inputStyle} />
         </Field>
 
-        {/* المسمى الوظيفي — للموظّف/المدير فقط */}
-        {isTeam && (
-          <Field label={T("المسمى الوظيفي", "Job title")} hint={T("نص حر، مثال: مدير مالي، محاسب، خدمة عملاء.", "Free text, e.g. Finance Manager, Accountant.")}>
-            <Input value={f.jobTitle} onChange={(e: any) => set({ jobTitle: e.target.value })} placeholder={T("مثال: مدير مالي", "e.g. Finance Manager")} style={inputStyle} />
+        {/* المسمى الوظيفي — للموظّف/المدير/الفني */}
+        {hasJobTitle && (
+          <Field label={T("المسمى الوظيفي", "Job title")} hint={T("نص حر، مثال: مدير مالي، فني حماية، خدمة عملاء.", "Free text, e.g. Finance Manager, PPF Technician.")}>
+            <Input value={f.jobTitle} onChange={(e: any) => set({ jobTitle: e.target.value })} placeholder={T("مثال: فني سيراميك", "e.g. Ceramic Technician")} style={inputStyle} />
           </Field>
         )}
 

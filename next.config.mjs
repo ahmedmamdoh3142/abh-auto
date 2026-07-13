@@ -8,7 +8,6 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
 
-  // يزيل console.* في الإنتاج (يقلّل JS التنفيذ)، مع إبقاء error/warn
   compiler: {
     removeConsole: { exclude: ['error', 'warn'] },
   },
@@ -21,7 +20,13 @@ const nextConfig = {
       { protocol: 'https', hostname: 'cdn.pixabay.com' },
     ],
     formats: ['image/webp'],
-    minimumCacheTTL: 60 * 60 * 24 * 7,
+
+    // ── التغيير الوحيد ──
+    // كان 7 أيام: كل أسبوع الـ optimizer بيعيد ضغط كل صورة من الأول،
+    // فأول زائر بعد انتهاء الكاش بيدفع تكلفة الضغط → يضرب الـ LCP.
+    // سنة كاملة. لو غيّرت صورة → غيّر اسم الملف (discount-35-lab-v2.webp).
+    minimumCacheTTL: 31536000,
+
     deviceSizes: [640, 828, 1200, 1920],
     imageSizes: [16, 64, 256, 512],
   },
@@ -37,7 +42,6 @@ const nextConfig = {
       '@radix-ui/react-slot',
       'embla-carousel-react',
       'sonner',
-      // أُزيل '@react-three/drei' لأنه غير مثبّت في package.json
     ],
   },
 

@@ -18,18 +18,16 @@ declare global {
 
 function updateGoogleConsent(granted: boolean) {
   if (typeof window === "undefined") return;
-  window.dataLayer = window.dataLayer || [];
-  const gtag: (...args: any[]) => void = function () {
-    // eslint-disable-next-line prefer-rest-params
-    (window.dataLayer as any[]).push(arguments);
-  };
   const value = granted ? "granted" : "denied";
-  gtag("consent", "update", {
-    ad_storage: value,
-    ad_user_data: value,
-    ad_personalization: value,
-    analytics_storage: value,
-  });
+  // gtag متعرّف من سكربت الـconsent (beforeInteractive)
+  if (typeof window.gtag === "function") {
+    window.gtag("consent", "update", {
+      ad_storage: value,
+      ad_user_data: value,
+      ad_personalization: value,
+      analytics_storage: value,
+    });
+  }
 }
 
 export default function CookieConsent({ locale }: { locale?: string }) {

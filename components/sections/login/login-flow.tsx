@@ -203,7 +203,13 @@ function Console({ t }: { t: ReturnType<typeof useTranslations> }) {
 
   const onSuccess = useCallback((name: string) => {
     setWelcome({ name });
-    setTimeout(() => router.push(redirect), 1500);
+    setTimeout(async () => {
+      try {
+        const me = await fetch("/api/auth/me").then((r) => r.json());
+        if (me?.user?.role === "technician") { router.push("/my-work"); return; }
+      } catch {}
+      router.push(redirect);
+    }, 1500);
   }, [redirect, router]);
 
   return (

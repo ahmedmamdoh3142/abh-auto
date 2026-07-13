@@ -133,9 +133,13 @@ export async function PATCH(request: Request) {
     /* ── تحديث المرحلة (0..3). 3 = مكتمل، وأي مرحلة أثناء "قادم" تنقله لـ "قيد التنفيذ" ── */
     if (b.stage != null) {
       const stage = Math.max(0, Math.min(3, Number(b.stage)));
+      // نطابق work_stage الجديد مع الرقم القديم للحفاظ على الاتساق.
+      const WORK_STAGE = ["received", "in_service", "quality_check", "ready"] as const;
+      const workStage = WORK_STAGE[stage] ?? "received";
       const rows = await query<any>(
         `UPDATE bookings
             SET stage = $2,
+                work_stage = $3,
                 status = CASE
                   WHEN $2 >= 3 THEN 'completed'::booking_status
                   WHEN status = 'cancelled' THEN status
@@ -144,8 +148,8 @@ export async function PATCH(request: Request) {
                 END,
                 updated_at = now()
           WHERE id = $1
-        RETURNING status, stage`,
-        [id, stage]
+        RETURNING status, stage, work_stage`,
+        [id, stage, workStage]
       );
       if (!rows[0]) return bad("not_found", 404);
 
@@ -155,7 +159,14 @@ export async function PATCH(request: Request) {
         [id, rows[0].status, rows[0].stage, `تحديث مرحلة (${stage}) بواسطة ${admin.name}`]
       ).catch(() => {});
 
-      return NextResponse.json({ ok: true, booking: { status: rows[0].status, stage: rows[0].stage } });
+      // سجل الحدث الجديد كمان
+      await query(
+        `INSERT INTO work_order_events (booking_id, event, actor_id, meta)
+         VALUES ($1, 'stage_changed', $2, $3::jsonb)`,
+        [id, admin.id, JSON.stringify({ stage, workStage })]
+      ).catch(() => {});
+
+      return NextResponse.json({ ok: true, booking: { status: rows[0].status, stage: rows[0].stage, workStage: rows[0].work_stage } });
     }
 
     return bad("no_op");

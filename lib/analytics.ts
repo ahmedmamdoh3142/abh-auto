@@ -1,15 +1,15 @@
 /**
- * lib/analytics.ts — طبقة تتبّع مركزية لـ ABH Auto (GA4 عبر Google Tag Manager).
+ * lib/analytics.ts — طبقة تتبّع مركزية لـ ABH Auto (GA4 مباشر، بدون GTM).
  *
- * الفكرة: بدل ما تكتب gtag/dataLayer في كل مكان، تستدعي دالة واضحة (مثلاً
- * trackBeginCheckout) وهي اللي بتبعت الحدث للـ dataLayer بصيغة GA4 القياسية.
+ * تغيير مهم: بعد شيل GTM، الأحداث بتتبعت عبر gtag('event', ...) مباشرة بدل
+ * dataLayer.push({event}). كل دوال التتبّع محفوظة بنفس أسمائها وتوقيعاتها،
+ * فلا يحتاج أي ملف مستهلك أي تعديل.
  *
  * • الأحداث بتتبعت بس لو المستخدم وافق على الكوكيز (hasConsent).
  * • أسماء الأحداث القياسية لـ GA4 (page_view, begin_checkout, purchase…)
  *   عشان تشتغل مع التقارير الجاهزة، + أحداث مخصّصة لخطوات الحجز.
  */
 
-export const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID || "";   // مثال: GTM-XXXXXXX
 export const GA4_ID = process.env.NEXT_PUBLIC_GA4_ID || "";   // مثال: G-XXXXXXXXXX
 
 type DL = Record<string, any>;
@@ -20,6 +20,7 @@ export const CONSENT_KEY = "abh_cookie_consent";
 declare global {
   interface Window {
     dataLayer?: DL[];
+    gtag?: (...args: any[]) => void;
   }
 }
 
@@ -33,19 +34,31 @@ export function hasConsent(): boolean {
   }
 }
 
-/** دفع أي حدث للـ dataLayer (لو فيه موافقة فقط). */
+/** إرسال أي حدث لـGA4 عبر gtag (لو فيه موافقة فقط).
+ *  لو GA4 لسه ما حمّلش (lazyOnload)، الأحداث بتتجمّع في dataLayer وبتتبعت
+ *  تلقائيًا أول ما السكربت يشتغل — مفيش فقدان. */
 export function pushEvent(event: string, params: DL = {}): void {
   if (typeof window === "undefined") return;
+  if (!GA4_ID) return;
   if (!hasConsent()) return;
   window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push({ event, ...params });
+  if (typeof window.gtag === "function") {
+    window.gtag("event", event, params);
+  } else {
+    // fallback: gtag لسه ما اتعرّفش — ندفع بصيغة arguments اللي GA4 بيفهمها
+    (window.dataLayer as any[]).push(arguments.length ? ["event", event, params] : []);
+  }
 }
 
 /* ════════════════ أحداث عامّة ════════════════ */
 
 /** مشاهدة صفحة (تُستدعى عند تغيير المسار في App Router). */
 export function trackPageView(url: string, title?: string): void {
-  pushEvent("page_view", { page_path: url, page_title: title ?? (typeof document !== "undefined" ? document.title : "") });
+  pushEvent("page_view", {
+    page_path: url,
+    page_location: typeof window !== "undefined" ? window.location.href : "",
+    page_title: title ?? (typeof document !== "undefined" ? document.title : ""),
+  });
 }
 
 /* ════════════════ قمع الحجز (Booking Funnel) ════════════════
