@@ -235,7 +235,7 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
           whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text)
        VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
                $18,$19,$20,$21,
-               $22, CASE WHEN $22 IS NOT NULL THEN now() ELSE NULL END,
+               $22::uuid, CASE WHEN $22::uuid IS NOT NULL THEN now() ELSE NULL END,
                $23,$24,$25,$26,
                $27,$28,$29,
                $30, CASE WHEN $30 THEN now() ELSE NULL END, $31)
