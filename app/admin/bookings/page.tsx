@@ -2,7 +2,8 @@
  * app/admin/bookings/page.tsx — قائمة الحجوزات (SERVER).
  * تجلب الحجوزات + بيانات العميل (بيانات الحجز لها الأولوية، ثم المستخدم المسجّل)
  * + الدفع + الخدمات بالأسعار + علم «هدية» لكل عنصر + الفروع/الألوان + بيانات
- * كود الخصم (الكود/القيمة/النوع) لعرضها في التفاصيل، وتمرّرها لـ BookingsClient.
+ * كود الخصم (الكود/القيمة/النوع) + الخصم اليدوي (نسبة/مبلغ ثابت يطبّقه الموظف)
+ * لعرضها في التفاصيل، وتمرّرها لـ BookingsClient.
  */
 import { requireAdmin } from "@/lib/admin/guard";
 import { query } from "@/lib/db";
@@ -25,6 +26,9 @@ export default async function BookingsPage() {
             b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
             b.payment_method_code, b.payment_status, b.cancel_reason, b.notes,
             b.promo_code, b.promo_discount, b.promo_kind, b.invoice_number,
+            b.manual_discount_kind, b.manual_discount_value, b.manual_discount_amount, b.manual_discount_reason,
+            md.name AS manual_discount_by_name,
+            b.followup_status, b.followup_outcome, b.followup_closed_at,
             b.created_at,
             -- بيانات العميل المُدخَلة في الحجز لها الأولوية (تدعم «احجز لصاحبك»)،
             -- ونرجع لبيانات المستخدم المسجّل فقط لو الحجز ما فيهوش بيانات عميل.
@@ -46,9 +50,21 @@ export default async function BookingsPage() {
                        )
                      ) ORDER BY bi.id)
               FROM booking_items bi WHERE bi.booking_id = b.id
-            ), '[]') AS items
+            ), '[]') AS items,
+            -- سجل المتابعة (مكالمات/واتساب/ملاحظات الموظفين) — الأحدث أولًا
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'id', f.id,
+                       'channel', f.channel,
+                       'note', f.note,
+                       'author', f.author_name,
+                       'createdAt', f.created_at
+                     ) ORDER BY f.created_at DESC)
+              FROM booking_followups f WHERE f.booking_id = b.id
+            ), '[]') AS followups
      FROM bookings b
      LEFT JOIN users u ON u.id = b.user_id
+     LEFT JOIN users md ON md.id = b.manual_discount_by
      ORDER BY b.created_at DESC
      LIMIT 300`
   );
@@ -96,8 +112,25 @@ export default async function BookingsPage() {
     promoCode: b.promo_code || "",
     promoDiscount: Number(b.promo_discount) || 0,
     promoKind: b.promo_kind || "",
+    // (جديد) خصم يدوي يطبّقه الموظف — عند الإنشاء أو عند تأكيد الدفع لاحقًا.
+    manualDiscountKind: b.manual_discount_kind || "",
+    manualDiscountValue: b.manual_discount_value != null ? Number(b.manual_discount_value) : 0,
+    manualDiscountAmount: Number(b.manual_discount_amount) || 0,
+    manualDiscountReason: b.manual_discount_reason || "",
+    manualDiscountBy: b.manual_discount_by_name || "",
     // رقم الفاتورة المتسلسل (يُصرَف من الداتابيز عند تأكيد الدفع) — للطباعة.
     invoiceNumber: b.invoice_number != null ? Number(b.invoice_number) : undefined,
+    // نظام متابعة الحجز — حالة المتابعة + القرار النهائي + الخط الزمني.
+    followupStatus: b.followup_status || "none",
+    followupOutcome: b.followup_outcome || "",
+    followupClosedAt: b.followup_closed_at ? new Date(b.followup_closed_at).toISOString() : "",
+    followups: (Array.isArray(b.followups) ? b.followups : []).map((f: any) => ({
+      id: f.id,
+      channel: f.channel,
+      note: f.note,
+      author: f.author || "",
+      createdAt: f.createdAt,
+    })),
     services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,

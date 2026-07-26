@@ -240,7 +240,7 @@ function a4Html(b: InvoiceBooking, isAr: boolean, ccy: string) {
         <div style="font:300 20px Georgia,serif;letter-spacing:5px;color:#fff;">${proforma ? T("فاتورة مبدئية", "PRO-FORMA") : T("فاتورة ضريبية", "TAX INVOICE")}</div>
         ${inv.issued
           ? `<div dir="ltr" style="font-size:12px;color:#e4c979;margin-top:7px;text-align:${eA};font-weight:700;">${T("فاتورة", "Invoice")} #${esc(inv.no)}</div>`
-          : `<div style="font-size:10px;color:#e4c979;margin-top:7px;text-align:${eA};font-weight:700;">${T("غير ضريبية — تُصدر بعد الدفع", "Non-tax — issued after payment")}</div>`}
+          : `<div style="font-size:10px;color:#e4c979;margin-top:7px;text-align:${eA};font-weight:700;">${T(" ضريبية — تُصدر بعد الدفع", "Tax — issued after payment")}</div>`}
         <div dir="ltr" style="font-size:11px;color:#aeb2b7;margin-top:3px;text-align:${eA};">${T("حجز", "Booking")} ${esc(b.reference)}</div>
         <div style="font-size:10.5px;color:#8b8f95;margin-top:2px;">${T("بتاريخ", "Issued")} ${esc(issuedDate)}</div>
       </div>

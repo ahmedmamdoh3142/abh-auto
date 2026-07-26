@@ -1,18 +1,18 @@
 "use client";
 /**
- * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v4
+ * app/admin/bookings/bookings-client.tsx — لوحة الحجوزات (CLIENT) · v5
  *
- * • فلتر «بانتظار الدفع» مضاف للتابات (يفلتر حسب حالة الدفع لا حالة الحجز).
+ * • فلتر «بانتظار الدفع» و«قيد المتابعة» مضافين للتابات.
  * • نظام ألوان احترافي موحّد: مدفوع=أخضر، بانتظار الدفع=كهرماني فاقع، مُسترَد=رمادي.
  * • تصدير فاتورة PDF فاخرة بهوية ABH AUTO (شعار + ألوان الشركة) لكل حجز.
  * • عرضان: Grid (كروت سينمائية) + List (صفوف كثيفة) + بحث/فرز/CSV + مودال تفاصيل.
  *
- * (تعديل v4)
- *  • زرار «تقدّم» في الكرت ظاهر من أول لحظة طول ما الحجز مش ملغي/مكتمل. لو الحجز
- *    لسه «قادم» يظهر كـ«ابدأ» وأول ضغطة تبدأ العمل (المرحلة 0 = تم الاستلام) وتنقله
- *    «قيد التنفيذ» ويبان البروجرس. بعدها بيكمّل المراحل عادي.
+ * (v5)
+ *  • بروجرس بار المراحل في التفاصيل بقى للعرض فقط — يتحدّث أوتوماتيك حسب نسبة
+ *    إنجاز مهام أمر العمل، ومفيش أي تحكّم يدوي فيه من هنا (زرار «تقدّم» اتشال).
+ *  • نظام متابعة كامل لكل حجز (Timeline + قرار نهائي إجباري عند الإقفال).
+ *  • تأكيد الدفع بقى بيفتح مودال بيسمح بإضافة خصم يدوي (نسبة/مبلغ ثابت) لحظة الدفع.
  *  • الإلغاء + إعادة الجدولة يختفوا لما يتم الدفع ويبدأ العمل معًا (paid && active).
- *  • كود الخصم وتفاصيله (الكود + قيمة الخصم) يظهروا في مودال تفاصيل الحجز.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -96,9 +96,14 @@ const I = {
   sort: (s = 14) => mini(["M3 6h12", "M3 12h9", "M3 18h6", "M17 6v12", "M14 15l3 3 3-3"], s),
   download: (s = 14) => mini(["M12 3v12", "M7 11l5 5 5-5", "M5 21h14"], s),
   play: (s = 14) => mini(["M6 4l14 8-14 8z"], s),
+  bubble: (s = 14) => mini("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", s),
+  pencil: (s = 14) => mini(["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"], s),
 };
-/* ═════════════════ بايبلاين المراحل (تفاعلي) ═════════════════ */
-function StagePipeline({ stage, onSet, busy, isAr }: any) {
+
+/* ═════════════════ بروجرس بار المراحل — عرض فقط ═════════════════ */
+/* المراحل تتحدّث أوتوماتيك حسب نسبة إنجاز مهام أمر العمل (booking_tasks)،
+   ولذلك لا يوجد أي تحكّم يدوي هنا — هذا المكوّن للاطّلاع فقط. */
+function StagePipeline({ stage, isAr }: any) {
   const pct = (Math.max(0, Math.min(3, stage)) / (STAGES.length - 1)) * 100;
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.32)", padding: "18px 18px 14px" }}>
@@ -112,8 +117,7 @@ function StagePipeline({ stage, onSet, busy, isAr }: any) {
         {STAGES.map((s, i) => {
           const done = i < stage, act = i === stage;
           return (
-            <button key={i} onClick={() => !busy && onSet?.(i)} disabled={busy || !onSet}
-              style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 9, background: "none", border: "none", cursor: onSet && !busy ? "pointer" : "default", flex: 1 }}>
+            <div key={i} style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 9, flex: 1 }}>
               <span style={{
                 display: "grid", placeItems: "center", height: 28, width: 28, borderRadius: 999,
                 border: `1.5px solid ${act ? "#f5993d" : done ? "rgba(62,205,142,.6)" : "rgba(255,255,255,.14)"}`,
@@ -122,7 +126,7 @@ function StagePipeline({ stage, onSet, busy, isAr }: any) {
                 boxShadow: act ? "0 0 0 4px rgba(245,153,61,.16)" : "none", transition: "all .35s var(--abh-ease)",
               }}>{done ? <Ic.check s={13} sw={2.6} /> : <Ic.dot s={13} />}</span>
               <span style={{ fontSize: 9.5, textAlign: "center", maxWidth: 62, lineHeight: 1.3, color: act ? "var(--abh-ivory)" : done ? "var(--abh-platinum)" : "var(--abh-steel)" }}>{isAr ? s.ar : s.en}</span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -202,23 +206,48 @@ function giftChipStyle(): React.CSSProperties {
   return { borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.45)", display: "inline-flex", alignItems: "center", gap: 4 };
 }
 
+/* ───────── نظام المتابعة (Follow-up) ───────── */
+const FOLLOWUP_STATUS: Record<string, { ar: string; en: string; color: string }> = {
+  none:   { ar: "بدون متابعة",  en: "No follow-up",  color: "#66696e" },
+  open:   { ar: "قيد المتابعة", en: "Following up",  color: "#6ba8f5" },
+  closed: { ar: "مقفولة",       en: "Closed",         color: "#8a9099" },
+};
+const FOLLOWUP_OUTCOME: Record<string, { ar: string; en: string; color: string }> = {
+  confirmed:   { ar: "أكّد الحضور",       en: "Confirmed coming",   color: "#3ecd8e" },
+  not_coming:  { ar: "لن يأتي / اعتذر",   en: "Not coming",         color: "#ef5a4d" },
+  rescheduled: { ar: "طلب تأجيل",         en: "Requested reschedule", color: "#f5993d" },
+  no_response: { ar: "لا يوجد رد",        en: "No response",        color: "#9aa0a6" },
+  other:       { ar: "أخرى",               en: "Other",              color: "#cbcdcd" },
+};
+const FOLLOWUP_CHANNEL: Record<string, { ar: string; en: string; icon: (s?: number) => React.ReactNode }> = {
+  call:      { ar: "مكالمة",       en: "Call",      icon: I.phone },
+  whatsapp:  { ar: "واتساب",       en: "WhatsApp",  icon: I.whats },
+  sms:       { ar: "رسالة نصية",   en: "SMS",       icon: I.bubble },
+  in_person: { ar: "شخصيًا",       en: "In person", icon: I.user },
+  note:      { ar: "ملاحظة",       en: "Note",      icon: I.pencil },
+};
+function followupColorOf(b: any): string {
+  const status = b.followupStatus || "none";
+  if (status === "closed" && b.followupOutcome && FOLLOWUP_OUTCOME[b.followupOutcome]) return FOLLOWUP_OUTCOME[b.followupOutcome].color;
+  return FOLLOWUP_STATUS[status].color;
+}
+
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onAdvance, onConfirmPay, onCall, onWhats, onPrint }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onFollowUp }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
-  const isUpcoming = b.status === "upcoming";
   const isCancelled = b.status === "cancelled";
   const isCompleted = b.status === "completed";
   const needsWorkOrder = !b.workOrderNo && !isCancelled && !isCompleted; // لسه ما اتستلمش
   // مرحلة أمر العمل (أدقّ من status) — تُعرض بدلها لو موجودة.
   const ws = b.workStage && !isCancelled && !isCompleted ? WORK_STAGE[b.workStage] : null;
-  // زرار «تقدّم» اليدوي: بس لو مفيش أمر عمل (النظام الجديد بيتحكّم في المراحل تلقائيًا).
-  const canAdvance = !isCancelled && !isCompleted && !b.workOrderNo;
   const [hover, setHover] = useState(false);
   const touch = useMediaQuery("(hover: none)");
   const reveal = hover || touch;
   const stop = (e: any, fn: () => void) => { e.stopPropagation(); fn(); };
+  const followupStatus = b.followupStatus || "none";
+  const followupColor = followupColorOf(b);
 
   return (
     <div
@@ -246,6 +275,12 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
             : <span style={{ height: 7, width: 7, borderRadius: 999, background: ws ? ws.color : st.color }} />}
           {ws ? (isAr ? ws.ar : ws.en) : (isAr ? st.ar : st.en)}
         </span>
+        {followupStatus === "open" && (
+          <span title={isAr ? "قيد المتابعة" : "Follow-up in progress"} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 10px", fontSize: 10, color: followupColor, background: "rgba(0,0,0,.55)", border: `1px solid ${followupColor}`, backdropFilter: "blur(8px)" }}>
+            <span style={{ position: "relative", display: "flex", height: 6, width: 6 }}><span style={{ position: "absolute", inset: 0, borderRadius: 999, background: followupColor, opacity: .7, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} /><span style={{ position: "relative", height: 6, width: 6, borderRadius: 999, background: followupColor }} /></span>
+            {I.bubble(11)}
+          </span>
+        )}
         <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
       </div>
 
@@ -339,13 +374,6 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
                 : (isAr ? "متابعة العمل" : "Track")}
             </button>
           )}
-          {/* حجوزات قديمة بدون أمر عمل → زرّ «تقدّم» اليدوي */}
-          {canAdvance && (
-            <button onClick={(e) => !busy && stop(e, () => onAdvance(b))} style={qBtn()}>
-              {isUpcoming ? I.play(14) : Ic.check({ s: 14 })}
-              {isUpcoming ? (isAr ? "ابدأ" : "Start") : (isAr ? "تقدّم" : "Advance")}
-            </button>
-          )}
           {/* حجز مكتمل بأمر عمل → التقرير النهائي */}
           {isCompleted && b.workOrderNo && (
             <button onClick={(e) => stop(e, () => onReport(b.id))} style={qBtn(true)}>
@@ -353,7 +381,12 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
             </button>
           )}
           <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
-          <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
+          <span style={{ position: "relative", display: "inline-flex" }}>
+            <button onClick={(e) => stop(e, () => onFollowUp(b.id))} title={isAr ? "المتابعة" : "Follow-up"} style={qIcon(followupColor)}>{I.bubble(15)}</button>
+            {b.followups && b.followups.length > 0 && (
+              <span style={{ position: "absolute", top: -3, insetInlineEnd: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: followupColor, color: "#0b0c0e", fontSize: 8.5, fontWeight: 700, display: "grid", placeItems: "center", border: "1.5px solid #0b0c0e" }}>{b.followups.length}</span>
+            )}
+          </span>
           {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
           {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
         </div>
@@ -371,7 +404,10 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
       <span style={{ height: 46, width: 64, borderRadius: 10, flexShrink: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.7)" }} />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 15, color: "var(--abh-ivory)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.vehicle}</div>
-        <div dir="ltr" style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{b.reference}{b.plate ? ` · ${b.plate}` : ""}</div>
+        <div dir="ltr" style={{ fontSize: 10.5, color: "var(--abh-steel)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {b.reference}{b.plate ? ` · ${b.plate}` : ""}
+          {b.followupStatus === "open" && <span title={isAr ? "قيد المتابعة" : "Follow-up in progress"} style={{ height: 6, width: 6, borderRadius: 999, background: "#6ba8f5", display: "inline-block" }} />}
+        </div>
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, color: "var(--abh-platinum)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.customer}</div>
@@ -386,8 +422,90 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
     </div>
   );
 }
+
+/* ═════════════════ مودال تأكيد الدفع (مع خصم اختياري) ═════════════════ */
+function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
+  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const [kind, setKind] = useState<"none" | "percent" | "fixed">("none");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+
+  const base = Math.max(0, (Number(b.subtotal) || 0) + (Number(b.towing) || 0) - (Number(b.promoDiscount) || 0));
+  const rawValue = Math.max(0, Number(value) || 0);
+  const discountAmount = kind === "none" ? 0
+    : kind === "percent" ? Math.round((base * Math.min(100, rawValue)) / 100)
+    : Math.min(rawValue, base);
+  const newTotal = Math.max(0, (Number(b.total) || 0) - discountAmount);
+
+  const submit = () => {
+    onConfirm(b.id, kind === "none" || !rawValue ? undefined : { kind, value: rawValue, reason: reason.trim() || undefined });
+  };
+
+  return (
+    <Modal title={T("تأكيد الدفع", "Confirm payment")} onClose={onClose}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{b.customer} · {b.vehicle}</div>
+        <div dir="ltr" className="abh-num" style={{ fontSize: 15, color: "var(--abh-ivory)", marginTop: 3 }}>{b.reference}</div>
+      </div>
+
+      <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>
+        {T("هل تريد إضافة خصم للعميل؟", "Give the customer a discount?")}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        {(["none", "percent", "fixed"] as const).map((k) => (
+          <button key={k} type="button" onClick={() => setKind(k)}
+            style={{ flex: 1, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, border: `1px solid ${kind === k ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.1)"}`, background: kind === k ? "rgba(203,205,205,.1)" : "transparent", color: kind === k ? "var(--abh-ivory)" : "var(--abh-platinum)", cursor: "pointer" }}>
+            {k === "none" ? T("بدون خصم", "No discount") : k === "percent" ? T("نسبة %", "Percentage") : T("مبلغ ثابت", "Fixed amount")}
+          </button>
+        ))}
+      </div>
+
+      {kind !== "none" && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <input value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" dir="ltr"
+              placeholder={kind === "percent" ? "10" : "100"}
+              style={{ flex: 1, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: "center" }} />
+            <span style={{ display: "grid", placeItems: "center", fontSize: 13, color: "var(--abh-steel)", minWidth: 44 }}>{kind === "percent" ? "%" : ccy}</span>
+          </div>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={T("سبب الخصم (اختياري)", "Discount reason (optional)")}
+            style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
+        </div>
+      )}
+
+      <div style={{ borderRadius: 16, border: "1px solid rgba(203,205,205,.2)", background: "rgba(255,255,255,.02)", padding: "14px 16px", marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: discountAmount > 0 ? 8 : 0 }}>
+          <span style={{ color: "var(--abh-steel)" }}>{T("الإجمالي الحالي", "Current total")}</span>
+          <span dir="ltr" className="abh-num" style={{ color: "var(--abh-ivory)" }}>{EGP(b.total)} {ccy}</span>
+        </div>
+        {discountAmount > 0 && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8 }}>
+              <span style={{ color: "#e7b4b4" }}>{T("الخصم", "Discount")}</span>
+              <span dir="ltr" className="abh-num" style={{ color: "#e7b4b4" }}>−{EGP(discountAmount)} {ccy}</span>
+            </div>
+            <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "8px 0" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
+              <span style={{ color: "var(--abh-platinum)" }}>{T("الإجمالي الجديد", "New total")}</span>
+              <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", fontWeight: 600 }}>{EGP(newTotal)} {ccy}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+        <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
+        <button disabled={busy} onClick={submit}
+          style={{ opacity: busy ? .4 : 1, pointerEvents: busy ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "12px 24px", fontSize: 12, fontWeight: 600, letterSpacing: ".14em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
+          {I.wallet(15)} {T("تأكيد الدفع", "Confirm payment")}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onConfirmPay }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -406,6 +524,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
   const payMethod = PAY_METHOD[b.paymentMethod] ? (isAr ? PAY_METHOD[b.paymentMethod].ar : PAY_METHOD[b.paymentMethod].en) : (b.paymentMethod || "—");
   const promoDiscount = Number(b.promoDiscount) || 0;
   const isGiftCode = b.promoKind === "gift_service";
+  const manualDiscountAmount = Number(b.manualDiscountAmount) || 0;
 
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
@@ -480,6 +599,16 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
                 <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(promoDiscount)} {ccy}</span>
               </div>
             )}
+            {/* خصم يدوي طبّقه الموظف مباشرة (نسبة/مبلغ) — عند الإنشاء أو تأكيد الدفع */}
+            {manualDiscountAmount > 0 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>
+                  {I.tag(13)}{T("خصم يدوي", "Manual discount")}
+                  {b.manualDiscountKind ? ` (${b.manualDiscountKind === "percent" ? `${b.manualDiscountValue}%` : `${EGP(b.manualDiscountValue)} ${ccy}`})` : ""}
+                </span>
+                <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(manualDiscountAmount)} {ccy}</span>
+              </div>
+            )}
             <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "10px 0" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الإجمالي", "Total")}</span>
@@ -488,13 +617,15 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>
               {T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}
               {b.promoCode ? ` · ${T("كود", "Code")}: ${b.promoCode}${isGiftCode ? ` (${T("هدية", "Gift")})` : ""}` : ""}
+              {manualDiscountAmount > 0 && b.manualDiscountReason ? ` · ${T("سبب الخصم", "Discount reason")}: ${b.manualDiscountReason}` : ""}
+              {manualDiscountAmount > 0 && b.manualDiscountBy ? ` · ${T("بواسطة", "By")}: ${b.manualDiscountBy}` : ""}
             </div>
           </div>
 
           {b.status !== "cancelled" && (
             <div style={{ marginBottom: 18 }}>
-              <StagePipeline stage={b.stage || 0} busy={busy} isAr={isAr} onSet={(s: number) => onMutate(b.id, { stage: s })} />
-              <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T("اضغط على أي مرحلة لتحديثها — العميل يشوف نفس التقدّم في حسابه فورًا.", "Click a stage to update it — the customer sees the same progress in their account instantly.")}</p>
+              <StagePipeline stage={b.stage || 0} isAr={isAr} />
+              <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T("يتحدّث تلقائيًا حسب نسبة إنجاز مهام أمر العمل — العميل يشوف نفس التقدّم في حسابه فورًا.", "Updates automatically based on work-order task completion — the customer sees the same progress in their account instantly.")}</p>
             </div>
           )}
 
@@ -507,7 +638,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
             <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
             <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
-            {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onMutate(b.id, { action: "confirm_pay" })}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
+            {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onConfirmPay(b)}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
             {canModify && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
             {canModify && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
           </div>
@@ -560,6 +691,139 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
     </Modal>
   );
 }
+
+/* ═════════════════ مودال المتابعة (Follow-up timeline) ═════════════════ */
+function FollowUpModal({ b, busy, isAr, onClose, onAddNote, onCloseFollowup, onReopenFollowup }: any) {
+  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const [channel, setChannel] = useState<string>("call");
+  const [note, setNote] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [outcome, setOutcome] = useState<string>("confirmed");
+  const [closeNote, setCloseNote] = useState("");
+
+  const status = b.followupStatus || "none";
+  const followups: any[] = b.followups || [];
+  const outcomeInfo = b.followupOutcome ? FOLLOWUP_OUTCOME[b.followupOutcome] : null;
+  const badgeColor = status === "closed" && outcomeInfo ? outcomeInfo.color : FOLLOWUP_STATUS[status].color;
+
+  const fmtTime = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(+d)) return iso;
+    return d.toLocaleString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  };
+
+  const submitNote = async () => {
+    const n = note.trim();
+    if (!n) return;
+    await onAddNote(b.id, channel, n);
+    setNote("");
+  };
+  const submitClose = async () => {
+    await onCloseFollowup(b.id, outcome, closeNote.trim() || undefined);
+    setClosing(false);
+    setCloseNote("");
+  };
+
+  return (
+    <Modal title={T("متابعة الحجز", "Booking follow-up")} onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 15, color: "var(--abh-ivory)" }}>{b.customer}</div>
+          <div dir="ltr" style={{ fontSize: 11, color: "var(--abh-steel)" }}>{b.reference} · {b.vehicle}</div>
+        </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 12px", fontSize: 10.5, fontWeight: 600, color: badgeColor, background: "rgba(255,255,255,.04)", border: `1px solid ${badgeColor}` }}>
+          <span style={{ height: 7, width: 7, borderRadius: 999, background: badgeColor }} />
+          {status === "closed" && outcomeInfo ? (isAr ? outcomeInfo.ar : outcomeInfo.en) : (isAr ? FOLLOWUP_STATUS[status].ar : FOLLOWUP_STATUS[status].en)}
+        </span>
+      </div>
+
+      {status === "closed" && (
+        <div style={{ marginBottom: 16, borderRadius: 14, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: "12px 15px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>
+            {T("أُقفلت المتابعة", "Follow-up closed")}{b.followupClosedAt ? ` · ${fmtTime(b.followupClosedAt)}` : ""}
+          </span>
+          <Ghost sm onClick={() => onReopenFollowup(b.id)}>{T("إعادة فتح", "Reopen")}</Ghost>
+        </div>
+      )}
+
+      <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>
+        {T("سجل المتابعة", "Timeline")}
+      </div>
+      <div className="abh-col" style={{ gap: 10, marginBottom: 18, maxHeight: 320, overflowY: "auto", paddingInlineEnd: 4 }}>
+        {followups.length === 0 ? (
+          <div style={{ borderRadius: 14, border: "1px dashed rgba(255,255,255,.12)", padding: "22px 16px", textAlign: "center", fontSize: 12.5, color: "var(--abh-steel)" }}>
+            {T("لا توجد متابعات بعد — أضف أول ملاحظة تحت.", "No follow-up entries yet — add the first note below.")}
+          </div>
+        ) : (
+          followups.map((f: any) => {
+            const ch = FOLLOWUP_CHANNEL[f.channel] || FOLLOWUP_CHANNEL.note;
+            return (
+              <div key={f.id} style={{ display: "flex", gap: 12 }}>
+                <span style={{ display: "grid", placeItems: "center", height: 30, width: 30, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", color: "var(--abh-platinum)" }}>{ch.icon(14)}</span>
+                <div style={{ flex: 1, minWidth: 0, borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)", padding: "10px 13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 11.5, color: "var(--abh-ivory)" }}>{isAr ? ch.ar : ch.en}{f.author ? ` · ${f.author}` : ""}</span>
+                    <span style={{ fontSize: 10, color: "var(--abh-steel)", flexShrink: 0 }}>{fmtTime(f.createdAt)}</span>
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--abh-platinum)", whiteSpace: "pre-wrap" }}>{f.note}</div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {!closing && status !== "closed" && (
+        <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 14 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+            {Object.entries(FOLLOWUP_CHANNEL).map(([k, v]) => {
+              const on = channel === k;
+              return (
+                <button key={k} type="button" onClick={() => setChannel(k)} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "7px 12px", fontSize: 11, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.1)"}`, background: on ? "rgba(203,205,205,.1)" : "transparent", color: on ? "var(--abh-ivory)" : "var(--abh-steel)", cursor: "pointer" }}>
+                  {v.icon(12)}{isAr ? v.ar : v.en}
+                </button>
+              );
+            })}
+          </div>
+          <Textarea rows={3} value={note} onChange={(e: any) => setNote(e.target.value)} placeholder={T("مثال: كلمت العميل، أكّد إنه هييجي يوم السبت الساعة ٤…", "e.g. Called the customer, confirmed they’ll come Saturday at 4…")} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <Ghost sm onClick={() => setClosing(true)}>{T("إنهاء المتابعة", "End follow-up")}</Ghost>
+            <button disabled={!note.trim() || busy} onClick={submitNote} style={{ opacity: !note.trim() || busy ? .4 : 1, pointerEvents: !note.trim() || busy ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "10px 20px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
+              {I.bubble(14)}{T("إضافة", "Add")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {closing && (
+        <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", padding: 14 }}>
+          <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>
+            {T("القرار النهائي", "Final decision")}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8, marginBottom: 12 }}>
+            {Object.entries(FOLLOWUP_OUTCOME).map(([k, v]) => {
+              const on = outcome === k;
+              return (
+                <button key={k} type="button" onClick={() => setOutcome(k)} style={{ borderRadius: 12, padding: "10px 12px", fontSize: 12, textAlign: isAr ? "right" : "left", border: `1px solid ${on ? v.color : "rgba(255,255,255,.1)"}`, background: on ? `${v.color}1a` : "transparent", color: on ? v.color : "var(--abh-platinum)", cursor: "pointer" }}>
+                  {isAr ? v.ar : v.en}
+                </button>
+              );
+            })}
+          </div>
+          <Textarea rows={2} value={closeNote} onChange={(e: any) => setCloseNote(e.target.value)} placeholder={T("ملاحظة أخيرة (اختياري)…", "Final note (optional)…")} />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
+            <Ghost onClick={() => setClosing(false)}>{T("رجوع", "Back")}</Ghost>
+            <button disabled={busy} onClick={submitClose} style={{ opacity: busy ? .4 : 1, pointerEvents: busy ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "10px 20px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
+              {Ic.check({ s: 14 })}{T("تأكيد الإقفال", "Confirm close")}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function SectionLabel({ children }: any) {
   return <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11, fontSize: 10.5, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--abh-platinum)" }}><span style={{ display: "inline-flex" }}>{children}</span></div>;
 }
@@ -607,6 +871,8 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const [sort, setSort] = useState("recent");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [confirmPayId, setConfirmPayId] = useState<string | null>(null);
+  const [followupId, setFollowupId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mobile = useMediaQuery("(max-width: 640px)");
 
@@ -615,7 +881,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     const d = new Date(iso); if (isNaN(+d)) return iso;
     return d.toLocaleDateString(isAr ? "ar-EG" : "en-US", { weekday: "short", day: "numeric", month: "long" });
   };
-  const tabs: [string, string][] = [["all", T("الكل", "All")], ["needs_intake", T("بانتظار الاستلام", "Needs intake")], ["needs_assign", T("بانتظار التخصيص", "Needs assign")], ["in_service", T("قيد التشغيل", "In service")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
+  const tabs: [string, string][] = [["all", T("الكل", "All")], ["needs_intake", T("بانتظار الاستلام", "Needs intake")], ["needs_assign", T("بانتظار التخصيص", "Needs assign")], ["in_service", T("قيد التشغيل", "In service")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["followup", T("قيد المتابعة", "Following up")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
     c.unpaid = list.filter((b) => b.payment !== "paid" && b.status !== "cancelled").length;
@@ -625,6 +891,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     c.needs_assign = list.filter((b) => b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed").length;
     // قيد التشغيل = بدأ الشغل
     c.in_service = list.filter((b) => ["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled").length;
+    c.followup = list.filter((b) => b.followupStatus === "open").length;
     c.completed = list.filter((b) => b.status === "completed").length;
     c.cancelled = list.filter((b) => b.status === "cancelled").length;
     return c;
@@ -640,6 +907,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
         : tab === "needs_intake" ? (!b.workOrderNo && b.status !== "cancelled" && b.status !== "completed")
         : tab === "needs_assign" ? (b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed")
         : tab === "in_service" ? (["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled")
+        : tab === "followup" ? (b.followupStatus === "open")
         : b.status === tab;
       const matchQ = q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase());
       return matchTab && matchQ;
@@ -650,6 +918,8 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   }, [list, tab, q, sort]);
 
   const detail = detailId ? list.find((b) => b.id === detailId) : null;
+  const confirmPayBooking = confirmPayId ? list.find((b) => b.id === confirmPayId) : null;
+  const followup = followupId ? list.find((b) => b.id === followupId) : null;
 
   async function mutate(id: string, body: any) {
     setBusy(true);
@@ -661,16 +931,54 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       toast(
         body.action === "cancel" ? T("تم إلغاء الحجز", "Booking cancelled") :
         body.action === "reschedule" ? T("تم تغيير الموعد", "Rescheduled") :
-        body.action === "confirm_pay" ? T("تم تأكيد الدفع", "Payment confirmed") : T("تم تحديث المرحلة", "Stage updated")
+        body.action === "confirm_pay" ? T("تم تأكيد الدفع", "Payment confirmed") :
+        body.action === "followup_close" ? T("تم إقفال المتابعة", "Follow-up closed") :
+        body.action === "followup_reopen" ? T("تم إعادة فتح المتابعة", "Follow-up reopened") :
+        body.action === "followup_add" ? T("تمت إضافة المتابعة", "Follow-up added") :
+        T("تم تحديث المرحلة", "Stage updated")
       );
     } catch { toast(T("فشل التنفيذ", "Action failed"), "bad"); }
     finally { setBusy(false); }
   }
-  // «تقدّم»: لو الحجز لسه قادم → أول ضغطة تبدأ العمل عند المرحلة الحالية (0 = تم الاستلام)
-  // وتنقله «قيد التنفيذ». لو شغّال بالفعل → يتقدّم مرحلة (بحد أقصى 3 = مكتمل).
-  const advance = (b: any) =>
-    mutate(b.id, { stage: b.status === "upcoming" ? Math.max(0, Math.min(3, b.stage || 0)) : Math.min(3, (b.stage || 0) + 1) });
-  const confirmPay = (b: any) => mutate(b.id, { action: "confirm_pay" });
+
+  const openConfirmPay = (b: any) => setConfirmPayId(b.id);
+  const confirmPaymentWithDiscount = async (id: string, discount?: { kind: string; value: number; reason?: string }) => {
+    await mutate(id, { action: "confirm_pay", discount });
+    setConfirmPayId(null);
+  };
+
+  async function addFollowupNote(id: string, channel: string, note: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/bookings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "followup_add", channel, note }) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "fail");
+      setList((ls) => ls.map((b) => (b.id === id ? { ...b, ...data.booking } : b)));
+    } catch { toast(T("فشل إضافة المتابعة", "Failed to add follow-up"), "bad"); }
+    finally { setBusy(false); }
+  }
+  async function closeFollowup(id: string, outcome: string, note?: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/bookings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "followup_close", outcome, note }) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "fail");
+      setList((ls) => ls.map((b) => (b.id === id ? { ...b, ...data.booking } : b)));
+      toast(T("تم إقفال المتابعة", "Follow-up closed"));
+    } catch { toast(T("فشل إقفال المتابعة", "Failed to close follow-up"), "bad"); }
+    finally { setBusy(false); }
+  }
+  async function reopenFollowup(id: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/bookings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "followup_reopen" }) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "fail");
+      setList((ls) => ls.map((b) => (b.id === id ? { ...b, ...data.booking } : b)));
+    } catch { toast(T("فشل إعادة الفتح", "Failed to reopen"), "bad"); }
+    finally { setBusy(false); }
+  }
+
   const call = (phone: string) => { window.location.href = `tel:${phone}`; };
   const whats = (phone: string) => { const p = String(phone).replace(/[^\d]/g, ""); window.open(`https://wa.me/${p}`, "_blank"); };
 
@@ -756,7 +1064,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onAdvance={advance} onConfirmPay={confirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onFollowUp={setFollowupId} />
           ))}
         </div>
       ) : (
@@ -764,8 +1072,12 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} />}
-
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onConfirmPay={openConfirmPay} />}
+      {confirmPayBooking && (
+        <ConfirmPaymentModal b={confirmPayBooking} busy={busy} isAr={isAr} ccy={ccy}
+          onClose={() => setConfirmPayId(null)} onConfirm={confirmPaymentWithDiscount} />
+      )}
+      {followup && <FollowUpModal b={followup} busy={busy} isAr={isAr} onClose={() => setFollowupId(null)} onAddNote={addFollowupNote} onCloseFollowup={closeFollowup} onReopenFollowup={reopenFollowup} />}
       <style>{`
         @media(min-width:680px){.abh-resched-grid{grid-template-columns:1fr 1fr!important}}
         @media(max-width:620px){.abh-row{grid-template-columns:auto 1fr auto!important}.abh-row>div:nth-child(3),.abh-row>div:nth-child(4){display:none!important}}

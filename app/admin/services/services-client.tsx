@@ -197,6 +197,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
             onRequest: s.onRequest,
             cells,
             includes: (s.includes || []).map((inc) => txt(inc)).filter(Boolean),
+            warranty: s.warrantyYears > 0 ? T(`${s.warrantyYears} سنوات`, `${s.warrantyYears} yrs`) : undefined,
           };
         });
       return { category: c.label, rows };

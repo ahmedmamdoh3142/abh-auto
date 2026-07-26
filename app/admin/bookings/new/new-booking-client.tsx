@@ -41,20 +41,12 @@ function useMediaQuery(query: string) {
 type SizeCode = "small" | "medium" | "large";
 type Model = { name: string; size: SizeCode };
 type Brand = { id: string; name: string; models: Model[] };
-type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; active?: boolean; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number> };
+type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; active?: boolean; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number>; includes?: string[] };
 type Opt = { code: string; label: string };
 type ColorOpt = { key: string; hex: string; light: boolean; name: string };
 type TowOpt = { code: string; label: string; cost: number };
 type UserLite = { id: string; name: string; email: string; phone?: string; city?: string };
-/* نتيجة التحقق من كود الخصم (مطابقة لرد /api/promo/validate). */
-type PromoInfo = {
-  code: string;
-  kind: string;                    // percentage | fixed | service_* | gift_service
-  discount: number;                // قيمة الخصم (0 للهدية)
-  discountPercent: number;
-  giftServiceSlug: string | null;  // لكود الهدية
-  giftServiceName: string | null;
-};
+
 const SIZE_LABEL: Record<SizeCode, { ar: string; en: string }> = {
   small: { ar: "صغيرة", en: "Small" },
   medium: { ar: "متوسطة", en: "Medium" },
@@ -73,6 +65,13 @@ const giftIco = (s = 12) => (
 const tagIco = (s = 13) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <path d="M20.6 13.4 12 22l-9-9V3h10l8 8a2 2 0 0 1-.4 2.4z" /><path d="M7 7h.01" />
+  </svg>
+);
+
+/* أيقونة معلومات صغيرة (لزر "تشمل") */
+const infoIco = (s = 12) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="9" /><path d="M12 16v-5" /><path d="M12 8h.01" />
   </svg>
 );
 
@@ -135,10 +134,55 @@ export default function NewBookingClient({
   const [colorKey, setColorKey] = useState("");
   const [plate, setPlate] = useState("");
 
+  // (جديد) موديلات مؤقتة تُكتب يدويًا لو الموديل مش موجود — تتسجّل في القاعدة فورًا
+  // عبر /api/brand-models وتُستخدم لحساب حجم السيارة وسعرها.
+  const [customModels, setCustomModels] = useState<Record<string, SizeCode>>({});
+  const [customModelOpen, setCustomModelOpen] = useState(false);
+  const [customModelName, setCustomModelName] = useState("");
+  const [customModelSize, setCustomModelSize] = useState<SizeCode>("large");
+  const [customModelSaving, setCustomModelSaving] = useState(false);
+
   const brand = brands.find((b) => b.id === brandId);
-  const modelObj = brand?.models.find((m) => m.name === model);
-  const size: SizeCode = modelObj?.size ?? "large";
+  const brandModelsWithCustom = useMemo(() => {
+    if (!brand) return [] as Model[];
+    const extra = Object.keys(customModels)
+      .filter((k) => k.startsWith(`${brand.id}::`))
+      .map((k) => ({ name: k.slice(brand.id.length + 2), size: customModels[k] }))
+      .filter((m) => !brand.models.some((bm) => bm.name === m.name));
+    return extra.length ? [...brand.models, ...extra] : brand.models;
+  }, [brand, customModels]);
+  const modelObj = brandModelsWithCustom.find((m) => m.name === model);
+  const size: SizeCode = customModels[`${brandId}::${model}`] ?? modelObj?.size ?? "large";
+
+  const addCustomModel = async (bId: string) => {
+    const nm = customModelName.trim();
+    if (!nm) return;
+    setCustomModelSaving(true);
+    try {
+      const res = await fetch("/api/brand-models", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: bId, name: nm, size: customModelSize }),
+      });
+      const j = await res.json().catch(() => null);
+      const finalName = j?.ok && j.model?.name ? j.model.name : nm;
+      const finalSize: SizeCode = j?.ok && ["small", "medium", "large"].includes(j.model?.size) ? j.model.size : customModelSize;
+      setCustomModels((prev) => ({ ...prev, [`${bId}::${finalName}`]: finalSize }));
+      setModel(finalName);
+    } catch (e) {
+      console.error("add custom model failed:", e);
+      setCustomModels((prev) => ({ ...prev, [`${bId}::${nm}`]: customModelSize }));
+      setModel(nm);
+    } finally {
+      setCustomModelSaving(false);
+      setCustomModelOpen(false);
+    }
+  };
   const [chosen, setChosen] = useState<Set<string>>(new Set());
+  // (جديد) أي كروت خدمة مفتوح فيها عرض "تشمل" حاليًا
+  const [expandedIncl, setExpandedIncl] = useState<Set<string>>(new Set());
+  const toggleIncl = (slug: string) => setExpandedIncl((prev) => {
+    const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n;
+  });
   const grouped = useMemo(() => {
     const g = new Map<string, Service[]>();
     for (const s of services) { const a = g.get(s.category) ?? []; a.push(s); g.set(s.category, a); }
@@ -187,11 +231,10 @@ export default function NewBookingClient({
   const [time, setTime] = useState("");
   const [payment, setPayment] = useState(payments.find((p) => p.code === "cash")?.code ?? payments[0]?.code ?? "");
 
-  // ── كود الخصم (يتأكّد فعليًا زي الموقع) ──
-  const [promo, setPromo] = useState("");              // نص الكود المُدخَل
-  const [promoInfo, setPromoInfo] = useState<PromoInfo | null>(null);
-  const [promoChecking, setPromoChecking] = useState(false);
-  const [promoError, setPromoError] = useState<string | null>(null);
+  // ── خصم يدوي يطبّقه الموظف مباشرة (نسبة أو مبلغ ثابت) — بدل أكواد الخصم ──
+  const [discountKind, setDiscountKind] = useState<"none" | "percent" | "fixed">("none");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
 
   const [waOptIn, setWaOptIn] = useState(true); // موافقة الواتساب (افتراضيًا مفعّلة في الداشبورد)
 
@@ -212,98 +255,17 @@ export default function NewBookingClient({
     const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
     const customTotal = customItems.reduce((s, c) => s + (c.price || 0), 0);
     const beforePromo = svc + tow;
-    // خصم الكود (لا يُطبّق لكود الهدية) — محسوب من السيرفر، ويعاد التأكّد نهائيًا وقت الإنشاء.
-    const promoCut = promoInfo && promoInfo.kind !== "gift_service"
-      ? Math.min(promoInfo.discount || 0, beforePromo)
-      : 0;
+    // خصم يدوي (نسبة أو مبلغ ثابت) يطبّقه الموظف مباشرة — يُعاد حسابه نهائيًا في السيرفر وقت الإنشاء.
+    const rawVal = Math.max(0, Number(discountValue) || 0);
+    const promoCut = discountKind === "none" ? 0
+      : discountKind === "percent" ? Math.round((beforePromo * Math.min(100, rawVal)) / 100)
+      : Math.min(rawVal, beforePromo);
     const grand = Math.max(0, beforePromo - promoCut) + giftsCharge + customTotal;
     // الإجمالي قبل أي خصم (أصل الأسعار) — عشان نبيّن «قبل الخصم» و«وفّرت» زي الموقع.
     const originalTotal = svcOriginal + tow + giftsCharge + customTotal;
     return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, grand, onReq, saved, originalTotal };
-  }, [chosenServices, size, towMode, towing, gifts, customItems, promoInfo]);
+  }, [chosenServices, size, towMode, towing, gifts, customItems, discountKind, discountValue]);
 
-  /* ── منطق كود الخصم ── */
-  const promoErr = (e: string) => {
-    if (isAr) return e === "not_found" ? "كود غير صحيح"
-      : e === "expired" ? "انتهت صلاحية الكود"
-      : e === "not_started" ? "الكود لسه ما اشتغلش"
-      : e === "used_up" || e === "inactive" ? "الكود مش متاح"
-      : e === "per_user" ? "العميل استخدم الكود ده قبل كده"
-      : e === "min_order" ? "الكود يتطلّب حد أدنى للطلب"
-      : e === "no_match" ? "الكود لا ينطبق على الخدمات المختارة"
-      : "تعذّر التحقق، حاول تاني";
-    return e === "not_found" ? "Invalid code"
-      : e === "expired" ? "Code expired"
-      : e === "not_started" ? "Code not active yet"
-      : e === "used_up" || e === "inactive" ? "Code no longer available"
-      : e === "per_user" ? "Customer already used this code"
-      : e === "min_order" ? "Order below the code minimum"
-      : e === "no_match" ? "Not applicable to selected services"
-      : "Could not verify, try again";
-  };
-
-  const buildPromoLines = () => chosenServices
-    .filter((s) => !s.onRequest)
-    .map((s) => ({ serviceId: s.id, unit: s.prices[size] ?? s.prices.large ?? 0 }));
-
-  const applyPromo = async (raw?: string) => {
-    const c = (raw ?? promo).trim();
-    if (!c) return;
-    setPromoChecking(true); setPromoError(null);
-    try {
-      const lines = buildPromoLines();
-      const subtotal = lines.reduce((s, l) => s + l.unit, 0) + total.tow;
-      const j = await fetch("/api/promo/validate", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: c, lines, subtotal }),
-      }).then((r) => r.json());
-      if (j?.ok) {
-        if (j.kind === "gift_service") {
-          const gn = j.giftService
-            ? ((isAr ? j.giftService.name?.ar : j.giftService.name?.en) || j.giftService.name?.ar || j.giftService.name?.en || T("هدية", "Gift"))
-            : T("هدية", "Gift");
-          setPromoInfo({ code: j.code, kind: j.kind, discount: 0, discountPercent: 0, giftServiceSlug: j.giftService?.slug ?? null, giftServiceName: gn });
-        } else {
-          setPromoInfo({ code: j.code, kind: j.kind, discount: Number(j.discount) || 0, discountPercent: Number(j.discountPercent) || 0, giftServiceSlug: null, giftServiceName: null });
-        }
-        setPromo(c);
-        setPromoError(null);
-      } else {
-        setPromoInfo(null);
-        setPromoError(promoErr(j?.error ?? "server_error"));
-      }
-    } catch {
-      setPromoInfo(null);
-      setPromoError(promoErr("server_error"));
-    } finally { setPromoChecking(false); }
-  };
-
-  const clearPromo = () => { setPromoInfo(null); setPromo(""); setPromoError(null); };
-
-  // إعادة التحقق تلقائيًا (بصمت) لما تتغيّر الخدمات/الحجم/النقل وكود مطبّق موجود.
-  useEffect(() => {
-    if (!promoInfo || promoInfo.kind === "gift_service") return;
-    let alive = true;
-    (async () => {
-      try {
-        const lines = buildPromoLines();
-        const subtotal = lines.reduce((s, l) => s + l.unit, 0) + total.tow;
-        const j = await fetch("/api/promo/validate", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: promoInfo.code, lines, subtotal }),
-        }).then((r) => r.json());
-        if (!alive) return;
-        if (j?.ok && j.kind !== "gift_service") {
-          setPromoInfo((p) => p ? { ...p, discount: Number(j.discount) || 0, discountPercent: Number(j.discountPercent) || 0 } : p);
-        } else if (!j?.ok) {
-          setPromoInfo(null);
-          setPromoError(promoErr(j?.error ?? "no_match"));
-        }
-      } catch { /* تجاهل أخطاء الشبكة */ }
-    })();
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen, size, towMode]);
 
   const phoneOk = !phone.trim() || isValidPhone(phone);
   const customerOk = mode === "registered" ? !!userId : (!!name.trim() && !!phone.trim() && phoneOk);
@@ -327,7 +289,9 @@ export default function NewBookingClient({
           services: Array.from(chosen),
           customItems: customItems.map((c) => ({ name: c.name, price: c.price })),
           gifts: gifts.map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
-          promoCode: promoInfo?.code ?? null, // نبعت الكود المتحقّق فقط؛ السيرفر يعيد حسابه
+          manualDiscount: discountKind === "none" || !Number(discountValue)
+            ? null
+            : { kind: discountKind, value: Math.max(0, Number(discountValue) || 0), reason: discountReason.trim() || undefined },
           whatsappOptIn: waOptIn,
         }),
       });
@@ -336,7 +300,7 @@ export default function NewBookingClient({
       toast(T(`تم إنشاء الحجز ${j.reference}`, `Booking ${j.reference} created`));
       setChosen(new Set()); setGifts([]); setCustomItems([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
       setDate(""); setTime(""); setTowMode(""); setTowAddress("");
-      clearPromo();
+      setDiscountKind("none"); setDiscountValue(""); setDiscountReason("");
       if (mode === "guest") { setName(""); setPhone(""); setEmail(""); setCity(""); }
       setUserId(""); setTouched(false);
     } catch {
@@ -453,7 +417,7 @@ export default function NewBookingClient({
                     placeholder={T("اختر الماركة", "Select brand")}
                     searchPlaceholder={T("ابحث عن ماركة…", "Search brand…")}
                     options={brands.map((b) => ({ value: b.id, label: b.name }))}
-                    onChange={(v) => { setBrandId(v); setModel(""); }} />
+                    onChange={(v) => { setBrandId(v); setModel(""); setCustomModelOpen(false); }} />
                 </Field>
               </div>
               <div style={{ minWidth: 0 }}>
@@ -461,8 +425,51 @@ export default function NewBookingClient({
                   <AdminSearchSelect isAr={isAr} inp={inp} value={model} disabled={!brand}
                     placeholder={T("اختر الموديل", "Select model")}
                     searchPlaceholder={T("ابحث عن موديل…", "Search model…")}
-                    options={(brand?.models ?? []).map((m) => ({ value: m.name, label: m.name }))}
-                    onChange={(v) => setModel(v)} />
+                    options={brandModelsWithCustom.map((m) => ({ value: m.name, label: m.name }))}
+                    onChange={(v) => { setModel(v); setCustomModelOpen(false); }} />
+
+                  {brand && !customModelOpen && (
+                    <button type="button"
+                      onClick={() => { setCustomModelOpen(true); setCustomModelName(""); setCustomModelSize("large"); }}
+                      style={{ marginTop: 8, background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 4, color: "var(--abh-platinum)" }}>
+                      {T("الموديل مش موجود؟ أضفه يدويًا", "Model not listed? Add it manually")}
+                    </button>
+                  )}
+
+                  {brand && customModelOpen && (
+                    <div style={{ marginTop: 10, borderRadius: 12, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.03)", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
+                          {T("اسم الموديل", "Model name")}
+                        </div>
+                        <input value={customModelName} onChange={(e) => setCustomModelName(e.target.value)}
+                          placeholder={T("اكتب اسم الموديل", "Type the model name")} style={inp} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
+                          {T("حجم السيارة", "Vehicle size")}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {(["small", "medium", "large"] as SizeCode[]).map((sz) => (
+                            <button key={sz} type="button" onClick={() => setCustomModelSize(sz)} style={chipStyle(customModelSize === sz)}>
+                              {isAr ? SIZE_LABEL[sz].ar : SIZE_LABEL[sz].en}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <button type="button" disabled={!customModelName.trim() || customModelSaving}
+                          onClick={() => addCustomModel(brand.id)}
+                          style={{ borderRadius: 999, border: "none", padding: "9px 18px", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", cursor: !customModelName.trim() || customModelSaving ? "not-allowed" : "pointer", color: "#0c0d0e", background: !customModelName.trim() || customModelSaving ? "rgba(255,255,255,.15)" : "linear-gradient(135deg,#fff,#cbcdcd)" }}>
+                          {customModelSaving ? T("جارٍ الإضافة…", "Adding…") : T("إضافة واستخدام", "Add & use")}
+                        </button>
+                        <button type="button" onClick={() => setCustomModelOpen(false)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                          {T("إلغاء", "Cancel")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </Field>
               </div>
             </div>
@@ -507,8 +514,13 @@ export default function NewBookingClient({
                       const oldP = s.oldPrices[size] ?? s.oldPrices.large ?? 0;
                       const hasDiscount = !s.onRequest && oldP > 0 && oldP !== price;
                       const isTrigger = isTriggerService(bundles, s.id);
+                      const incl = s.includes ?? [];
+                      const showIncl = expandedIncl.has(s.slug);
                       return (
-                        <button key={s.slug} onClick={() => toggleSvc(s.slug)} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10, borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.07)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "14px 15px", cursor: "pointer", textAlign: isAr ? "right" : "left", transition: "all .2s", minHeight: 92, minWidth: 0 }}>
+                        <div key={s.slug} role="button" tabIndex={0}
+                          onClick={() => toggleSvc(s.slug)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSvc(s.slug); } }}
+                          style={{ position: "relative", display: "flex", flexDirection: "column", gap: 10, borderRadius: 14, border: `1px solid ${on ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.07)"}`, background: on ? "rgba(203,205,205,.08)" : "rgba(255,255,255,.02)", padding: "14px 15px", cursor: "pointer", textAlign: isAr ? "right" : "left", transition: "all .2s", minHeight: 92, minWidth: 0 }}>
                           {/* الصف العلوي: مربّع الاختيار */}
                           <span style={{ display: "flex", justifyContent: isAr ? "flex-start" : "flex-end" }}>
                             <span style={{ display: "grid", placeItems: "center", height: 22, width: 22, flexShrink: 0, borderRadius: 7, border: on ? "none" : "1px solid rgba(255,255,255,.2)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", color: "#000" }}>{on && <Ic.check s={13} />}</span>
@@ -542,7 +554,26 @@ export default function NewBookingClient({
                               </>
                             )}
                           </span>
-                        </button>
+
+                          {/* (جديد) زر "تشمل" — يفتح قائمة تفاصيل الخدمة زي الموقع، من غير ما يختار/يلغي الخدمة */}
+                          {incl.length > 0 && (
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleIncl(s.slug); }}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 5, alignSelf: isAr ? "flex-end" : "flex-start", width: "fit-content", border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 10.5, color: "var(--abh-steel)", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 3 }}>
+                              {infoIco(11)}{showIncl ? T("إخفاء التفاصيل", "Hide details") : T("تشمل", "What's included")}
+                            </button>
+                          )}
+                          {incl.length > 0 && showIncl && (
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                              {incl.map((line, i) => (
+                                <span key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 11, lineHeight: 1.5, color: "var(--abh-platinum)" }}>
+                                  <span style={{ marginTop: 5, height: 4, width: 4, flexShrink: 0, borderRadius: 999, background: "var(--abh-steel)" }} />
+                                  {line}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -638,17 +669,25 @@ export default function NewBookingClient({
                 </Field>
               </div>
             </div>
-            {/* كود الخصم — يتأكّد فعليًا زي الموقع */}
+            {/* (جديد) خصم يدوي — يطبّق مباشرة بدون كود، ويظهر في الملخّص فورًا */}
             <div style={{ marginTop: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
-                <span style={{ color: "var(--abh-steel)" }}>{tagIco(14)}</span>{T("كود خصم (اختياري)", "Promo code (optional)")}
+                <span style={{ color: "var(--abh-steel)" }}>{tagIco(14)}</span>{T("خصم يدوي (اختياري)", "Manual discount (optional)")}
               </div>
-              <PromoBox
-                isAr={isAr} T={T} ccy={ccy} inp={inp}
-                info={promoInfo} code={promo} setCode={setPromo}
-                checking={promoChecking} error={promoError}
-                onApply={() => applyPromo()} onClear={clearPromo}
-              />
+              <div style={{ display: "flex", gap: 8, marginBottom: discountKind !== "none" ? 10 : 0 }}>
+                {(["none", "percent", "fixed"] as const).map((k) => (
+                  <button key={k} type="button" onClick={() => setDiscountKind(k)} style={chipStyle(discountKind === k)}>
+                    {k === "none" ? T("بدون خصم", "No discount") : k === "percent" ? T("نسبة %", "Percentage") : T("مبلغ ثابت", "Fixed amount")}
+                  </button>
+                ))}
+              </div>
+              {discountKind !== "none" && (
+                <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "140px 1fr", gap: 8 }}>
+                  <input value={discountValue} onChange={(e) => setDiscountValue(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" dir="ltr"
+                    placeholder={discountKind === "percent" ? "10" : "100"} style={{ ...inp, textAlign: "center" }} />
+                  <input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} placeholder={T("سبب الخصم (اختياري)", "Reason (optional)")} style={inp} />
+                </div>
+              )}
             </div>
             {/* موافقة الواتساب */}
             <label style={{ marginTop: 16, display: "flex", alignItems: "flex-start", gap: 11, cursor: "pointer", borderRadius: 12, border: `1px solid ${waOptIn ? "rgba(159,212,176,.3)" : "rgba(255,255,255,.08)"}`, background: waOptIn ? "rgba(159,212,176,.06)" : "rgba(255,255,255,.02)", padding: "13px 15px", transition: "all .2s" }}>
@@ -747,18 +786,15 @@ export default function NewBookingClient({
                       <span dir="ltr" className="abh-num" style={{ color: "#e7b4b4" }}>−{EGP(total.saved)} {ccy}</span>
                     </div>
                   )}
-                  {/* خصم الكود / هدية الكود */}
-                  {promoInfo && (promoInfo.kind === "gift_service" ? (
+                  {/* خصم يدوي (نسبة/مبلغ) طبّقه الموظف مباشرة */}
+                  {total.promoCut > 0 && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GIFT_GOLD, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{giftIco(11)}{promoInfo.giftServiceName || T("هدية الكود", "Code gift")}</span>
-                      <span dir="ltr" className="abh-num" style={{ color: GIFT_GOLD, flexShrink: 0 }}>{T("مجانًا", "Free")}</span>
-                    </div>
-                  ) : total.promoCut > 0 ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tagIco(12)}{T("خصم الكود", "Promo")} ({promoInfo.code})</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--abh-platinum)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {tagIco(12)}{T("خصم", "Discount")} ({discountKind === "percent" ? `${discountValue || 0}%` : `${EGP(Number(discountValue) || 0)} ${ccy}`})
+                      </span>
                       <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", flexShrink: 0 }}>−{EGP(total.promoCut)}</span>
                     </div>
-                  ) : null)}
+                  )}
                 </div>
               );
             })()}
@@ -797,55 +833,6 @@ export default function NewBookingClient({
       )}
 
       <style>{NB_CSS}</style>
-    </div>
-  );
-}
-
-/* ─── صندوق كود الخصم (تحقّق فعلي + عرض المطبَّق) ─── */
-function PromoBox({ isAr, T, ccy, inp, info, code, setCode, checking, error, onApply, onClear }: {
-  isAr: boolean;
-  T: (ar: string, en: string) => string;
-  ccy: string;
-  inp: React.CSSProperties;
-  info: PromoInfo | null;
-  code: string;
-  setCode: (v: string) => void;
-  checking: boolean;
-  error: string | null;
-  onApply: () => void;
-  onClear: () => void;
-}) {
-  const isGift = info?.kind === "gift_service";
-  return (
-    <div>
-      {info ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 12, border: `1px solid ${isGift ? "rgba(217,178,95,.45)" : "rgba(62,205,142,.4)"}`, background: isGift ? "rgba(217,178,95,.07)" : "rgba(62,205,142,.07)", padding: "11px 14px" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, fontSize: 13, color: "var(--abh-ivory)" }}>
-            <span style={{ color: isGift ? GIFT_GOLD : "#3ecd8e", display: "inline-flex", flexShrink: 0 }}>{isGift ? giftIco(15) : <Ic.check s={15} />}</span>
-            <span dir="ltr" className="abh-num" style={{ letterSpacing: ".08em", flexShrink: 0 }}>{info.code}</span>
-            <span style={{ color: isGift ? GIFT_GOLD : "var(--abh-platinum)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {isGift
-                ? T(`· هدية: ${info.giftServiceName ?? "خدمة"} مجانًا`, `· Gift: ${info.giftServiceName ?? "service"} free`)
-                : `· −${EGP(info.discount)} ${ccy}`}
-            </span>
-          </span>
-          <button onClick={onClear} aria-label="remove" style={{ display: "grid", placeItems: "center", height: 28, width: 28, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "var(--abh-steel)", cursor: "pointer" }}>
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={code} dir="ltr"
-            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onApply(); } }}
-            placeholder="SUMMER25" style={{ ...inp, textAlign: "left", letterSpacing: ".08em" }} />
-          <button onClick={onApply} disabled={checking || !code.trim()}
-            style={{ flexShrink: 0, borderRadius: 12, border: `1px solid ${checking || !code.trim() ? "rgba(255,255,255,.1)" : "rgba(203,205,205,.4)"}`, background: checking || !code.trim() ? "rgba(255,255,255,.02)" : "rgba(203,205,205,.1)", color: checking || !code.trim() ? "var(--abh-steel)" : "var(--abh-ivory)", padding: "11px 18px", fontSize: 12.5, fontWeight: 600, cursor: checking || !code.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            {checking ? T("جارٍ…", "…") : T("تحقّق", "Apply")}
-          </button>
-        </div>
-      )}
-      {error && <Err>{error}</Err>}
     </div>
   );
 }

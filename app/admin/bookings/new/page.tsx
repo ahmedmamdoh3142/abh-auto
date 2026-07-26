@@ -55,7 +55,9 @@ export default async function AdminNewBookingPage() {
             s.is_on_request, s.is_active,
             COALESCE((SELECT jsonb_object_agg(sp.size_code,
                         jsonb_build_object('price', sp.price, 'old', sp.old_price))
-                      FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices_raw
+                      FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices_raw,
+            COALESCE((SELECT json_agg(si.label ORDER BY si.sort)
+                      FROM service_includes si WHERE si.service_id = s.id), '[]') AS includes_raw
      FROM services s
      JOIN service_categories c ON c.id = s.category_id
      WHERE s.surface='catalog'
@@ -71,6 +73,7 @@ export default async function AdminNewBookingPage() {
       prices[sz] = Number(p[sz]?.price) || 0;
       oldPrices[sz] = Number(p[sz]?.old) || 0; // السعر قبل الخصم (0 لو لا يوجد)
     }
+    const includes: string[] = (r.includes_raw ?? []).map((x: any) => pick(x, locale));
     return {
       id: Number(r.id),
       slug: r.slug,
@@ -81,6 +84,7 @@ export default async function AdminNewBookingPage() {
       active: !!r.is_active, // false = مخفية من الموقع (تظهر بالداشبورد بشارة)
       prices,
       oldPrices,
+      includes, // (جديد) قائمة "تشمل" — نفس اللي بيظهر بالموقع
     };
   });
 

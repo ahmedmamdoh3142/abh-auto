@@ -16,7 +16,6 @@ import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
-import { getPromoByCode, checkPromoValidity, computePromo, recordRedemption, type PromoLine } from "@/lib/promo";
 import { getBundleById, giftChargeFor } from "@/lib/bundles";
 import { enqueueBookingConfirm, enqueueBookingReminder } from "@/lib/whatsapp";
 
@@ -61,7 +60,14 @@ export async function POST(request: Request) {
           .map((g: any) => ({ slug: String(g?.slug || ""), bundleId: String(g?.bundleId || "") }))
           .filter((g: any) => g.slug && g.bundleId)
       : [];
-    const promoCodeInput = !partner && body.promoCode ? String(body.promoCode).trim() : null;
+// (جديد) خصم يدوي يطبّقه الموظف مباشرة بدل كود الخصم — نسبة أو مبلغ ثابت.
+    const manualDiscountInput = !partner && body.manualDiscount && (body.manualDiscount.kind === "percent" || body.manualDiscount.kind === "fixed")
+      ? {
+          kind: body.manualDiscount.kind as "percent" | "fixed",
+          value: Math.max(0, Number(body.manualDiscount.value) || 0),
+          reason: body.manualDiscount.reason ? String(body.manualDiscount.reason).trim().slice(0, 200) : null,
+        }
+      : null;
 
     // بيانات العميل (للزائر، أو نسخة احتياطية للمسجّل)
     const customerName = body.name ? String(body.name).trim() : null;
@@ -165,32 +171,19 @@ export async function POST(request: Request) {
 
     const beforePromo = subtotal + towingCost;
 
-    // البرومو (للعملاء العاديين فقط)
-    let promoCode: string | null = null;
-    let promoKind: string | null = null;
-    let promoDiscount = 0;
-    let promoId: string | null = null;
-    let giftCouponServiceId: number | null = null; // كوبون هدية → خدمة تتضاف مجانًا
-    if (promoCodeInput) {
-      const promo = await getPromoByCode(promoCodeInput);
-      if (promo) {
-        const invalid = await checkPromoValidity(promo, effectiveUserId);
-        if (!invalid) {
-          if (promo.kind === "gift_service" && promo.giftServiceId) {
-            // كوبون هدية: لا خصم — الخدمة تتضاف مجانًا (مع مراعاة الحد الأدنى لو موجود).
-            if (!(promo.minOrder > 0 && beforePromo < promo.minOrder)) {
-              promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = 0;
-              giftCouponServiceId = promo.giftServiceId;
-            }
-          } else {
-            const lines: PromoLine[] = items.filter((it) => it.unit > 0).map((it) => ({ serviceId: it.serviceId, unit: it.unit }));
-            const comp = computePromo(promo, lines, beforePromo);
-            if (!comp.error && comp.discount > 0) {
-              promoId = promo.id; promoCode = promo.code; promoKind = promo.kind; promoDiscount = comp.discount;
-            }
-          }
-        }
-      }
+    // (جديد) الخصم اليدوي — يُحسب في السيرفر بنفس القيمة المُدخَلة فقط، ولا نثق
+    // بأي مبلغ خصم جاهز من الواجهة.
+    let manualDiscountKind: string | null = null;
+    let manualDiscountValue: number | null = null;
+    let manualDiscountAmount = 0;
+    let manualDiscountReason: string | null = null;
+    if (manualDiscountInput && manualDiscountInput.value > 0) {
+      manualDiscountKind = manualDiscountInput.kind;
+      manualDiscountValue = manualDiscountInput.value;
+      manualDiscountReason = manualDiscountInput.reason;
+      manualDiscountAmount = manualDiscountInput.kind === "percent"
+        ? Math.round((beforePromo * Math.min(100, manualDiscountInput.value)) / 100)
+        : Math.min(manualDiscountInput.value, beforePromo);
     }
 
     // ── هدايا البندلات — تُسعّر وتُتحقّق من جهة الخادم (نفس الموقع) ──
@@ -226,7 +219,7 @@ export async function POST(request: Request) {
     const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
     const customTotal = customItems.reduce((s, c) => s + c.price, 0);
 
-    const total = Math.max(0, beforePromo - promoDiscount) + giftsCharge + customTotal;
+const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + customTotal;
     const paidImmediately = paymentMethod !== "cash";
     const paymentStatus = paidImmediately ? "paid" : "pending";
 
@@ -235,19 +228,24 @@ export async function POST(request: Request) {
          (user_id, status, vehicle_label, plate, brand_id, model, size_code, color_code,
           branch_code, scheduled_date, scheduled_time, subtotal,
           towing_code, towing_cost, towing_address, total, payment_method_code, payment_status,
-          promo_code, promo_discount, promo_kind,
+          manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason,
+          manual_discount_by, manual_discount_at,
           customer_name, customer_phone, customer_email, customer_city,
           partner_id, commission_total, notes,
           whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text)
-       VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-               $20,$21,$22,$23,$24,$25,$26,$27,
-               $28, CASE WHEN $28 THEN now() ELSE NULL END, $29)
+       VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+               $18,$19,$20,$21,
+               $22, CASE WHEN $22 IS NOT NULL THEN now() ELSE NULL END,
+               $23,$24,$25,$26,
+               $27,$28,$29,
+               $30, CASE WHEN $30 THEN now() ELSE NULL END, $31)
        RETURNING id, reference`,
       [
         effectiveUserId, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
         branchCode, date || null, time, subtotal,
         towingMode, towingCost, towingAddress, total, paymentMethod, paymentStatus,
-        promoCode, promoDiscount, promoKind,
+        manualDiscountKind, manualDiscountValue, manualDiscountAmount, manualDiscountReason,
+        manualDiscountKind ? admin.id : null,
         customerName, customerPhone, customerEmail, customerCity,
         partner?.id ?? null, commissionTotal,
         `حجز يدوي بواسطة ${admin.name} من الداشبورد`,
@@ -291,41 +289,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // هدية كوبون عجلة الحظ — تُضاف كخدمة مجانية فوق الطلب (مش خصم).
-    if (giftCouponServiceId) {
-      const gr = await query<any>(
-        `SELECT id, slug, name FROM services WHERE id = $1 LIMIT 1`,
-        [giftCouponServiceId]
-      );
-      const g = gr[0];
-      if (g) {
-        await query(
-          `INSERT INTO booking_items
-             (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
-           VALUES ($1, $2, $3, $4, $5, 0, 1, 0, 0)`,
-          [booking.id, g.id, g.slug, g.name ? JSON.stringify(g.name) : null, sizeCode]
-        );
-        await query(
-          `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
-           VALUES ($1, NULL, $2, $3)`,
-          [booking.id, g.id, 0]
-        ).catch(() => {}); // لو العمود bundle_id لا يقبل NULL، نتجاهل (البند المجاني اتسجّل بالفعل)
-      }
-    }
-
-    if (promoCode) {
-      await recordRedemption({
-        promoId, code: promoCode, bookingId: booking.id, userId: effectiveUserId,
-        customerName, customerEmail,
-        orderSubtotal: beforePromo, discountAmount: promoDiscount, orderTotal: total,
-        paidImmediately,
-      }).catch((e) => console.error("recordRedemption failed:", e));
-    }
-
     await query(
       `INSERT INTO booking_status_history (booking_id, status, stage, note)
        VALUES ($1,'upcoming',0,$2)`,
-      [booking.id, `أنشئ من الداشبورد بواسطة ${admin.name}`]
+      [booking.id, `أنشئ من الداشبورد بواسطة ${admin.name}` +
+        (manualDiscountKind ? ` — خصم ${manualDiscountKind === "percent" ? `${manualDiscountValue}%` : `${manualDiscountValue} ريال`} (${manualDiscountReason || "بدون سبب مذكور"})` : "")]
     ).catch(() => {});
 
     // واتساب: تأكيد + تذكير (إن وافق العميل) — يبقى في الطابور حتى يُفعَّل المزوّد.
@@ -345,7 +313,7 @@ export async function POST(request: Request) {
       } catch (e) { console.error("whatsapp enqueue failed:", e); }
     }
 
-    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal, customerCaptured });
+    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal, customerCaptured, manualDiscountAmount });
   } catch (err) {
     console.error("POST /api/admin/bookings/create failed:", err);
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });

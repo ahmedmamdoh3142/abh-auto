@@ -13,13 +13,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import { Check, ChevronDown, Plus, Car, Search } from 'lucide-react';
 
-import { COLORS, type Brand } from '@/lib/booking-data';
+import { COLORS, type Brand, type VehicleSize } from '@/lib/booking-data';
 import type { DbColor } from '@/lib/booking-data-db';
 import type { Vehicle } from '@/components/shared/auth-provider';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill } from './booking-flow';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+
+const SIZE_LABEL_MAP: Record<VehicleSize, { ar: string; en: string }> = {
+  small: { ar: 'صغيرة', en: 'Small' },
+  medium: { ar: 'متوسطة', en: 'Medium' },
+  large: { ar: 'كبيرة', en: 'Large' },
+};
 
 /* ── أدوات اللوحة: أرقام + حروف ──────────────────────────── */
 const DIGITS_RE = /[0-9\u0660-\u0669]/g;            // أرقام لاتيني + عربي
@@ -41,7 +47,7 @@ const onlyLetters = (s: string) =>
 const FALLBACK_COLORS: DbColor[] = COLORS.map((c) => ({ key: c.key, hex: c.hex, light: c.light, name: c.key }));
 
 export function StepVehicle({
-  t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors,
+  t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors, onAddCustomModel,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -52,6 +58,7 @@ export function StepVehicle({
   garage?: Vehicle[];
   brands: Brand[];
   colors?: DbColor[];
+  onAddCustomModel: (brandId: string, model: string, size: VehicleSize) => void;
 }) {
   const palette = colors && colors.length > 0 ? colors : FALLBACK_COLORS;
   const brand = brands.find((b) => b.id === data.brandId);
@@ -61,6 +68,34 @@ export function StepVehicle({
 
   const { digits, letters } = splitPlate(data.plate);
   const [mode, setMode] = useState<'pick' | 'new'>(garage.length > 0 ? 'pick' : 'new');
+
+  // (جديد) نموذج إضافة موديل يدوي لو مش موجود بالقائمة
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customSize, setCustomSize] = useState<VehicleSize>('large');
+  const [customSaving, setCustomSaving] = useState(false);
+
+  const submitCustomModel = async (brandId: string) => {
+    const name = customName.trim();
+    if (!name) return;
+    setCustomSaving(true);
+    try {
+      const res = await fetch('/api/brand-models', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandId, name, size: customSize }),
+      });
+      const j = await res.json().catch(() => null);
+      const finalName = j?.ok && j.model?.name ? j.model.name : name;
+      const finalSize: VehicleSize = j?.ok && ['small', 'medium', 'large'].includes(j.model?.size) ? j.model.size : customSize;
+      onAddCustomModel(brandId, finalName, finalSize);
+    } catch (e) {
+      console.error('add custom model failed:', e);
+      onAddCustomModel(brandId, name, customSize); // نكمل محليًا حتى لو فشل الحفظ في القاعدة
+    } finally {
+      setCustomSaving(false);
+      setCustomOpen(false);
+    }
+  };
 
   const pickVehicle = (v: Vehicle) =>
     onChange({ brandId: v.brandId, model: v.model, colorKey: v.colorKey, plate: v.plate });
@@ -146,7 +181,54 @@ export function StepVehicle({
                 <SearchSelect value={data.model} placeholder={t('step1.modelPlaceholder')} disabled={!brand}
                   searchPlaceholder={isAr ? 'ابحث عن موديل…' : 'Search model…'}
                   options={(brand?.models ?? []).map((m) => ({ value: m, label: m }))}
-                  onChange={(v) => onChange({ model: v })} />
+                  onChange={(v) => { onChange({ model: v }); setCustomOpen(false); }} />
+
+                {brand && !customOpen && (
+                  <button type="button" data-cursor="hover"
+                    onClick={() => { setCustomOpen(true); setCustomName(''); setCustomSize('large'); }}
+                    className="mt-2.5 text-[0.62rem] uppercase tracking-[0.16em] text-platinum/60 underline decoration-dotted underline-offset-4 transition-colors hover:text-ivory">
+                    {isAr ? 'الموديل مش موجود؟ أضفه يدويًا' : 'Model not listed? Add it manually'}
+                  </button>
+                )}
+
+                {brand && customOpen && (
+                  <div className="mt-3 space-y-3 rounded-2xl border border-white/12 bg-white/[0.03] p-4">
+                    <div>
+                      <span className="mb-1.5 block text-[0.55rem] uppercase tracking-[0.2em] text-steel">
+                        {isAr ? 'اسم الموديل' : 'Model name'}
+                      </span>
+                      <input value={customName} onChange={(e) => setCustomName(e.target.value)}
+                        placeholder={isAr ? 'اكتب اسم الموديل' : 'Type the model name'}
+                        className="w-full rounded-xl border border-white/12 bg-white/[0.03] px-4 py-3 text-sm text-ivory placeholder:text-steel/50 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+                    </div>
+                    <div>
+                      <span className="mb-1.5 block text-[0.55rem] uppercase tracking-[0.2em] text-steel">
+                        {isAr ? 'حجم السيارة' : 'Vehicle size'}
+                      </span>
+                      <div className="flex gap-2">
+                        {(['small', 'medium', 'large'] as VehicleSize[]).map((sz) => (
+                          <button key={sz} type="button" data-cursor="hover" onClick={() => setCustomSize(sz)}
+                            className={['flex-1 rounded-xl border px-3 py-2.5 text-[0.68rem] uppercase tracking-wide transition-colors duration-200',
+                              customSize === sz ? 'border-platinum/50 bg-platinum/10 text-ivory' : 'border-white/12 text-platinum/70 hover:border-white/25'].join(' ')}>
+                            {SIZE_LABEL_MAP[sz][isAr ? 'ar' : 'en']}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 pt-1">
+                      <button type="button" data-cursor="hover" disabled={!customName.trim() || customSaving}
+                        onClick={() => submitCustomModel(brand.id)}
+                        className={['rounded-full px-5 py-2.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-200',
+                          !customName.trim() || customSaving ? 'cursor-not-allowed bg-white/[0.05] text-steel' : 'bg-gradient-to-br from-white to-platinum text-obsidian'].join(' ')}>
+                        {customSaving ? (isAr ? 'جارٍ الإضافة…' : 'Adding…') : (isAr ? 'إضافة واستخدام' : 'Add & use')}
+                      </button>
+                      <button type="button" data-cursor="hover" onClick={() => setCustomOpen(false)}
+                        className="text-[0.6rem] uppercase tracking-[0.16em] text-steel transition-colors hover:text-platinum">
+                        {isAr ? 'إلغاء' : 'Cancel'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Field>
 
               <Field label={t('step1.color')}>

@@ -125,6 +125,8 @@ export function BookingFlow({
   const [done, setDone] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
+  // (جديد) موديلات مؤقتة يضيفها العميل يدويًا — تتسجّل في القاعدة فورًا وتُستخدم لحساب السعر بحجمها.
+  const [customModels, setCustomModels] = useState<Record<string, VehicleSize>>({});
 
   // تتبّع: دخل صفحة الحجز (بداية القمع)
   useEffect(() => { trackBookingView(); }, []);
@@ -134,10 +136,36 @@ export function BookingFlow({
     [],
   );
 
-  const effectiveBrands = (brands && brands.some((b) => (b.models?.length ?? 0) > 0)) ? brands : LIB_BRANDS;
+  const baseBrands = (brands && brands.some((b) => (b.models?.length ?? 0) > 0)) ? brands : LIB_BRANDS;
+
+  // نضيف الموديلات المؤقتة (المكتوبة يدويًا) لقائمة كل ماركة عشان تظهر مختارة في الكومبوبوكس.
+  const effectiveBrands = useMemo(() => {
+    const extraByBrand = new Map<string, string[]>();
+    for (const key of Object.keys(customModels)) {
+      const idx = key.indexOf('::');
+      const bId = key.slice(0, idx);
+      const name = key.slice(idx + 2);
+      const arr = extraByBrand.get(bId) ?? [];
+      arr.push(name);
+      extraByBrand.set(bId, arr);
+    }
+    if (extraByBrand.size === 0) return baseBrands;
+    return baseBrands.map((b) => {
+      const extra = (extraByBrand.get(b.id) ?? []).filter((m) => !b.models.includes(m));
+      return extra.length ? { ...b, models: [...b.models, ...extra] } : b;
+    });
+  }, [baseBrands, customModels]);
+
   const sizeOf = useCallback((brandId: string, model: string): VehicleSize => {
-    return modelSizes[`${brandId}::${model}`] ?? sizeForModel(brandId, model) ?? 'large';
-  }, [modelSizes]);
+    const key = `${brandId}::${model}`;
+    return customModels[key] ?? modelSizes[key] ?? sizeForModel(brandId, model) ?? 'large';
+  }, [modelSizes, customModels]);
+
+  // (جديد) تسجيل موديل يدوي: يحفظ حجمه محليًا فورًا ويحدّث بيانات الحجز بحجمه الصحيح.
+  const onAddCustomModel = useCallback((brandId: string, model: string, size: VehicleSize) => {
+    setCustomModels((prev) => ({ ...prev, [`${brandId}::${model}`]: size }));
+    setData((d) => ({ ...d, brandId, model, size }));
+  }, []);
 
   useEffect(() => {
     if (categories.length > 0) setData((d) => ({ ...d, activeCat: categories[0].id }));
@@ -344,7 +372,8 @@ export function BookingFlow({
                 >
                   {step === 0 && (
                     <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} brands={effectiveBrands}
-                      colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)} />
+                      colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
+                      onAddCustomModel={onAddCustomModel} />
                   )}
                   {step === 1 && (
                     <StepServices t={t} isAr={isAr} data={data} set={set} total={total}

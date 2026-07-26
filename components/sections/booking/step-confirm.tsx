@@ -25,6 +25,7 @@ import {
   type PaymentMethod, type VehicleSize,
 } from '@/lib/booking-data';
 import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
+import { useAuth } from '@/components/shared/auth-provider';
 import type { BookingState } from './booking-flow';
 import { PrimaryPill, GhostPill } from './booking-flow';
 
@@ -115,7 +116,12 @@ export function StepConfirm({
               <p className="text-[0.78rem] text-steel">{isAr ? 'لا خدمات مدفوعة — هدية فقط.' : 'No paid services — gift only.'}</p>
             )}
             {data.towing && data.towingMode && (
-              <Row k={t('step4.towing')} v={`${currencyFmt(total.tow)} ${t('currency')}`} mono />
+              <>
+                <Row k={t('step4.towing')} v={`${currencyFmt(total.tow)} ${t('currency')}`} mono />
+                <p className="text-[0.64rem] leading-relaxed text-steel/60">
+                  {isAr ? '* سعر تقريبي — قابل للتعديل حسب موقعك الفعلي.' : '* Estimated — may vary based on your actual location.'}
+                </p>
+              </>
             )}
           </DossierCard>
 
@@ -201,7 +207,10 @@ export function StepConfirm({
                       })}
                       {data.towing && data.towingMode && (
                         <div className="flex justify-between gap-3 py-1.5 text-[0.82rem] text-ivory/82">
-                          <span>{t('step4.towing')}</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            {t('step4.towing')}
+                            <span className="text-[0.58rem] text-steel/60">{isAr ? '(تقريبي)' : '(est.)'}</span>
+                          </span>
                           <span dir="ltr" className="font-display text-platinum tabular-nums">{currencyFmt(total.tow)}</span>
                         </div>
                       )}
@@ -341,6 +350,9 @@ function PromoField({ isAr, data, set, services, t }: {
   services: DbServiceMeta[]; t: ReturnType<typeof useTranslations>;
 }) {
   const ccy = t('currency');
+  const { member } = useAuth();
+  // الشركاء (partner) عندهم أسعار وخصومات خاصة بيهم أصلاً — من غير تذكرة العرض التلقائية.
+  const isPartner = member?.role === 'partner';
   const [code, setCode] = useState(data.promoCode ?? '');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -349,6 +361,7 @@ function PromoField({ isAr, data, set, services, t }: {
   const applied = !!data.promoCode && (data.promoDiscount > 0 || data.promoKind === 'gift_service');
 
   useEffect(() => {
+    if (isPartner) return; // مفيش تذكرة تلقائية لحساب الشريك
     let alive = true;
     (async () => {
       try {
@@ -357,7 +370,7 @@ function PromoField({ isAr, data, set, services, t }: {
       } catch { /* صامت */ }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [isPartner]);
 
   const errMsg = (e: string) => {
     if (isAr) return e === 'not_found' ? 'كود غير صحيح'
@@ -457,7 +470,7 @@ function PromoField({ isAr, data, set, services, t }: {
       </div>
 
       <AnimatePresence>
-        {autoPromo && !applied && (
+        {autoPromo && !applied && !isPartner && (
           <motion.button
             type="button" onClick={applyTicket} disabled={checking} data-cursor="hover"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, height: 0, marginBottom: 0 }}

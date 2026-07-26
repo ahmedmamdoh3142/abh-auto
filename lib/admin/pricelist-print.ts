@@ -25,6 +25,8 @@ export interface PriceRow {
   cells: Record<string, { price: number; old?: number; commission?: number }>;
   /** محتويات الخدمة (المشمولات) — تظهر كسطر تحت اسم الخدمة */
   includes?: string[];
+  /** مدة الضمان (نص جاهز، مثلاً "5 سنوات" أو "10 yrs") — تظهر كشارة بجانب اسم الخدمة */
+  warranty?: string;
 }
 export interface PriceGroup {
   category: string;
@@ -100,7 +102,14 @@ function buildHtml(d: PriceListInput) {
            </div>`
         : "";
 
-      const nameCell = `<div style="font-size:12px;font-weight:600;color:#15161a;">${esc(r.name)}</div>${incHtml}`;
+      // شارة الضمان (لو موجودة) — تظهر جنب اسم الخدمة
+      const warrantyBadge = r.warranty
+        ? `<span style="display:inline-flex;align-items:center;gap:4px;margin-${sA === "right" ? "left" : "right"}:8px;padding:2px 8px;border:1px solid #d9c98f;border-radius:999px;font-size:8.5px;font-weight:700;letter-spacing:.3px;color:#9a7a1f;background:#faf6ea;vertical-align:middle;white-space:nowrap;">
+             ${T("ضمان", "Warranty")} ${esc(r.warranty)}
+           </span>`
+        : "";
+
+      const nameCell = `<div style="font-size:12px;font-weight:600;color:#15161a;">${esc(r.name)}${warrantyBadge}</div>${incHtml}`;
 
       if (r.onRequest) {
         return `<tr style="background:${bg};">
@@ -133,10 +142,10 @@ function buildHtml(d: PriceListInput) {
   }).join("");
 
   const note = isPartner
-    ? T(`القيم بالـ${d.ccy}. «سعر» = ما يُدفع للطرف. «عمولة» = ما يخصّ الطرف على كل بيعة لكل حجم.`,
-        `Values in ${d.ccy}. “Price” = paid amount. “Comm.” = earned per sale, per size.`)
-    : T(`القيم بالـ${d.ccy}. الأسعار الظاهرة على الموقع لكل حجم سيارة.`,
-        `Values in ${d.ccy}. Public website prices per vehicle size.`);
+    ? T(`القيم بالـ${d.ccy}. «سعر» = ما يُدفع للطرف. «عمولة» = ما يخصّ الطرف على كل بيعة لكل حجم. شارة «ضمان» بجانب اسم الخدمة توضّح مدة الضمان المعتمدة.`,
+        `Values in ${d.ccy}. “Price” = paid amount. “Comm.” = earned per sale, per size. The “Warranty” badge next to each service shows its warranty period.`)
+    : T(`القيم بالـ${d.ccy}. الأسعار الظاهرة على الموقع لكل حجم سيارة. شارة «ضمان» بجانب اسم الخدمة توضّح مدة الضمان.`,
+        `Values in ${d.ccy}. Public website prices per vehicle size. The “Warranty” badge next to each service shows its warranty period.`);
 
   return `
   <div style="width:190mm;margin:0 auto;background:#fff;color:#15161a;font-family:'Helvetica Neue',Arial,'Segoe UI','Tahoma',sans-serif;direction:${dir};">

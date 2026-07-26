@@ -369,6 +369,9 @@ export function StepServices({
               <span className="flex-1">
                 <span className="block font-display text-base uppercase text-ivory">{t('step2.towingTitle')}</span>
                 <span className="mt-0.5 block text-xs text-platinum/55">{t('step2.towingDesc')}</span>
+                <span className="mt-0.5 block text-[0.62rem] text-platinum/40">
+                  {isAr ? 'سعر تقريبي — يختلف زيادة أو نقصانًا حسب موقعك الفعلي' : 'Estimated price — may vary based on your actual location'}
+                </span>
               </span>
               <span className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors duration-300 ${data.towing ? 'bg-gradient-to-r from-platinum to-ivory' : 'bg-white/10'}`}>
                 <motion.span className="absolute top-1 h-5 w-5 rounded-full bg-obsidian"
@@ -393,6 +396,11 @@ export function StepServices({
                         );
                       })}
                     </div>
+                    <p className="text-[0.64rem] leading-relaxed text-steel/60">
+                      {isAr
+                        ? '* الأسعار أعلاه تقريبية — ممكن تزيد أو تقل حسب موقعك الفعلي، وهنأكدها معاك بعد تحديد العنوان.'
+                        : '* Prices above are estimates — they may increase or decrease based on your actual location, and we\u2019ll confirm the final amount after you set the address.'}
+                    </p>
                     <div>
                       <SubLabel>{t('step2.towingLocationTitle')}</SubLabel>
                       <div className="mt-4">
