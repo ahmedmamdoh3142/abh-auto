@@ -8,9 +8,9 @@ export const dynamic = 'force-dynamic';
 export default async function PaymentFailedPage({
   searchParams,
 }: {
-  searchParams: { ref?: string };
+  searchParams: Promise<{ ref?: string }>;  // ← تحويل إلى Promise
 }) {
-  const ref = searchParams.ref;
+  const { ref } = await searchParams;        // ← استخراج القيم باستخدام await
   const t = await getTranslations('booking.paymentResult');
 
   const rows = ref
