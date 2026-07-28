@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic';
 export default async function PaymentSuccessPage({
   searchParams,
 }: {
-  searchParams: { ref?: string };
+  searchParams: Promise<{ ref?: string }>;
 }) {
-  const ref = searchParams.ref;
+  const { ref } = await searchParams;   // ← استخدم await
   const t = await getTranslations('booking.paymentResult');
   const tc = await getTranslations('booking');
 
