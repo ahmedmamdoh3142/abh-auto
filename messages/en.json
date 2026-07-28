@@ -9,7 +9,6 @@
     "booking": "Book Now",
     "offers": "Offers",
     "projects": "Projects",
-    "offers": "Offers",
     "testimonials": "Testimonials",
     "about": "About",
     "faq": "FAQ",
@@ -981,6 +980,8 @@
       "tamaraDesc": "Split into 3 easy payments.",
       "applePay": "Apple Pay",
       "applePayDesc": "Fast, secure payment with Face ID.",
+      "card": "Credit / Mada Card",
+      "cardDesc": "Pay securely through our payment gateway.",
       "cash": "Cash at Branch",
       "cashDesc": "Pay when you arrive at the branch.",
       "breakdown": "Price breakdown",
@@ -1028,6 +1029,19 @@
       "nextSteps": "Our  team will contact you shortly to finalise your appointment.",
       "backHome": "Back to Home",
       "newBooking": "Make Another Booking"
+    },
+    "paymentResult": {
+      "successTitle": "Payment Successful",
+      "successSubtitle": "Your booking and payment are confirmed. Our team will be in touch shortly.",
+      "failedTitle": "Payment Not Completed",
+      "failedSubtitle": "Something went wrong during payment and your booking wasn't confirmed. Please try again or contact us.",
+      "refLabel": "Booking Reference",
+      "totalLabel": "Total",
+      "vehicleLabel": "Vehicle",
+      "viewBookings": "View My Bookings",
+      "newBooking": "Make Another Booking",
+      "tryAgain": "Try Payment Again",
+      "contactSupport": "Contact Us"
     },
     "meta": {
       "title": "Reserve Your Session · ABH Auto",

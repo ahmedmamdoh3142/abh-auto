@@ -215,10 +215,11 @@ export function branchLabel(code: string, isAr: boolean): string {
   return b ? (isAr ? b.ar : b.en) : code;
 }
 
-export type PaymentMethod = 'tabby' | 'tamara' | 'applePay' | 'cash';
+export type PaymentMethod = 'card' | 'tabby' | 'tamara' | 'applePay' | 'cash';
 // كل طرق الدفع ظاهرة، لكن المعطّلة منها (PAYMENT_DISABLED) معروضة كـ "قريبًا"
-// وغير قابلة للاختيار لحد ما نفعّل بوابات الدفع. المتاح حاليًا: الدفع بالفرع (cash).
-export const PAYMENT_METHODS: PaymentMethod[] = ['tabby', 'tamara', 'applePay', 'cash'];
+// وغير قابلة للاختيار لحد ما نفعّل بوابات الدفع. المتاح حاليًا: البطاقة (card) عبر
+// AlinmaPay، والدفع بالفرع (cash).
+export const PAYMENT_METHODS: PaymentMethod[] = ['card', 'tabby', 'tamara', 'applePay', 'cash'];
 export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby', 'applePay']);
 
 /** Time slots grouped by part of day; BOOKED simulates taken slots. */

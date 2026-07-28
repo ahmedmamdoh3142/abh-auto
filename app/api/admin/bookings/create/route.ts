@@ -3,13 +3,14 @@
  *
  * زي حجز الموقع بالظبط لكن:
  *   • يُنسب الحجز للعميل المختار (userId) لو مسجّل، أو يُحفظ كزائر ببياناته.
- *   • (جديد) لو زائر ببيانات جديدة → نسجّله كعميل في users (lead capture) ونربط
+ *   • لو زائر ببيانات جديدة → نسجّله كعميل في users (lead capture) ونربط
  *     الحجز بيه عشان يظهر في «العملاء» ويتاح للاستهداف لاحقًا — نفس منطق الموقع.
  *   • الأسعار تُحسب في الخادم حسب حجم السيارة (size) — لا نثق بأي سعر من الواجهة.
  *   • لو العميل المختار شركة (partner): تُطبّق أسعاره الخاصة وعمولته (تُجمّد).
  *   • هدايا البندلات (خدمة + هدية): تُسعّر وتُتحقّق من الخادم وتُسجّل في
  *     booking_items + booking_bundle_gifts — نفس الموقع.
  *   • الدفع: cash → pending (معلّق)، غيره → paid. والبرومو يتبع نفس قاعدة الدفع.
+ *   • (جديد) خصم بنك العميل (BIN-based) — يلغي الخصم اليدوي تمامًا لو اتحقق.
  */
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
@@ -18,6 +19,7 @@ import { getAdminOrNull } from "@/lib/admin/guard";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 import { getBundleById, giftChargeFor } from "@/lib/bundles";
 import { enqueueBookingConfirm, enqueueBookingReminder } from "@/lib/whatsapp";
+import { matchBankBin } from "@/lib/bank-discount";
 
 const SIZE_OK = new Set(["small", "medium", "large"]);
 const onlyDigits = (s: string | null | undefined) => (s || "").replace(/[^0-9]/g, "");
@@ -60,8 +62,14 @@ export async function POST(request: Request) {
           .map((g: any) => ({ slug: String(g?.slug || ""), bundleId: String(g?.bundleId || "") }))
           .filter((g: any) => g.slug && g.bundleId)
       : [];
-// (جديد) خصم يدوي يطبّقه الموظف مباشرة بدل كود الخصم — نسبة أو مبلغ ثابت.
-    const manualDiscountInput = !partner && body.manualDiscount && (body.manualDiscount.kind === "percent" || body.manualDiscount.kind === "fixed")
+
+    const bankCardDigits = !partner && body.bankCardDigits
+      ? String(body.bankCardDigits).replace(/\D/g, "").slice(0, 8)
+      : null;
+
+    // (جديد) خصم يدوي يطبّقه الموظف مباشرة بدل كود الخصم — نسبة أو مبلغ ثابت.
+    // معطّل تمامًا لو خصم البنك اتحقق (bankCardDigits موجود وهيتأكد تحت).
+    const manualDiscountInputRaw = !partner && body.manualDiscount && (body.manualDiscount.kind === "percent" || body.manualDiscount.kind === "fixed")
       ? {
           kind: body.manualDiscount.kind as "percent" | "fixed",
           value: Math.max(0, Number(body.manualDiscount.value) || 0),
@@ -80,13 +88,10 @@ export async function POST(request: Request) {
     if (!customerName && !userId) return NextResponse.json({ ok: false, error: "customer_required" }, { status: 400 });
 
     // ════════════ التقاط العميل الزائر وتسجيله في users ════════════
-    // لو مفيش userId (زائر) وفيه تليفون/إيميل → نلاقيه أو ننشئه كعميل، ونربط
-    // الحجز بيه (effectiveUserId) عشان يظهر في «العملاء» وحجوزاته تتجمّع.
     async function captureLeadCustomer(): Promise<string | null> {
       const digits = onlyDigits(customerPhone);
       const email = customerEmail ? customerEmail.toLowerCase() : null;
 
-      // موجود بنفس التليفون؟ (نحدّث الاسم لو كان فاضي)
       if (digits) {
         const r = await query<{ id: string; name: string | null }>(
           `SELECT id, name FROM users WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g') = $1 LIMIT 1`,
@@ -97,12 +102,10 @@ export async function POST(request: Request) {
           return r[0].id;
         }
       }
-      // موجود بنفس الإيميل؟
       if (email) {
         const r = await query<{ id: string }>(`SELECT id FROM users WHERE lower(email) = $1 LIMIT 1`, [email]);
         if (r[0]) return r[0].id;
       }
-      // أنشئه
       const leadEmail = email || (digits ? `${digits}@lead.abh-auto.com` : null);
       if (!leadEmail) return null;
       const noLoginHash = `nologin:${randomBytes(24).toString("hex")}`;
@@ -114,7 +117,7 @@ export async function POST(request: Request) {
         );
         return ins[0]?.id ?? null;
       } catch (e: any) {
-        if (String(e?.code) !== "23505") throw e; // سباق إدخال → جِب الموجود
+        if (String(e?.code) !== "23505") throw e;
         if (digits) {
           const r = await query<{ id: string }>(
             `SELECT id FROM users WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g') = $1 LIMIT 1`,
@@ -127,7 +130,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // userId الفعّال للحجز: المسجّل لو اختير، وإلا العميل الملتقَط (lead).
     let effectiveUserId: string | null = userId;
     let customerCaptured = false;
     if (!userId && (onlyDigits(customerPhone) || customerEmail)) {
@@ -171,8 +173,22 @@ export async function POST(request: Request) {
 
     const beforePromo = subtotal + towingCost;
 
-    // (جديد) الخصم اليدوي — يُحسب في السيرفر بنفس القيمة المُدخَلة فقط، ولا نثق
-    // بأي مبلغ خصم جاهز من الواجهة.
+    // ── (جديد) خصم بنك العميل — يلغي الخصم اليدوي تمامًا لو اتحقق ──
+    let bankDiscount = 0;
+    let bankCode: string | null = null;
+    let bankBinMatched: string | null = null;
+    if (bankCardDigits) {
+      const match = await matchBankBin(bankCardDigits);
+      if (match) {
+        bankCode = match.bankCode;
+        bankBinMatched = bankCardDigits;
+        bankDiscount = Math.round((beforePromo * match.percent) / 100);
+      }
+    }
+
+    // الخصم اليدوي — يُحسب في السيرفر بنفس القيمة المُدخَلة فقط، ولا نثق
+    // بأي مبلغ خصم جاهز من الواجهة. معطّل تمامًا لو فيه خصم بنك مؤكّد.
+    const manualDiscountInput = bankCode ? null : manualDiscountInputRaw;
     let manualDiscountKind: string | null = null;
     let manualDiscountValue: number | null = null;
     let manualDiscountAmount = 0;
@@ -219,7 +235,7 @@ export async function POST(request: Request) {
     const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
     const customTotal = customItems.reduce((s, c) => s + c.price, 0);
 
-const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + customTotal;
+    const total = Math.max(0, beforePromo - manualDiscountAmount - bankDiscount) + giftsCharge + customTotal;
     const paidImmediately = paymentMethod !== "cash";
     const paymentStatus = paidImmediately ? "paid" : "pending";
 
@@ -232,13 +248,15 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
           manual_discount_by, manual_discount_at,
           customer_name, customer_phone, customer_email, customer_city,
           partner_id, commission_total, notes,
-          whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text)
+          whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text,
+          bank_discount_amount, bank_code, bank_bin_matched)
        VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
                $18,$19,$20,$21,
                $22::uuid, CASE WHEN $22::uuid IS NOT NULL THEN now() ELSE NULL END,
                $23,$24,$25,$26,
                $27,$28,$29,
-               $30, CASE WHEN $30 THEN now() ELSE NULL END, $31)
+               $30, CASE WHEN $30 THEN now() ELSE NULL END, $31,
+               $32, $33, $34)
        RETURNING id, reference`,
       [
         effectiveUserId, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
@@ -251,6 +269,7 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
         `حجز يدوي بواسطة ${admin.name} من الداشبورد`,
         whatsappOptIn,
         whatsappOptIn ? "موافقة مأخوذة شفهيًا عند الحجز اليدوي بالداشبورد" : null,
+        bankDiscount, bankCode, bankBinMatched,
       ]
     );
     const booking = bookingRows[0];
@@ -264,7 +283,6 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
       );
     }
 
-    // عناصر الهدايا + سجلّها
     for (const g of giftLines) {
       await query(
         `INSERT INTO booking_items
@@ -279,7 +297,6 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
       );
     }
 
-    // الخدمات المؤقتة — تُسجَّل كعناصر حجز بدون service_id (مرتبطة بهذا الحجز فقط).
     for (const c of customItems) {
       await query(
         `INSERT INTO booking_items
@@ -293,10 +310,10 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
       `INSERT INTO booking_status_history (booking_id, status, stage, note)
        VALUES ($1,'upcoming',0,$2)`,
       [booking.id, `أنشئ من الداشبورد بواسطة ${admin.name}` +
-        (manualDiscountKind ? ` — خصم ${manualDiscountKind === "percent" ? `${manualDiscountValue}%` : `${manualDiscountValue} ريال`} (${manualDiscountReason || "بدون سبب مذكور"})` : "")]
+        (manualDiscountKind ? ` — خصم ${manualDiscountKind === "percent" ? `${manualDiscountValue}%` : `${manualDiscountValue} ريال`} (${manualDiscountReason || "بدون سبب مذكور"})` : "") +
+        (bankCode ? ` — خصم عملاء البنك الأهلي السعودي` : "")]
     ).catch(() => {});
 
-    // واتساب: تأكيد + تذكير (إن وافق العميل) — يبقى في الطابور حتى يُفعَّل المزوّد.
     if (whatsappOptIn && customerPhone) {
       try {
         await enqueueBookingConfirm({
@@ -313,7 +330,10 @@ const total = Math.max(0, beforePromo - manualDiscountAmount) + giftsCharge + cu
       } catch (e) { console.error("whatsapp enqueue failed:", e); }
     }
 
-    return NextResponse.json({ ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal, customerCaptured, manualDiscountAmount });
+    return NextResponse.json({
+      ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal,
+      customerCaptured, manualDiscountAmount, bankDiscount, bankCode,
+    });
   } catch (err) {
     console.error("POST /api/admin/bookings/create failed:", err);
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });

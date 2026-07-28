@@ -17,7 +17,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift, Sparkles } from 'lucide-react';
+import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift, Sparkles, CreditCard } from 'lucide-react';
 
 import {
   BRANDS, PAYMENT_METHODS, PAYMENT_DISABLED, branchLabel, currencyFmt,
@@ -43,7 +43,7 @@ export function StepConfirm({
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
   data: BookingState;
-  total: { services: number; tow: number; beforePromo: number; promoCut: number; grand: number; onReq: boolean; saved: number; originalTotal: number };
+  total: { services: number; tow: number; beforePromo: number; promoCut: number; bankCut: number; grand: number; onReq: boolean; saved: number; originalTotal: number };
   set: (patch: Partial<BookingState>) => void;
   services: DbServiceMeta[];
   onBack: () => void; onConfirm: () => void;
@@ -162,7 +162,7 @@ export function StepConfirm({
           <div className="sticky top-28">
             <SubLabel>{t('step4.paymentTitle')}</SubLabel>
             <div className="mt-5 space-y-3">
-              {PAYMENT_METHODS.map((m, i) => {
+              {PAYMENT_METHODS.filter(method => method !== 'card').map((m, i) => {
                 const disabled = PAYMENT_DISABLED.has(m);
                 return (
                   <PaymentRow key={m} method={m} on={data.payment === m} disabled={disabled}
@@ -175,6 +175,9 @@ export function StepConfirm({
 
             {/* ── كود الخصم ── */}
             <PromoField isAr={isAr} data={data} set={set} services={SERVICES} t={t} />
+
+            {/* ── (جديد) خصم بنك العميل — تحت كود الخصم مباشرة ── */}
+            <BankDiscountField isAr={isAr} data={data} set={set} t={t} />
 
             <div className="mt-7 rounded-3xl border border-platinum/25 bg-gradient-to-b from-platinum/[0.07] to-white/[0.01] p-5 md:p-6">
               <button data-cursor="hover" onClick={() => set({ showBreakdown: !data.showBreakdown })}
@@ -268,6 +271,17 @@ export function StepConfirm({
                     {promoLabel(isAr, data)}
                   </span>
                   <span dir="ltr" className="font-display text-platinum tabular-nums">−{currencyFmt(total.promoCut)} {t('currency')}</span>
+                </div>
+              )}
+
+              {/* (جديد) خصم بنك العميل */}
+              {data.bankVerified && total.bankCut > 0 && (
+                <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
+                  <span className="inline-flex items-center gap-1.5 text-[#9fd4b0]">
+                    <ShieldCheck className="h-3 w-3" strokeWidth={2} />
+                    {isAr ? `خصم عملاء البنك الأهلي (${data.bankDiscountPercent}%)` : `Bank customer discount (${data.bankDiscountPercent}%)`}
+                  </span>
+                  <span dir="ltr" className="font-display text-[#9fd4b0] tabular-nums">−{currencyFmt(total.bankCut)} {t('currency')}</span>
                 </div>
               )}
 
@@ -558,6 +572,97 @@ function PromoField({ isAr, data, set, services, t }: {
     </div>
   );
 }
+/* ── خصم بنك العميل: تحقق BIN، تحت كود الخصم مباشرة ── */
+function BankDiscountField({ isAr, data, set, t }: {
+  isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const [open, setOpen] = useState(!!data.bankVerified);
+  const [digits, setDigits] = useState(data.bankCardDigits ?? '');
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const check = async () => {
+    const d = digits.replace(/\D/g, '').slice(0, 8);
+    if (d.length < 6) { setError(isAr ? 'أدخل 6 أرقام على الأقل من رقم الكارت' : 'Enter at least 6 digits'); return; }
+    setChecking(true); setError(null);
+    try {
+      const res = await fetch('/api/bank-discount/check', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardDigits: d }),
+      });
+      const j = await res.json();
+      if (j?.ok) {
+        set({
+          bankVerified: true, bankCardDigits: d, bankCode: j.bankCode, bankDiscountPercent: j.percent,
+          promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
+          promoServiceIds: [], promoPerService: {}, giftServiceSlug: null, giftServiceName: null,
+        });
+      } else {
+        set({ bankVerified: false, bankCode: null, bankDiscountPercent: 0 });
+        setError(isAr ? 'الكارت ده مش من البنك الأهلي السعودي' : 'This card is not from Saudi National Bank');
+      }
+    } catch {
+      setError(isAr ? 'تعذّر التحقق، حاول تاني' : 'Could not verify, try again');
+    } finally { setChecking(false); }
+  };
+
+  const clear = () => {
+    set({ bankVerified: false, bankCardDigits: null, bankCode: null, bankDiscountPercent: 0 });
+    setDigits(''); setError(null);
+  };
+
+  if (data.bankVerified) {
+    return (
+      <div className="mt-3 flex items-center justify-between rounded-2xl border border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.07] px-4 py-3">
+        <span className="inline-flex items-center gap-2 text-sm text-ivory">
+          <ShieldCheck className="h-4 w-4 text-[#9fd4b0]" strokeWidth={2} />
+          {isAr ? `تم التحقق — خصم عملاء البنك الأهلي ${data.bankDiscountPercent}%` : `Verified — bank customer discount ${data.bankDiscountPercent}%`}
+        </span>
+        <button data-cursor="hover" onClick={clear} aria-label="remove"
+          className="grid h-7 w-7 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
+          <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      {open ? (
+        <div>
+          <p className="mb-2 text-[0.66rem] leading-relaxed text-platinum/55">
+            {isAr ? 'عميل البنك الأهلي السعودي؟ اكتب أول 8 أرقام من كارتك للتحقق — خصم 20% لا يُجمع مع أي خصم آخر.'
+              : "Saudi National Bank customer? Enter your card's first 8 digits to verify — 20% off, not combinable with other discounts."}
+          </p>
+          <div className="flex gap-2.5">
+            <input
+              value={digits} dir="ltr" inputMode="numeric" maxLength={8}
+              onChange={(e) => { setDigits(e.target.value.replace(/\D/g, '').slice(0, 8)); setError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
+              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-3 font-display text-sm tracking-[0.14em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+            <button data-cursor="hover" onClick={check} disabled={checking || digits.length < 8}
+              className={`inline-flex flex-none items-center gap-2 rounded-2xl border px-5 py-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] transition-all duration-300 ${
+                checking || digits.length < 8
+                  ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-steel/50'
+                  : 'border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.08] text-ivory hover:border-[#9fd4b0]/70 hover:bg-[#9fd4b0]/[0.14]'
+              }`}>
+              {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />}
+              {isAr ? 'تحقّق' : 'Verify'}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
+        </div>
+      ) : (
+        <button data-cursor="hover" onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/70 transition-colors hover:border-[#9fd4b0]/40 hover:text-ivory">
+          <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {isAr ? 'أنا عميل البنك الأهلي السعودي' : "I'm a Saudi National Bank customer"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function Heading({ t }: { t: ReturnType<typeof useTranslations> }) {
   return (
@@ -637,6 +742,8 @@ function PaymentRow({ method, on, title, desc, delay, onSelect, disabled, soonLa
   );
 }
 
+
+
 function PaymentMark({ method }: { method: PaymentMethod }) {
   if (method === 'applePay') {
     return (
@@ -645,6 +752,13 @@ function PaymentMark({ method }: { method: PaymentMethod }) {
           <svg viewBox="0 0 24 24" className="me-px h-[11px] w-[11px] fill-ivory"><path d="M17.5 12.3c0-2 1.6-2.9 1.7-3-.9-1.3-2.4-1.5-2.9-1.5-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7 1 1.4 2 2.4 2 1 0 1.3-.6 2.5-.6s1.5.6 2.5.6 1.6-1 2.3-2c.7-1.1 1-2.1 1-2.2-.1 0-2.2-.9-2.2-3.6zM15.6 6.5c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.2 1.1-.5.5-.9 1.4-.8 2.3.9.1 1.8-.4 2.2-1z" /></svg>
           Pay
         </span>
+      </span>
+    );
+  }
+  if (method === 'card') {
+    return (
+      <span className="grid h-10 w-14 flex-shrink-0 place-items-center rounded-lg border border-white/12 bg-gradient-to-b from-white/[0.06] to-white/[0.01]">
+        <CreditCard className="h-5 w-5 text-ivory" strokeWidth={1.6} />
       </span>
     );
   }

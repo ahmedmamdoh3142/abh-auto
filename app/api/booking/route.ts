@@ -2,8 +2,10 @@
 // (+ partner pricing & commission + promo v2 + loyalty discount + pending-on-unpaid
 //  + التقاط العميل: لو بيانات العميل مختلفة عنك يتسجّل كعميل lead للاستهداف،
 //    لكن الحجز يفضل مربوطًا بحسابك أنت/الشريك كما هو.)
-//  + (جديد) كوبون هدية عجلة الحظ (kind=gift_service): يضيف الخدمة المُهداة
+//  + كوبون هدية عجلة الحظ (kind=gift_service): يضيف الخدمة المُهداة
 //    مجانًا فوق الطلب بدل أي خصم.
+//  + (جديد) خصم بنك العميل (BIN-based) — 20% لعملاء البنك الأهلي السعودي،
+//    يستبعد أي خصم تاني تمامًا (كود/تذكرة تلقائية/ولاء) لو اتحقق.
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
@@ -11,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getPartnerForUser, getPartnerPriceMap, priceKey } from "@/lib/partner-pricing";
 import { getPromoByCode, checkPromoValidity, computePromo, recordRedemption, type PromoLine } from "@/lib/promo";
 import { getLoyaltyDiscountPercent } from "@/lib/loyalty";
+import { matchBankBin } from "@/lib/bank-discount";
 import { getBundleById, giftChargeFor } from "@/lib/bundles";
 import { enqueueBookingConfirm, enqueueBookingReminder, waEnabled } from "@/lib/whatsapp";
 
@@ -46,6 +49,9 @@ export async function POST(request: Request) {
           .filter((g: any) => g.slug && g.bundleId)
       : [];
     const promoCodeInput = !partner && body.promoCode ? String(body.promoCode).trim() : null;
+    const bankCardDigits = !partner && body.bankCardDigits
+      ? String(body.bankCardDigits).replace(/\D/g, "").slice(0, 8)
+      : null;
 
     const customerName = body.name ? String(body.name).trim() : null;
     const customerPhone = body.phone ? String(body.phone).trim() : null;
@@ -152,14 +158,27 @@ export async function POST(request: Request) {
 
     const beforePromo = subtotal + towingCost;
 
-    // ── كود الخصم (v2): للعملاء العاديين فقط ──
+    // ── (جديد) خصم بنك العميل — يستبعد أي خصم تاني تمامًا لو اتحقق ──
+    let bankDiscount = 0;
+    let bankCode: string | null = null;
+    let bankBinMatched: string | null = null;
+    if (bankCardDigits) {
+      const match = await matchBankBin(bankCardDigits);
+      if (match) {
+        bankCode = match.bankCode;
+        bankBinMatched = bankCardDigits;
+        bankDiscount = Math.round((beforePromo * match.percent) / 100);
+      }
+    }
+
+    // ── كود الخصم (v2): للعملاء العاديين فقط، ومعطّل تمامًا لو خصم البنك اتفعّل ──
     let promoCode: string | null = null;
     let promoKind: string | null = null;
     let promoDiscount = 0;
     let promoId: string | null = null;
     let giftCouponServiceId: number | null = null; // كوبون هدية → خدمة تتضاف مجانًا
 
-    if (promoCodeInput) {
+    if (promoCodeInput && !bankCode) {
       const promo = await getPromoByCode(promoCodeInput);
       if (promo) {
         const invalid = await checkPromoValidity(promo, user?.id);
@@ -192,9 +211,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "no_services" }, { status: 400 });
     }
 
-    // ── خصم الولاء — على حسابك أنت صاحب الحجز (كما هو الأصل) ──
+    // ── خصم الولاء — على حسابك أنت صاحب الحجز (كما هو الأصل) — معطّل لو خصم بنك ──
     let loyaltyDiscount = 0;
-    if (!partner && !promoCode && user?.id) {
+    if (!partner && !promoCode && !bankCode && user?.id) {
       const loyaltyPct = await getLoyaltyDiscountPercent(user.id);
       loyaltyDiscount = Math.round((subtotal * loyaltyPct) / 100);
     }
@@ -231,7 +250,7 @@ export async function POST(request: Request) {
     }
     const giftsCharge = giftLines.reduce((s, g) => s + g.unit, 0);
 
-    const total = Math.max(0, beforePromo - promoDiscount - loyaltyDiscount) + giftsCharge;
+    const total = Math.max(0, beforePromo - promoDiscount - loyaltyDiscount - bankDiscount) + giftsCharge;
     // مفيش بوابة دفع مفعّلة فعليًا بعد — كل الحجوزات تبقى "بانتظار الدفع"
     // (تُأكَّد يدويًا أو عند تفعيل بوابة تتحقق من الدفع فعلًا).
     const paidImmediately = false;
@@ -246,10 +265,12 @@ export async function POST(request: Request) {
           promo_code, promo_discount, promo_kind,
           customer_name, customer_phone, customer_email, customer_city,
           partner_id, commission_total,
-          whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text, loyalty_discount)
+          whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_in_text, loyalty_discount,
+          bank_discount_amount, bank_code, bank_bin_matched)
        VALUES ($1,'upcoming',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
                $20,$21,$22,$23,$24,$25,$26,
-               $27, CASE WHEN $27 THEN now() ELSE NULL END, $28, $29)
+               $27, CASE WHEN $27 THEN now() ELSE NULL END, $28, $29,
+               $30, $31, $32)
        RETURNING id, reference`,
       [
         user?.id ?? null, vehicleLabel, plate, brandId, model, sizeCode, colorCode,
@@ -259,6 +280,7 @@ export async function POST(request: Request) {
         customerName, customerPhone, customerEmail, customerCity,
         partner?.id ?? null, commissionTotal,
         whatsappOptIn, whatsappOptInText, loyaltyDiscount,
+        bankDiscount, bankCode, bankBinMatched,
       ]
     );
     const booking = bookingRows[0];
@@ -341,6 +363,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      bookingId: booking.id,
       reference: booking.reference,
       total,
       saved: totalSaved,
@@ -351,6 +374,8 @@ export async function POST(request: Request) {
       isPartner: !!partner,
       commissionTotal,
       customerCaptured,
+      bankDiscount,
+      bankCode,
     });
   } catch (err) {
     console.error("POST /api/booking failed:", err);

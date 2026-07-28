@@ -74,6 +74,12 @@ const infoIco = (s = 12) => (
     <circle cx="12" cy="12" r="9" /><path d="M12 16v-5" /><path d="M12 8h.01" />
   </svg>
 );
+/* أيقونة درع صغيرة (للتحقق من بنك العميل) */
+const shieldIco = (s = 13) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
+  </svg>
+);
 
 export default function NewBookingClient({
   locale, brands, services, branches, colors, cities, payments, towing, slots,
@@ -236,6 +242,42 @@ export default function NewBookingClient({
   const [discountValue, setDiscountValue] = useState("");
   const [discountReason, setDiscountReason] = useState("");
 
+  // ── (جديد) خصم بنك العميل — يلغي الخصم اليدوي تمامًا لو اتحقق ──
+  const [bankDigits, setBankDigits] = useState("");
+  const [bankChecking, setBankChecking] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [bankVerified, setBankVerified] = useState(false);
+  const [bankCodeLabel, setBankCodeLabel] = useState<string | null>(null);
+  const [bankDiscountPercent, setBankDiscountPercent] = useState(0);
+
+  const checkBank = async () => {
+    const d = bankDigits.replace(/\D/g, "").slice(0, 8);
+    if (d.length < 6) { setBankError(T("أدخل 6 أرقام على الأقل", "Enter at least 6 digits")); return; }
+    setBankChecking(true); setBankError(null);
+    try {
+      const res = await fetch("/api/bank-discount/check", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardDigits: d }),
+      });
+      const j = await res.json();
+      if (j?.ok) {
+        setBankVerified(true);
+        setBankDiscountPercent(j.percent);
+        setBankCodeLabel(isAr ? j.bankLabel?.ar : j.bankLabel?.en);
+        setDiscountKind("none"); setDiscountValue(""); setDiscountReason("");
+      } else {
+        setBankVerified(false); setBankDiscountPercent(0);
+        setBankError(T("الكارت ده مش من البنك الأهلي السعودي", "This card is not from Saudi National Bank"));
+      }
+    } catch {
+      setBankError(T("تعذّر التحقق، حاول تاني", "Could not verify, try again"));
+    } finally { setBankChecking(false); }
+  };
+
+  const clearBank = () => {
+    setBankVerified(false); setBankDigits(""); setBankDiscountPercent(0); setBankCodeLabel(null); setBankError(null);
+  };
+
   const [waOptIn, setWaOptIn] = useState(true); // موافقة الواتساب (افتراضيًا مفعّلة في الداشبورد)
 
   const [busy, setBusy] = useState(false);
@@ -255,16 +297,18 @@ export default function NewBookingClient({
     const giftsCharge = gifts.reduce((s, g) => s + (g.unit || 0), 0);
     const customTotal = customItems.reduce((s, c) => s + (c.price || 0), 0);
     const beforePromo = svc + tow;
+    // (جديد) خصم بنك العميل — يلغي الخصم اليدوي تمامًا لو اتحقق
+    const bankCut = bankVerified ? Math.round((beforePromo * bankDiscountPercent) / 100) : 0;
     // خصم يدوي (نسبة أو مبلغ ثابت) يطبّقه الموظف مباشرة — يُعاد حسابه نهائيًا في السيرفر وقت الإنشاء.
     const rawVal = Math.max(0, Number(discountValue) || 0);
-    const promoCut = discountKind === "none" ? 0
+    const promoCut = bankVerified ? 0 : discountKind === "none" ? 0
       : discountKind === "percent" ? Math.round((beforePromo * Math.min(100, rawVal)) / 100)
       : Math.min(rawVal, beforePromo);
-    const grand = Math.max(0, beforePromo - promoCut) + giftsCharge + customTotal;
+    const grand = Math.max(0, beforePromo - promoCut - bankCut) + giftsCharge + customTotal;
     // الإجمالي قبل أي خصم (أصل الأسعار) — عشان نبيّن «قبل الخصم» و«وفّرت» زي الموقع.
     const originalTotal = svcOriginal + tow + giftsCharge + customTotal;
-    return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, grand, onReq, saved, originalTotal };
-  }, [chosenServices, size, towMode, towing, gifts, customItems, discountKind, discountValue]);
+    return { svc, tow, giftsCharge, customTotal, beforePromo, promoCut, bankCut, grand, onReq, saved, originalTotal };
+  }, [chosenServices, size, towMode, towing, gifts, customItems, discountKind, discountValue, bankVerified, bankDiscountPercent]);
 
 
   const phoneOk = !phone.trim() || isValidPhone(phone);
@@ -289,9 +333,10 @@ export default function NewBookingClient({
           services: Array.from(chosen),
           customItems: customItems.map((c) => ({ name: c.name, price: c.price })),
           gifts: gifts.map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
-          manualDiscount: discountKind === "none" || !Number(discountValue)
+          manualDiscount: bankVerified || discountKind === "none" || !Number(discountValue)
             ? null
             : { kind: discountKind, value: Math.max(0, Number(discountValue) || 0), reason: discountReason.trim() || undefined },
+          bankCardDigits: bankVerified ? bankDigits.replace(/\D/g, "").slice(0, 8) : null,
           whatsappOptIn: waOptIn,
         }),
       });
@@ -301,6 +346,7 @@ export default function NewBookingClient({
       setChosen(new Set()); setGifts([]); setCustomItems([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
       setDate(""); setTime(""); setTowMode(""); setTowAddress("");
       setDiscountKind("none"); setDiscountValue(""); setDiscountReason("");
+      clearBank();
       if (mode === "guest") { setName(""); setPhone(""); setEmail(""); setCity(""); }
       setUserId(""); setTouched(false);
     } catch {
@@ -688,6 +734,43 @@ export default function NewBookingClient({
                   <input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} placeholder={T("سبب الخصم (اختياري)", "Reason (optional)")} style={inp} />
                 </div>
               )}
+              {bankVerified && (
+                <div style={{ marginTop: 8, fontSize: 10.5, color: "#f5993d" }}>
+                  {T("الخصم اليدوي معطّل حاليًا — خصم البنك الأهلي مفعّل.", "Manual discount is disabled — bank discount is active.")}
+                </div>
+              )}
+            </div>
+
+            {/* (جديد) خصم بنك العميل (BIN) — 20% لعملاء البنك الأهلي السعودي، يلغي أي خصم آخر */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
+                <span style={{ color: "var(--abh-steel)" }}>{shieldIco(14)}</span>{T("خصم عملاء البنك الأهلي (اختياري)", "Bank customer discount (optional)")}
+              </div>
+              {bankVerified ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 12, border: "1px solid rgba(159,212,176,.4)", background: "rgba(159,212,176,.08)", padding: "12px 14px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--abh-ivory)" }}>
+                    {shieldIco(16)}
+                    {T(`تم التحقق — ${bankCodeLabel ?? "البنك الأهلي"} — خصم ${bankDiscountPercent}%`, `Verified — ${bankCodeLabel ?? "SNB"} — ${bankDiscountPercent}% off`)}
+                  </span>
+                  <button onClick={clearBank} style={{ flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "var(--abh-platinum)", padding: "6px 12px", fontSize: 11, cursor: "pointer" }}>
+                    {T("إلغاء", "Remove")}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr auto", gap: 8 }}>
+                    <input value={bankDigits} onChange={(e) => { setBankDigits(e.target.value.replace(/\D/g, "").slice(0, 8)); setBankError(null); }}
+                      dir="ltr" inputMode="numeric" maxLength={8}
+                      placeholder={T("أول 6-8 أرقام من كارت العميل", "First 6-8 digits of customer's card")}
+                      style={{ ...inp, textAlign: "center", letterSpacing: ".1em" }} />
+                    <button type="button" onClick={checkBank} disabled={bankChecking || bankDigits.length < 6}
+                      style={{ borderRadius: 12, border: "1px solid rgba(159,212,176,.4)", background: bankChecking || bankDigits.length < 6 ? "rgba(255,255,255,.02)" : "rgba(159,212,176,.1)", color: bankChecking || bankDigits.length < 6 ? "var(--abh-steel)" : "var(--abh-ivory)", padding: "11px 18px", fontSize: 12.5, fontWeight: 600, cursor: bankChecking || bankDigits.length < 6 ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                      {bankChecking ? T("جارٍ التحقق…", "Checking…") : T("تحقّق", "Verify")}
+                    </button>
+                  </div>
+                  {bankError && <div style={{ marginTop: 6, fontSize: 11, color: "#e7b4b4" }}>{bankError}</div>}
+                </div>
+              )}
             </div>
             {/* موافقة الواتساب */}
             <label style={{ marginTop: 16, display: "flex", alignItems: "flex-start", gap: 11, cursor: "pointer", borderRadius: 12, border: `1px solid ${waOptIn ? "rgba(159,212,176,.3)" : "rgba(255,255,255,.08)"}`, background: waOptIn ? "rgba(159,212,176,.06)" : "rgba(255,255,255,.02)", padding: "13px 15px", transition: "all .2s" }}>
@@ -793,6 +876,15 @@ export default function NewBookingClient({
                         {tagIco(12)}{T("خصم", "Discount")} ({discountKind === "percent" ? `${discountValue || 0}%` : `${EGP(Number(discountValue) || 0)} ${ccy}`})
                       </span>
                       <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", flexShrink: 0 }}>−{EGP(total.promoCut)}</span>
+                    </div>
+                  )}
+                  {/* (جديد) خصم بنك العميل */}
+                  {bankVerified && total.bankCut > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, marginTop: total.promoCut > 0 ? 8 : 0 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#9fd4b0", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {shieldIco(12)}{T(`خصم عملاء البنك الأهلي (${bankDiscountPercent}%)`, `Bank customer discount (${bankDiscountPercent}%)`)}
+                      </span>
+                      <span dir="ltr" className="abh-num" style={{ color: "#9fd4b0", flexShrink: 0 }}>−{EGP(total.bankCut)}</span>
                     </div>
                   )}
                 </div>

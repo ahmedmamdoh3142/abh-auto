@@ -79,11 +79,15 @@ export interface BookingState {
   promoDiscount: number;
   promoServiceIds: number[];
   promoPerService: Record<number, number>;
-  /** (جديد) كود الهدية gift_service: slug واسم الخدمة المُهداة — لعرضها في الدوك. */
   giftServiceSlug: string | null;
   giftServiceName: string | null;
   whatsappOptIn: boolean | undefined;
   gifts: { slug: string; bundleId: string; unit: number }[];
+  /** (جديد) خصم بنك العميل — أول 8 أرقام من الكارت فقط، لا نخزّن الرقم الكامل. */
+  bankVerified: boolean;
+  bankCardDigits: string | null;
+  bankCode: string | null;
+  bankDiscountPercent: number;
 }
 
 const INITIAL: BookingState = {
@@ -97,6 +101,7 @@ const INITIAL: BookingState = {
   giftServiceSlug: null, giftServiceName: null,
   whatsappOptIn: undefined,
   gifts: [],
+  bankVerified: false, bankCardDigits: null, bankCode: null, bankDiscountPercent: 0,
 };
 
 const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
@@ -247,10 +252,12 @@ export function BookingFlow({
     const giftsCharge = (data.gifts ?? []).reduce((s, g) => s + (g.unit || 0), 0);
     // الإجمالي قبل أي خصم = أصل أسعار الخدمات + النقل + هدايا البندل المدفوعة
     const originalTotal = servicesOriginal + tow + giftsCharge;
-    const promoCut = Math.min(data.promoDiscount || 0, beforePromo);
-    const grand = Math.max(0, beforePromo - promoCut) + giftsCharge;
-    return { services, tow, beforePromo, promoCut, grand, onReq, saved, originalTotal };
-  }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, SERVICES]);
+    // (جديد) خصم بنك العميل يلغي أي خصم كود تمامًا
+    const bankCut = data.bankVerified ? Math.round((beforePromo * data.bankDiscountPercent) / 100) : 0;
+    const promoCut = data.bankVerified ? 0 : Math.min(data.promoDiscount || 0, beforePromo);
+    const grand = Math.max(0, beforePromo - promoCut - bankCut) + giftsCharge;
+    return { services, tow, beforePromo, promoCut, bankCut, grand, onReq, saved, originalTotal };
+  }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, data.bankVerified, data.bankDiscountPercent, SERVICES]);
 
   // قائمة الخدمات المختارة بصيغة التتبّع (اسم + سعر)
   const trackedServices = useCallback(() => data.services.map((slug) => {
@@ -274,6 +281,7 @@ export function BookingFlow({
 
     trackBookingSubmit(); // ضغط «تأكيد» (محاولة)
 
+    let json: any = null;
     try {
       const res = await fetch('/api/booking', {
         method: 'POST',
@@ -294,7 +302,8 @@ export function BookingFlow({
           towingAddress: data.towing ? data.towingAddress : null,
           services: data.services,
           gifts: (data.gifts ?? []).map((g) => ({ slug: g.slug, bundleId: g.bundleId })),
-          promoCode: data.promoCode ?? null,
+          promoCode: data.bankVerified ? null : (data.promoCode ?? null),
+          bankCardDigits: data.bankVerified ? data.bankCardDigits : null,
           name: data.name,
           phone: data.phone,
           email: data.email,
@@ -305,23 +314,51 @@ export function BookingFlow({
             : null,
         }),
       });
-      const json = await res.json();
-      if (json?.ok && json.reference) {
-        setReference(json.reference);
-        // تتبّع: حجز ناجح (purchase) — يظهر في تقارير التحويل
-        trackBookingSuccess({
-          reference: json.reference,
-          value: total.grand,
-          services: trackedServices(),
-          paymentMethod: data.payment ?? undefined,
-        });
-      } else {
-        trackBookingError(json?.error ?? 'no_reference');
-      }
+      json = await res.json();
     } catch (e) {
       console.error('booking save failed:', e);
       trackBookingError('network_error');
+      return;
     }
+
+    if (!json?.ok || !json.reference) {
+      trackBookingError(json?.error ?? 'no_reference');
+      return;
+    }
+
+    // ── مسار الدفع بالبطاقة (AlinmaPay) — يحوّل العميل خارج الموقع ──
+    if (data.payment === 'card') {
+      try {
+        const initRes = await fetch('/api/payment/alinma/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId: json.bookingId,
+            amount: total.grand,
+            customer: { email: data.email, mobile: data.phone },
+          }),
+        });
+        const initJson = await initRes.json();
+        if (initJson?.ok && initJson.redirectUrl) {
+          window.location.href = initJson.redirectUrl;
+          return; // العميل غادر الصفحة — متكملش أي حاجة تانية هنا
+        }
+        trackBookingError(initJson?.error ?? 'gateway_init_failed');
+      } catch (e) {
+        console.error('alinma initiate failed:', e);
+        trackBookingError('gateway_init_failed');
+      }
+      return;
+    }
+
+    // ── باقي طرق الدفع (cash) — نفس السلوك الحالي ──
+    setReference(json.reference);
+    trackBookingSuccess({
+      reference: json.reference,
+      value: total.grand,
+      services: trackedServices(),
+      paymentMethod: data.payment ?? undefined,
+    });
 
     if (member) {
       addBooking({
