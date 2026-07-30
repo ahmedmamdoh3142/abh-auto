@@ -115,9 +115,11 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.webp",
   },
   robots: { index: true, follow: true },
-  // 🔽 تم إضافة ميتا تاج توثيق فيسبوك
+  // 🔽 Facebook domain verification via `other`
   verification: {
-    facebook: "tpwmogfvey8h190vb0gl5i06xs10ht",
+    other: {
+      "facebook-domain-verification": "tpwmogfvey8h190vb0gl5i06xs10ht",
+    },
   },
 };
 
