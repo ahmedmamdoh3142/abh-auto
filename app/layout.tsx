@@ -35,7 +35,6 @@ import CookieConsent from "@/components/analytics/cookie-consent";
 import { localeDirection } from "@/lib/i18n";
 import { siteConfig } from "@/lib/site-config";
 
-
 import "./globals.css";
 
 // --- Fonts -----------------------------------------------------------------
@@ -116,6 +115,10 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.webp",
   },
   robots: { index: true, follow: true },
+  // 🔽 تم إضافة ميتا تاج توثيق فيسبوك
+  verification: {
+    facebook: "tpwmogfvey8h190vb0gl5i06xs10ht",
+  },
 };
 
 export const viewport: Viewport = {
