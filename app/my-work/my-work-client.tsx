@@ -16,6 +16,7 @@ const Ic = {
   car: (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3v-5l2-5h14l2 5v5h-2M5 17a2 2 0 1 0 4 0M15 17a2 2 0 1 0 4 0M5 17h10" /></svg>),
   send: (s = 15) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4z" /><path d="M22 2 11 13" /></svg>),
   x: (s = 15) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>),
+  translate: (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M5 8h9M9 6v2M13 8a12 12 0 0 1-5 7M8 15a11 11 0 0 0 5-6M2 20l6-6M16 14l6 6M20 12v8M17 16h6" /></svg>),
 };
 
 type Task = {
@@ -220,15 +221,19 @@ export default function MyWorkClient({ technicianName, locale }: { technicianNam
   );
 }
 
-/* مودال المحادثة مع المشرف */
+/* مودال المحادثة مع المشرف — مع ترجمة تلقائية */
 function ChatModal({ task, isAr, T, onClose, flash }: any) {
   const [comments, setComments] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [tr, setTr] = useState<Record<number, { text?: string; loading?: boolean; showOriginal?: boolean }>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const loc = isAr ? "ar-EG" : "en-US";
+  const myLang: "ar" | "en" = isAr ? "ar" : "en";
   const fmtT = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? "" : d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); };
+  const arabicPattern = /[\u0600-\u06FF\u0750-\u077F]/;
+  const detectLocal = (s: string): "ar" | "en" => (arabicPattern.test(s) ? "ar" : "en");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -236,7 +241,27 @@ function ChatModal({ task, isAr, T, onClose, flash }: any) {
     finally { setLoading(false); }
   }, [task.id]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [comments]);
+  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [comments, tr]);
+
+  async function translateOne(c: any) {
+    if (tr[c.id]?.text || tr[c.id]?.loading) return;
+    setTr((s) => ({ ...s, [c.id]: { ...s[c.id], loading: true } }));
+    try {
+      const j = await fetch("/api/translate/comment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: c.id, target: myLang }),
+      }).then((r) => r.json());
+      if (j?.ok && !j.sameLang) setTr((s) => ({ ...s, [c.id]: { text: j.translated, loading: false } }));
+      else setTr((s) => ({ ...s, [c.id]: { loading: false } }));
+    } catch { setTr((s) => ({ ...s, [c.id]: { loading: false } })); }
+  }
+
+  useEffect(() => {
+    comments.forEach((c) => {
+      if (!c.isMe && detectLocal(c.body) !== myLang && !tr[c.id]) translateOne(c);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments]);
 
   async function send() {
     const body = text.trim();
@@ -255,7 +280,6 @@ function ChatModal({ task, isAr, T, onClose, flash }: any) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center", background: "rgba(0,0,0,.7)", backdropFilter: "blur(6px)", padding: "0" }}>
       <div onClick={(e) => e.stopPropagation()} dir={isAr ? "rtl" : "ltr"} style={{ width: "100%", maxWidth: 560, maxHeight: "80vh", display: "flex", flexDirection: "column", borderRadius: "22px 22px 0 0", border: "1px solid rgba(255,255,255,.1)", borderBottom: "none", background: "#0c0d0e", overflow: "hidden" }}>
-        {/* رأس */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 18px", borderBottom: "1px solid rgba(255,255,255,.07)" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14.5, color: "#fff" }}>{task.name}</div>
@@ -264,27 +288,39 @@ function ChatModal({ task, isAr, T, onClose, flash }: any) {
           <button onClick={onClose} style={{ display: "grid", placeItems: "center", height: 34, width: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#cbcdcd", cursor: "pointer", flexShrink: 0 }}>{Ic.x(16)}</button>
         </div>
 
-        {/* الرسائل */}
         <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 10, minHeight: 200 }}>
           {loading ? (
             <div style={{ margin: "auto", color: "#8a9099", fontSize: 13 }}>{T("جارٍ التحميل…", "Loading…")}</div>
           ) : comments.length === 0 ? (
             <div style={{ margin: "auto", textAlign: "center", color: "#8a9099", fontSize: 13, lineHeight: 1.7 }}>{T("لسه مفيش رسائل.\nاكتب سؤالك أو طلبك للمشرف.", "No messages yet.\nAsk the supervisor anything.")}</div>
           ) : (
-            comments.map((c) => (
-              <div key={c.id} style={{ alignSelf: c.isMe ? "flex-end" : "flex-start", maxWidth: "80%" }}>
-                <div style={{ borderRadius: 14, padding: "10px 13px", fontSize: 13.5, lineHeight: 1.5, color: c.isMe ? "#0b0c0e" : "#fff", background: c.isMe ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.05)", border: c.isMe ? "none" : "1px solid rgba(255,255,255,.08)" }}>
-                  {c.body}
+            comments.map((c) => {
+              const st = tr[c.id];
+              const showTranslated = !!st?.text && !st?.showOriginal;
+              const shown = showTranslated ? st!.text : c.body;
+              return (
+                <div key={c.id} style={{ alignSelf: c.isMe ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+                  <div style={{ borderRadius: 14, padding: "10px 13px", fontSize: 13.5, lineHeight: 1.5, color: c.isMe ? "#0b0c0e" : "#fff", background: c.isMe ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.05)", border: c.isMe ? "none" : "1px solid rgba(255,255,255,.08)" }}>
+                    {shown}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, justifyContent: c.isMe ? (isAr ? "flex-start" : "flex-end") : (isAr ? "flex-end" : "flex-start"), flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 9.5, color: "#8a9099" }}>
+                      {c.fromSupervisor ? `${c.authorName} · ${T("مشرف", "Supervisor")}` : T("أنا", "Me")} · {fmtT(c.createdAt)}
+                    </span>
+                    {st?.loading && <span style={{ fontSize: 9.5, color: "#6ba8f5", display: "inline-flex", alignItems: "center", gap: 3 }}>{Ic.translate(10)}{T("جارٍ الترجمة…", "Translating…")}</span>}
+                    {!!st?.text && (
+                      <button onClick={() => setTr((s) => ({ ...s, [c.id]: { ...s[c.id], showOriginal: !s[c.id]?.showOriginal } }))}
+                        style={{ fontSize: 9.5, color: "#6ba8f5", background: "transparent", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, padding: 0 }}>
+                        {Ic.translate(10)}{showTranslated ? T("عرض الأصل", "See original") : T("عرض الترجمة", "See translation")}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: 9.5, color: "#8a9099", marginTop: 4, textAlign: c.isMe ? (isAr ? "left" : "right") : (isAr ? "right" : "left") }}>
-                  {c.fromSupervisor ? `${c.authorName} · ${T("مشرف", "Supervisor")}` : T("أنا", "Me")} · {fmtT(c.createdAt)}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
-        {/* الإدخال */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 14, borderTop: "1px solid rgba(255,255,255,.07)" }}>
           <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
             placeholder={T("اكتب رسالتك…", "Type a message…")} dir={isAr ? "rtl" : "ltr"}

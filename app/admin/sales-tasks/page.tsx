@@ -37,13 +37,19 @@ export default async function AdminSalesTasksPage() {
     })),
   }));
 
+  // موظفين المبيعات بس (مش فنيين، مش شركاء، مش أدمن) — دول اللي ينفع نوجّهلهم تاسك
+  const staffRows = await query<any>(`SELECT id, name FROM users WHERE role = 'staff' ORDER BY name`);
+  const staff = staffRows.map((u) => ({ id: u.id as string, name: u.name as string }));
+
   return (
     <SalesTasksClient
       locale={locale}
       services={services}
       brands={brands}
+      staff={staff}
       currentUserId={admin.id}
       currentUserName={admin.name}
+      currentUserRole={(admin as any).role ?? "staff"}
     />
   );
 }

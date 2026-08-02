@@ -17,11 +17,11 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   try {
     const b = await request.json();
 
-    // نجيب الحالة الحالية أولًا عشان نبني رسالة الفرق (audit) بدقة
     const cur = await query<any>(
-      `SELECT customer_name, customer_phone, stage, quality, price_objection,
-              vehicle_brand_name, vehicle_model, vehicle_size
-       FROM sales_tasks WHERE id = $1 LIMIT 1`,
+      `SELECT t.customer_name, t.customer_phone, t.stage, t.quality, t.price_objection,
+              t.vehicle_brand_name, t.vehicle_model, t.vehicle_size, t.assigned_to,
+              (SELECT name FROM users WHERE id = t.assigned_to) AS assigned_name
+       FROM sales_tasks t WHERE t.id = $1 LIMIT 1`,
       [id]
     );
     if (!cur[0]) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
@@ -70,13 +70,20 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         changes.push(`السيارة: «${before.vehicle_brand_name ?? "—"} ${before.vehicle_model ?? ""}» → «${newBrand ?? "—"} ${newModel ?? ""}»`);
       }
     }
+    if ("assignedTo" in b) {
+      const newAssigned = b.assignedTo ? String(b.assignedTo) : null;
+      if (newAssigned !== before.assigned_to) {
+        sets.push(`assigned_to = $${i++}`); vals.push(newAssigned);
+        const newName = newAssigned ? (b.assignedToName ?? "—") : "غير موجّه";
+        changes.push(`التوجيه: «${before.assigned_name ?? "غير موجّه"}» → «${newName}»`);
+      }
+    }
 
     if (sets.length === 0) return NextResponse.json({ ok: true, noChanges: true });
 
     vals.push(id);
     await query(`UPDATE sales_tasks SET ${sets.join(", ")} WHERE id = $${i}`, vals);
 
-    // (جديد) تسجيل كل تعديل كنشاط في السجل — بمين وإمتى بالظبط
     if (changes.length > 0) {
       const body = `✏️ تعديل بيانات:\n${changes.join("\n")}`;
       await query(

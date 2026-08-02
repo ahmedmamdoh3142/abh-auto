@@ -604,14 +604,20 @@ function RequestMaterialModal({ items, T, isAr, nm, onClose, onSend }: any) {
   );
 }
 
-/* مودال محادثة المهمة (المشرف يرد على الفني) */
+const IcTranslate = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M5 8h9M9 6v2M13 8a12 12 0 0 1-5 7M8 15a11 11 0 0 0 5-6M2 20l6-6M16 14l6 6M20 12v8M17 16h6" /></svg>);
+
+/* مودال محادثة المهمة (المشرف يرد على الفني) — مع ترجمة تلقائية */
 function TaskChatModal({ bookingId, task, T, isAr, onClose, toast }: any) {
   const [comments, setComments] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [tr, setTr] = useState<Record<number, { text?: string; loading?: boolean; showOriginal?: boolean }>>({});
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const loc = isAr ? "ar-EG" : "en-US";
+  const myLang: "ar" | "en" = isAr ? "ar" : "en";
+  const arabicPattern = /[\u0600-\u06FF\u0750-\u077F]/;
+  const detectLocal = (s: string): "ar" | "en" => (arabicPattern.test(s) ? "ar" : "en");
   const fmtT = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? "" : d.toLocaleDateString(loc, { day: "numeric", month: "short" }) + " · " + d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); };
 
   const load = useCallback(async () => {
@@ -620,7 +626,27 @@ function TaskChatModal({ bookingId, task, T, isAr, onClose, toast }: any) {
     finally { setLoading(false); }
   }, [bookingId, task.id]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [comments]);
+  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [comments, tr]);
+
+  async function translateOne(c: any) {
+    if (tr[c.id]?.text || tr[c.id]?.loading) return;
+    setTr((s) => ({ ...s, [c.id]: { ...s[c.id], loading: true } }));
+    try {
+      const j = await fetch("/api/translate/comment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: c.id, target: myLang }),
+      }).then((r) => r.json());
+      if (j?.ok && !j.sameLang) setTr((s) => ({ ...s, [c.id]: { text: j.translated, loading: false } }));
+      else setTr((s) => ({ ...s, [c.id]: { loading: false } }));
+    } catch { setTr((s) => ({ ...s, [c.id]: { loading: false } })); }
+  }
+
+  useEffect(() => {
+    comments.forEach((c) => {
+      if (!c.isMe && detectLocal(c.body) !== myLang && !tr[c.id]) translateOne(c);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments]);
 
   async function send() {
     const body = text.trim();
@@ -641,27 +667,39 @@ function TaskChatModal({ bookingId, task, T, isAr, onClose, toast }: any) {
       <div className="abh-col" style={{ gap: 14 }}>
         <div style={{ fontSize: 12.5, color: "var(--abh-platinum)" }}>{task.name}</div>
 
-        {/* الرسائل */}
         <div ref={scrollRef} style={{ maxHeight: 340, minHeight: 180, overflowY: "auto", borderRadius: 14, border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.18)", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           {loading ? (
             <div style={{ margin: "auto", color: "var(--abh-steel)", fontSize: 13 }}>{T("جارٍ التحميل…", "Loading…")}</div>
           ) : comments.length === 0 ? (
             <div style={{ margin: "auto", textAlign: "center", color: "var(--abh-steel)", fontSize: 12.5, lineHeight: 1.7 }}>{T("لا رسائل بعد.", "No messages yet.")}</div>
           ) : (
-            comments.map((c) => (
-              <div key={c.id} style={{ alignSelf: c.isMe ? "flex-end" : "flex-start", maxWidth: "82%" }}>
-                <div style={{ borderRadius: 13, padding: "9px 13px", fontSize: 13, lineHeight: 1.5, color: c.isMe ? "#0b0c0e" : "var(--abh-ivory)", background: c.isMe ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.05)", border: c.isMe ? "none" : "1px solid rgba(255,255,255,.08)" }}>
-                  {c.body}
+            comments.map((c) => {
+              const st = tr[c.id];
+              const showTranslated = !!st?.text && !st?.showOriginal;
+              const shown = showTranslated ? st!.text : c.body;
+              return (
+                <div key={c.id} style={{ alignSelf: c.isMe ? "flex-end" : "flex-start", maxWidth: "82%" }}>
+                  <div style={{ borderRadius: 13, padding: "9px 13px", fontSize: 13, lineHeight: 1.5, color: c.isMe ? "#0b0c0e" : "var(--abh-ivory)", background: c.isMe ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.05)", border: c.isMe ? "none" : "1px solid rgba(255,255,255,.08)" }}>
+                    {shown}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap", justifyContent: c.isMe ? (isAr ? "flex-start" : "flex-end") : (isAr ? "flex-end" : "flex-start") }}>
+                    <span style={{ fontSize: 9.5, color: "var(--abh-steel)" }}>
+                      {c.fromTechnician ? `${c.authorName} · ${T("فني", "Tech")}` : (c.isMe ? T("أنا", "Me") : c.authorName)} · {fmtT(c.createdAt)}
+                    </span>
+                    {st?.loading && <span style={{ fontSize: 9.5, color: "#6ba8f5", display: "inline-flex", alignItems: "center", gap: 3 }}>{IcTranslate(10)}{T("جارٍ الترجمة…", "Translating…")}</span>}
+                    {!!st?.text && (
+                      <button onClick={() => setTr((s) => ({ ...s, [c.id]: { ...s[c.id], showOriginal: !s[c.id]?.showOriginal } }))}
+                        style={{ fontSize: 9.5, color: "#6ba8f5", background: "transparent", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, padding: 0 }}>
+                        {IcTranslate(10)}{showTranslated ? T("عرض الأصل", "See original") : T("عرض الترجمة", "See translation")}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: 9.5, color: "var(--abh-steel)", marginTop: 4, textAlign: c.isMe ? (isAr ? "left" : "right") : (isAr ? "right" : "left") }}>
-                  {c.fromTechnician ? `${c.authorName} · ${T("فني", "Tech")}` : (c.isMe ? T("أنا", "Me") : c.authorName)} · {fmtT(c.createdAt)}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
-        {/* الإدخال */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
             placeholder={T("اكتب ردّك للفني…", "Reply to technician…")} dir={isAr ? "rtl" : "ltr"}

@@ -2,10 +2,10 @@
 /**
  * app/admin/sales-tasks/sales-tasks-client.tsx — متابعة المبيعات (Sales Follow-up).
  *
- * كل الفريق (سيلز + مودريتور) يشتغل على كل التاسكات — مفيش تعيين لشخص بعينه.
- * كل تعديل (حالة/بيانات/ملاحظة/إغلاق) بيتسجّل تلقائيًا في سجل النشاط بمين وإمتى بالظبط.
- * "راكد" (Stale): أي تاسك مفتوح ماتلمسش من 48 ساعة بيتعلّم بحد أصفر — مبدأ من أنظمة CRM
- * العالمية (Capsule/Kanban CRMs) عشان محدش ينسى عميل.
+ * كل تاسك بيبقى موجّه لموظف مبيعات واحد بس (assigned_to). كل حد بيدخل الصفحة يشوف
+ * تاسكاته هو بس افتراضيًا؛ الأدمن بس هو اللي يقدر يبدّل لـ"كل التاسكات" ويفلتر حسب الموظف.
+ * كل تعديل (حالة/توجيه/بيانات/ملاحظة/إغلاق) بيتسجّل تلقائيًا في سجل النشاط بمين وإمتى بالظبط.
+ * "راكد" (Stale): أي تاسك مفتوح ماتلمسش من 48 ساعة بيتعلّم بحد أصفر.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader } from "@/components/admin/ui";
@@ -17,6 +17,7 @@ type VehicleSize = "small" | "medium" | "large";
 type Service = { id: number; slug: string; name: string };
 type Model = { name: string; size: VehicleSize };
 type Brand = { id: string; name: string; models: Model[] };
+type StaffMember = { id: string; name: string };
 type Note = { id: number; authorId: string | null; authorName: string; body: string; createdAt: string };
 type Task = {
   id: string;
@@ -25,6 +26,7 @@ type Task = {
   quality: Quality; priceObjection: boolean; initialNote: string | null;
   vehicleBrandId: string | null; vehicleBrandName: string | null; vehicleModel: string | null; vehicleSize: VehicleSize | null;
   stage: Stage;
+  assignedTo: string | null; assignedName: string | null;
   createdBy: string; createdName: string | null; createdAt: string; updatedAt: string;
   closeResult: "won" | "lost" | null; closeReason: string | null; closeNote: string | null;
   closedAt: string | null; notesCount: number; lastActivityAt: string | null;
@@ -38,7 +40,7 @@ const STAGE_META: Record<Stage, { ar: string; en: string; color: string }> = {
   won:         { ar: "تم الحجز",     en: "Won",         color: "#9fd4b0" },
   lost:        { ar: "مرفوض",        en: "Lost",        color: "#e7b4b4" },
 };
-const BOARD_STAGES: Stage[] = ["new", "contacted", "follow_up", "negotiating"];
+const OPEN_STAGES: Stage[] = ["new", "contacted", "follow_up", "negotiating"];
 const STALE_MS = 48 * 60 * 60 * 1000; // 48 ساعة
 
 const QUALITY_META: Record<string, { ar: string; en: string; color: string }> = {
@@ -60,6 +62,13 @@ const LOST_REASONS: { code: string; ar: string; en: string }[] = [
   { code: "other",            ar: "سبب آخر",                 en: "Other" },
 ];
 
+const AVATAR_PALETTE = ["#9cc3e0", "#e8cf9a", "#9fd4b0", "#e7b4b4", "#d9b25f", "#cbcdcd", "#b39ddb"];
+function avatarColor(name: string) {
+  let sum = 0;
+  for (let k = 0; k < name.length; k++) sum += name.charCodeAt(k);
+  return AVATAR_PALETTE[sum % AVATAR_PALETTE.length];
+}
+
 /* أيقونات مخصصة */
 const phoneIco = (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>);
 const flameIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17a2.5 2.5 0 0 0 2.5-2.5c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7.5 7.5 0 1 1-15 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>);
@@ -67,13 +76,16 @@ const closeIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill
 const checkIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>);
 const carIco = (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14M5 17a2 2 0 1 0 0 .01M19 17a2 2 0 1 0 0 .01M5 17V9l2-5h10l2 5v8"/></svg>);
 const staleIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>);
+const userIco = (s = 11) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 
-export default function SalesTasksClient({ locale, services, brands, currentUserId, currentUserName }: {
-  locale?: string; services: Service[]; brands: Brand[]; currentUserId: string; currentUserName: string;
+export default function SalesTasksClient({ locale, services, brands, staff, currentUserId, currentUserName, currentUserRole }: {
+  locale?: string; services: Service[]; brands: Brand[]; staff: StaffMember[];
+  currentUserId: string; currentUserName: string; currentUserRole: string;
 }) {
   const isAr = locale !== "en";
   const T = (ar: string, en: string) => (isAr ? ar : en);
   const toast = useToast();
+  const isFullAccess = currentUserRole === "admin";
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +95,8 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
   const [q, setQ] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [scope, setScope] = useState<"mine" | "all">(isFullAccess ? "all" : "mine");
+  const [assignedFilter, setAssignedFilter] = useState("");
 
   const [creating, setCreating] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
@@ -92,6 +106,8 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
 
   const buildParams = (withFilters: boolean) => {
     const params = new URLSearchParams();
+    params.set("scope", scope);
+    if (scope === "all" && assignedFilter) params.set("assignedTo", assignedFilter);
     if (withFilters) {
       if (fStage !== "all") params.set("stage", fStage);
       if (q.trim()) params.set("q", q.trim());
@@ -119,28 +135,36 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
     } finally { setStatsLoading(false); }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, dateFrom, dateTo]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, dateFrom, dateTo, scope, assignedFilter]);
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q]);
-  useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [dateFrom, dateTo]);
+  useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [dateFrom, dateTo, scope, assignedFilter]);
+
+  const boardStages = useMemo<Stage[]>(() => {
+    if (fStage === "won" || fStage === "lost") return [fStage];
+    return OPEN_STAGES;
+  }, [fStage]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: tasks.length };
     for (const t of tasks) c[t.stage] = (c[t.stage] ?? 0) + 1;
     return c;
   }, [tasks]);
+
   const columns = useMemo(() => {
     const map = new Map<Stage, Task[]>();
-    for (const s of BOARD_STAGES) map.set(s, []);
+    for (const s of boardStages) map.set(s, []);
     for (const t of tasks) if (map.has(t.stage)) map.get(t.stage)!.push(t);
     return map;
-  }, [tasks]);
+  }, [tasks, boardStages]);
+
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
   const winRate = stats && (stats.won + stats.lost) > 0 ? Math.round((stats.won / (stats.won + stats.lost)) * 100) : null;
+  const showClosedGrid = fStage === "won" || fStage === "lost";
 
   return (
     <div className="abh-fade-up">
       <PageHeader title={T("متابعة المبيعات", "Sales Follow-up")}
-        subtitle={T("تاسكات العملاء المحتملين — الفريق كله يشتغل على كل التاسكات.", "Prospective customer tasks — the whole team works on every task.")}
+        subtitle={T("تاسكات العملاء المحتملين — كل تاسك موجّه لموظف مسؤول عنه.", "Prospective customer tasks — each task is routed to one responsible staff member.")}
         seed="sales-tasks-hero"
         action={<Pill icon={Ic.plus} onClick={() => setCreating(true)}>{T("تاسك جديد", "New task")}</Pill>} />
 
@@ -166,10 +190,34 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
             <StatBox label={T("عملاء جدد في الفترة", "New leads in period")} value={stats.total} color="var(--abh-ivory)" loading={statsLoading} />
             <StatBox label={T("تم إقناعهم (Won)", "Convinced (Won)")} value={stats.won} color="#9fd4b0" loading={statsLoading} />
             <StatBox label={T("مرفوضين (Lost)", "Lost")} value={stats.lost} color="#e7b4b4" loading={statsLoading} />
-            <StatBox label={T("نسبة التحويل", "Conversion rate")} value={winRate != null ? `${winRate}%` : "—"} color="#e8cf9a" loading={statsLoading} />
+            <StatBox label={T("نسبة التحويل", "Conversion rate")} value={winRate != null ? `${winRate}%` : "—"} color="#e8cf9a" loading={statsLoading}
+              hint={T("محجوز ÷ (محجوز + مرفوض) — من التاسكات المُقفلة بس", "Won ÷ (Won + Lost) — closed tasks only")} />
           </div>
         )}
       </div>
+
+      {/* تبديل النطاق: تاسكاتي / كل التاسكات — للأدمن بس */}
+      {isFullAccess && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: 3, background: "rgba(255,255,255,.02)" }}>
+            {(["mine", "all"] as const).map((s) => (
+              <button key={s} onClick={() => setScope(s)}
+                style={{ borderRadius: 999, padding: "7px 16px", fontSize: 11.5, border: "none", cursor: "pointer", transition: "all .15s",
+                  background: scope === s ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent",
+                  color: scope === s ? "#000" : "var(--abh-platinum)", fontWeight: scope === s ? 600 : 400 }}>
+                {s === "mine" ? T("تاسكاتي", "My tasks") : T("كل التاسكات", "All tasks")}
+              </button>
+            ))}
+          </div>
+          {scope === "all" && (
+            <div style={{ minWidth: 210 }}>
+              <Selectbox value={assignedFilter} onChange={setAssignedFilter}
+                options={[{ value: "", label: T("كل الموظفين", "All staff") }, { value: "unassigned", label: T("غير موجّه", "Unassigned") }, ...staff.map((s) => ({ value: s.id, label: s.name }))]}
+                placeholder={T("فلترة حسب التوجيه", "Filter by assignee")} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* فلاتر المرحلة/البحث */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -192,18 +240,22 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالاسم أو التليفون…", "Search name or phone…")}
               style={{ width: "100%", borderRadius: 14, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "10px 14px", paddingInlineStart: 38, fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
           </div>
-          <button onClick={() => setView(view === "board" ? "list" : "board")}
-            style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", color: "var(--abh-platinum)", padding: "9px 16px", fontSize: 12, cursor: "pointer" }}>
-            {view === "board" ? T("عرض قائمة", "List view") : T("عرض Kanban", "Board view")}
-          </button>
+          {!showClosedGrid && (
+            <button onClick={() => setView(view === "board" ? "list" : "board")}
+              style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", color: "var(--abh-platinum)", padding: "9px 16px", fontSize: 12, cursor: "pointer" }}>
+              {view === "board" ? T("عرض قائمة", "List view") : T("عرض Kanban", "Board view")}
+            </button>
+          )}
         </div>
       </div>
 
       {loading ? (
         <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("جارٍ التحميل…", "Loading…")}</div>
+      ) : showClosedGrid ? (
+        <ClosedGrid tasks={tasks} isAr={isAr} T={T} onOpen={setOpenTaskId} />
       ) : view === "board" ? (
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${BOARD_STAGES.length}, minmax(270px,1fr))`, gap: 16, overflowX: "auto" }}>
-          {BOARD_STAGES.map((stage) => {
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${boardStages.length}, minmax(270px,1fr))`, gap: 16, overflowX: "auto" }}>
+          {boardStages.map((stage) => {
             const meta = STAGE_META[stage];
             const items = columns.get(stage) ?? [];
             return (
@@ -231,13 +283,13 @@ export default function SalesTasksClient({ locale, services, brands, currentUser
       )}
 
       {creating && (
-        <CreateTaskModal services={services} brands={brands} isAr={isAr} T={T}
+        <CreateTaskModal services={services} brands={brands} staff={staff} isAr={isAr} T={T} currentUserId={currentUserId}
           onClose={() => setCreating(false)}
           onCreated={() => { setCreating(false); load(); loadStats(); }} />
       )}
 
       {openTask && (
-        <TaskDrawer task={openTask} services={services} brands={brands} isAr={isAr} T={T}
+        <TaskDrawer task={openTask} services={services} brands={brands} staff={staff} isAr={isAr} T={T}
           currentUserId={currentUserId} currentUserName={currentUserName}
           onClose={() => setOpenTaskId(null)}
           onChanged={() => { load(); loadStats(); }} />
@@ -255,11 +307,12 @@ function setLast7Days(setFrom: (v: string) => void, setTo: (v: string) => void) 
   const now = new Date(); const from = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
   setFrom(from.toISOString().slice(0, 10)); setTo(now.toISOString().slice(0, 10));
 }
-function StatBox({ label, value, color, loading }: { label: string; value: number | string; color: string; loading: boolean }) {
+function StatBox({ label, value, color, loading, hint }: { label: string; value: number | string; color: string; loading: boolean; hint?: string }) {
   return (
     <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.015)", padding: "12px 14px" }}>
       <div style={{ fontSize: 10, color: "var(--abh-steel)", marginBottom: 6 }}>{label}</div>
       <div className="abh-num" style={{ fontSize: 22, color, opacity: loading ? 0.5 : 1 }}>{value}</div>
+      {hint && <div style={{ fontSize: 9, color: "var(--abh-steel)", marginTop: 4, opacity: .8 }}>{hint}</div>}
     </div>
   );
 }
@@ -269,20 +322,28 @@ function isStale(t: Task): boolean {
   return Date.now() - new Date(ref).getTime() > STALE_MS;
 }
 
-/* ═══════ كارت التاسك — تصميم احترافي ═══════ */
+/* ═══════ أفاتار بالاسم ═══════ */
+function Avatar({ name, size = 34 }: { name: string; size?: number }) {
+  const color = avatarColor(name || "?");
+  const initials = (name || "?").trim().slice(0, 1).toUpperCase();
+  return (
+    <span style={{ display: "grid", placeItems: "center", height: size, width: size, flexShrink: 0, borderRadius: 999, border: `1px solid ${color}55`, background: `${color}18` }}>
+      <span className="abh-display" style={{ fontSize: size * 0.42, color }}>{initials}</span>
+    </span>
+  );
+}
+
+/* ═══════ كارت التاسك المفتوح ═══════ */
 function TaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; onOpen: () => void }) {
   const q = t.quality ? QUALITY_META[t.quality] : null;
   const stale = isStale(t);
-  const initials = t.customerName.trim().slice(0, 1).toUpperCase() || "?";
   return (
     <button onClick={onOpen} className="abh-lift"
       style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 10, borderRadius: 16, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.09)"}`, background: stale ? "linear-gradient(160deg,rgba(232,207,154,.05),rgba(255,255,255,.02))" : "rgba(255,255,255,.025)", padding: 14, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
       {stale && <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 3, background: "linear-gradient(180deg,#e8cf9a,#d9b25f)" }} />}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ display: "grid", placeItems: "center", height: 34, width: 34, flexShrink: 0, borderRadius: 999, border: "1px solid rgba(255,255,255,.14)", background: "linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.02))" }}>
-          <span className="abh-display" style={{ fontSize: 14, color: "var(--abh-platinum)" }}>{initials}</span>
-        </span>
+        <Avatar name={t.customerName} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, color: "var(--abh-ivory)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName}</div>
           <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--abh-steel)" }}>{phoneIco(10)}{t.customerPhone}</div>
@@ -311,7 +372,10 @@ function TaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: strin
       {t.priceObjection && <span style={{ fontSize: 10, color: "#e7b4b4" }}>{T("⚠ معترض على السعر", "⚠ Price objection")}</span>}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
-        <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{T("بواسطة", "by")} {t.createdName ?? "—"}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, color: t.assignedName ? "var(--abh-steel)" : "#e8cf9a" }}>
+          {userIco(10)}
+          <strong style={{ color: t.assignedName ? "var(--abh-platinum)" : "#e8cf9a", fontWeight: 600 }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</strong>
+        </span>
         {stale ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, color: "#e8cf9a", fontWeight: 600 }}>{staleIco(11)}{T("راكد", "Stale")}</span>
         ) : (
@@ -319,6 +383,67 @@ function TaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: strin
         )}
       </div>
     </button>
+  );
+}
+
+/* ═══════ كارت احترافي للتاسكات المُقفلة (محجوز/مرفوض) — Grid ═══════ */
+function ClosedTaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; onOpen: () => void }) {
+  const won = t.closeResult === "won";
+  const reason = t.closeReason ? LOST_REASONS.find((r) => r.code === t.closeReason) : null;
+  const tone = won ? "#9fd4b0" : "#e7b4b4";
+  return (
+    <button onClick={onOpen} className="abh-lift"
+      style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 12, borderRadius: 18,
+        border: `1px solid ${tone}45`, background: `linear-gradient(160deg,${tone}0f,rgba(255,255,255,.015))`,
+        padding: 18, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
+      <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 4, background: `linear-gradient(180deg,${tone},${tone}88)` }} />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "4px 11px", fontSize: 10.5, fontWeight: 700, color: tone, border: `1px solid ${tone}55`, background: `${tone}18` }}>
+          {won ? checkIco(11) : closeIco(11)}
+          {won ? T("تم الحجز", "Won") : T("مرفوض", "Lost")}
+        </span>
+        <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{fmtFull(t.closedAt ?? t.updatedAt, isAr)}</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Avatar name={t.customerName} size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, color: "var(--abh-ivory)" }}>{t.customerName}</div>
+          <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--abh-steel)" }}>{phoneIco(10)}{t.customerPhone}</div>
+        </div>
+      </div>
+
+      {t.vehicleBrandName && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
+          {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
+        </div>
+      )}
+
+      {!won && reason && (
+        <div style={{ borderRadius: 12, border: "1px solid rgba(231,180,180,.3)", background: "rgba(231,180,180,.06)", padding: 10 }}>
+          <div style={{ fontSize: 9.5, color: "var(--abh-steel)", marginBottom: 3 }}>{T("سبب الرفض", "Lost reason")}</div>
+          <div style={{ fontSize: 12, color: "#e7b4b4", fontWeight: 600 }}>{isAr ? reason.ar : reason.en}</div>
+        </div>
+      )}
+
+      {t.closeNote && <div style={{ fontSize: 11.5, color: "var(--abh-platinum)", lineHeight: 1.6 }}>{t.closeNote}</div>}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--abh-steel)" }}>{userIco(10)}{t.assignedName ?? T("—", "—")}</span>
+        <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{T("بواسطة", "by")} {t.createdName ?? "—"}</span>
+      </div>
+    </button>
+  );
+}
+function ClosedGrid({ tasks, isAr, T, onOpen }: { tasks: Task[]; isAr: boolean; T: (a: string, e: string) => string; onOpen: (id: string) => void }) {
+  if (tasks.length === 0) {
+    return <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد تاسكات في هذه القائمة.", "No tasks in this list.")}</div>;
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
+      {tasks.map((t) => <ClosedTaskCard key={t.id} t={t} isAr={isAr} T={T} onOpen={() => onOpen(t.id)} />)}
+    </div>
   );
 }
 
@@ -335,7 +460,7 @@ function ListRow({ t, i, isAr, T, onOpen }: { t: Task; i: number; isAr: boolean;
       </div>
       {stale && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, color: "#e8cf9a" }}>{staleIco(11)}{T("راكد", "Stale")}</span>}
       <span style={{ fontSize: 11.5, color: "var(--abh-platinum)", flexShrink: 0 }}>{isAr ? meta.ar : meta.en}</span>
-      <span style={{ fontSize: 11, color: "var(--abh-steel)", flexShrink: 0, minWidth: 90, textAlign: isAr ? "left" : "right" }}>{t.createdName ?? "—"}</span>
+      <span style={{ fontSize: 11, color: "var(--abh-steel)", flexShrink: 0, minWidth: 90, textAlign: isAr ? "left" : "right" }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</span>
     </button>
   );
 }
@@ -368,8 +493,8 @@ function VehiclePicker({ brands, isAr, T, brandId, model, onChange }: {
 }
 
 /* ═══════ مودال إنشاء تاسك ═══════ */
-function CreateTaskModal({ services, brands, isAr, T, onClose, onCreated }: {
-  services: Service[]; brands: Brand[]; isAr: boolean; T: (a: string, e: string) => string;
+function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onClose, onCreated }: {
+  services: Service[]; brands: Brand[]; staff: StaffMember[]; isAr: boolean; T: (a: string, e: string) => string; currentUserId: string;
   onClose: () => void; onCreated: () => void;
 }) {
   const toast = useToast();
@@ -377,6 +502,7 @@ function CreateTaskModal({ services, brands, isAr, T, onClose, onCreated }: {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
+  const [assignedTo, setAssignedTo] = useState(staff.some((s) => s.id === currentUserId) ? currentUserId : "");
   const [brandId, setBrandId] = useState(""); const [brandName, setBrandName] = useState("");
   const [model, setModel] = useState(""); const [size, setSize] = useState<VehicleSize | null>(null);
   const [selectedServices, setSelectedServices] = useState<Set<number>>(new Set());
@@ -400,6 +526,7 @@ function CreateTaskModal({ services, brands, isAr, T, onClose, onCreated }: {
           customerName: name, customerPhone: phone, customerEmail: email || null, customerCity: city || null,
           services: svcPayload, quality, priceObjection, initialNote: note.trim() || null,
           vehicleBrandId: brandId || null, vehicleBrandName: brandName || null, vehicleModel: model || null, vehicleSize: size,
+          assignedTo: assignedTo || null,
         }),
       });
       const j = await res.json();
@@ -419,6 +546,13 @@ function CreateTaskModal({ services, brands, isAr, T, onClose, onCreated }: {
         <Field label={T("رقم التليفون", "Phone")}>
           <PhoneInput isAr={isAr} value={phone} onChange={setPhone} error={phone.trim() && !phoneOk ? T("رقم غير صحيح", "Invalid number") : null} />
         </Field>
+
+        <Field label={T("التاسك موجّه لـ", "Task assigned to")}>
+          <Selectbox value={assignedTo} onChange={setAssignedTo}
+            options={[{ value: "", label: T("بدون توجيه", "Unassigned") }, ...staff.map((s) => ({ value: s.id, label: s.name }))]}
+            placeholder={T("اختر موظف مبيعات", "Select a staff member")} />
+        </Field>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <Field label={T("الإيميل (اختياري)", "Email (optional)")}>
             <Input dir="ltr" value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="name@email.com" style={{ textAlign: "left" }} />
@@ -479,9 +613,26 @@ function CreateTaskModal({ services, brands, isAr, T, onClose, onCreated }: {
   );
 }
 
-/* ═══════ درج تفاصيل التاسك — بيانات العميل للعرض فقط، المرحلة فقط قابلة للتعديل ═══════ */
-function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUserName, onClose, onChanged }: {
-  task: Task; services: Service[]; brands: Brand[]; isAr: boolean; T: (a: string, e: string) => string;
+function SectionTitle({ label, accent }: { label: string; accent?: boolean }) {
+  return (
+    <div style={{ fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: accent ? "var(--abh-ivory)" : "var(--abh-platinum)", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, fontWeight: accent ? 700 : 400 }}>
+      {label}
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(90deg,rgba(255,255,255,.12),transparent)" }} />
+    </div>
+  );
+}
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+      <span style={{ fontSize: 11.5, color: "var(--abh-steel)", flexShrink: 0, paddingTop: 1 }}>{label}</span>
+      <span style={{ fontSize: 13, color: "var(--abh-ivory)", fontWeight: 500, textAlign: "end" }}>{value}</span>
+    </div>
+  );
+}
+
+/* ═══════ درج تفاصيل التاسك — بروفايل ثابت للعرض + بانل حالة/توجيه قابل للتعديل ═══════ */
+function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, currentUserName, onClose, onChanged }: {
+  task: Task; services: Service[]; brands: Brand[]; staff: StaffMember[]; isAr: boolean; T: (a: string, e: string) => string;
   currentUserId: string; currentUserName: string;
   onClose: () => void; onChanged: () => void;
 }) {
@@ -489,16 +640,12 @@ function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUse
   const isClosed = task.stage === "won" || task.stage === "lost";
 
   const [draft, setDraft] = useState({
-    customerName: task.customerName, customerPhone: task.customerPhone,
-    stage: task.stage, quality: task.quality, priceObjection: task.priceObjection,
-    services: new Set(task.services.map((s) => s.id)),
-    brandId: task.vehicleBrandId ?? "", brandName: task.vehicleBrandName ?? "",
-    model: task.vehicleModel ?? "", size: task.vehicleSize,
+    stage: task.stage,
+    assignedTo: task.assignedTo ?? "",
   });
   const [saving, setSaving] = useState(false);
 
-  // فقط تغيير المرحلة يعتبر تعديلاً
-  const dirty = useMemo(() => draft.stage !== task.stage, [draft.stage, task.stage]);
+  const dirty = useMemo(() => draft.stage !== task.stage || draft.assignedTo !== (task.assignedTo ?? ""), [draft, task.stage, task.assignedTo]);
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
@@ -519,10 +666,13 @@ function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUse
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      // نرسل فقط المرحلة الجديدة – باقي الحقول للعرض فقط ولن تتغير
       const res = await fetch(`/api/admin/sales-tasks/${task.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: draft.stage }),
+        body: JSON.stringify({
+          stage: draft.stage,
+          assignedTo: draft.assignedTo || null,
+          assignedToName: staff.find((s) => s.id === draft.assignedTo)?.name ?? null,
+        }),
       });
       const j = await res.json();
       if (!j.ok) throw new Error();
@@ -547,6 +697,10 @@ function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUse
     finally { setPosting(false); }
   };
 
+  const vehicleLabel = task.vehicleBrandName
+    ? `${task.vehicleBrandName} ${task.vehicleModel ?? ""}${task.vehicleSize ? " · " + (isAr ? SIZE_META[task.vehicleSize].ar : SIZE_META[task.vehicleSize].en) : ""}`
+    : T("غير محدد", "Not specified");
+
   return (
     <>
       <Modal title={task.customerName} onClose={onClose} wide>
@@ -560,13 +714,6 @@ function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUse
             </span>
           </div>
 
-          {task.initialNote && (
-            <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 12 }}>
-              <div style={{ fontSize: 10.5, color: "var(--abh-steel)", marginBottom: 4 }}>{T("ملاحظة الإنشاء الأولى", "Initial note at creation")}</div>
-              <div style={{ fontSize: 13, color: "var(--abh-ivory)" }}>{task.initialNote}</div>
-            </div>
-          )}
-
           {isClosed ? (
             <div style={{ borderRadius: 14, border: `1px solid ${task.closeResult === "won" ? "rgba(159,212,176,.4)" : "rgba(231,180,180,.4)"}`, background: task.closeResult === "won" ? "rgba(159,212,176,.08)" : "rgba(231,180,180,.08)", padding: 16 }}>
               <div style={{ fontSize: 14, color: task.closeResult === "won" ? "#9fd4b0" : "#e7b4b4", fontWeight: 600 }}>
@@ -575,81 +722,57 @@ function TaskDrawer({ task, services, brands, isAr, T, currentUserId, currentUse
               {task.closeNote && <div style={{ fontSize: 12.5, color: "var(--abh-platinum)", marginTop: 6 }}>{task.closeNote}</div>}
               <div style={{ fontSize: 10.5, color: "var(--abh-steel)", marginTop: 8 }}>{fmtFull(task.closedAt!, isAr)}</div>
             </div>
-          ) : (
-            /* ── بيانات العميل للعرض فقط ── */
-            <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,.09)", background: "rgba(255,255,255,.02)", padding: 20 }}>
-              <div style={{ fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
-                {T("بيانات التاسك", "Task details")}
-                <span style={{ flex: 1, height: 1, background: "linear-gradient(90deg,rgba(255,255,255,.12),transparent)" }} />
-              </div>
+          ) : null}
 
-              <div className="abh-col" style={{ gap: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  <Field label={T("اسم العميل", "Customer name")}>
-                    <Input value={draft.customerName} disabled />
-                  </Field>
-                  <Field label={T("التليفون", "Phone")}>
-                    <Input dir="ltr" value={draft.customerPhone} disabled style={{ textAlign: "left" }} />
-                  </Field>
-                </div>
-
-                {/* عرض السيارة بدلاً من picker */}
-                <Field label={T("السيارة", "Vehicle")}>
-                  <div style={{ fontSize: 13, color: "var(--abh-platinum)" }}>
-                    {draft.brandName ? `${draft.brandName} ${draft.model}` : T("غير محدد", "Not specified")}
-                    {draft.size ? ` · ${isAr ? SIZE_META[draft.size].ar : SIZE_META[draft.size].en}` : ""}
+          {/* ── 1) بروفايل العميل — بيانات ثابتة للعرض بس ── */}
+          <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,.09)", background: "rgba(255,255,255,.02)", padding: 20 }}>
+            <SectionTitle label={T("بيانات العميل", "Customer profile")} />
+            <div className="abh-col" style={{ gap: 0 }}>
+              <InfoRow label={T("اسم العميل", "Customer name")} value={task.customerName} />
+              <InfoRow label={T("التليفون", "Phone")} value={<span dir="ltr">{task.customerPhone}</span>} />
+              {task.customerEmail && <InfoRow label={T("الإيميل", "Email")} value={<span dir="ltr">{task.customerEmail}</span>} />}
+              {task.customerCity && <InfoRow label={T("المدينة", "City")} value={task.customerCity} />}
+              <InfoRow label={T("السيارة", "Vehicle")} value={vehicleLabel} />
+              <InfoRow label={T("مستوى الاهتمام", "Interest level")} value={task.quality ? (isAr ? QUALITY_META[task.quality].ar : QUALITY_META[task.quality].en) : "—"} />
+              <InfoRow label={T("اعتراض على السعر", "Price objection")} value={task.priceObjection ? T("نعم", "Yes") : T("لا", "No")} />
+              <InfoRow label={T("الخدمات المهتم بها", "Interested services")} value={
+                task.services.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: isAr ? "flex-end" : "flex-start" }}>
+                    {task.services.map((s) => <span key={s.id} style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", fontSize: 11 }}>{s.name}</span>)}
                   </div>
+                ) : T("لا توجد", "None")
+              } />
+            </div>
+            {task.initialNote && (
+              <div style={{ marginTop: 14, borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 12 }}>
+                <div style={{ fontSize: 10.5, color: "var(--abh-steel)", marginBottom: 4 }}>{T("ملاحظة الإنشاء الأولى", "Initial note at creation")}</div>
+                <div style={{ fontSize: 13, color: "var(--abh-ivory)" }}>{task.initialNote}</div>
+              </div>
+            )}
+          </div>
+
+          {/* ── 2) الحالة والتوجيه — القابل للتعديل، وتحته زرار الحفظ ── */}
+          {!isClosed && (
+            <div style={{ borderRadius: 18, border: "1px solid rgba(203,205,205,.25)", background: "rgba(203,205,205,.04)", padding: 20 }}>
+              <SectionTitle label={T("الحالة والتوجيه — قابل للتعديل", "Status & routing — editable")} accent />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <Field label={T("المرحلة", "Stage")}>
+                  <Selectbox value={draft.stage} onChange={(v: Stage) => setDraft((d) => ({ ...d, stage: v }))}
+                    options={OPEN_STAGES.map((s) => ({ value: s, label: isAr ? STAGE_META[s].ar : STAGE_META[s].en }))} placeholder="" />
                 </Field>
-
-                <Field label={T("الخدمات المهتم بيها", "Interested services")}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                    {services.filter(s => draft.services.has(s.id)).map(s => (
-                      <span key={s.id} style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "6px 13px", fontSize: 11.5, color: "var(--abh-platinum)" }}>
-                        {s.name}
-                      </span>
-                    ))}
-                    {services.filter(s => draft.services.has(s.id)).length === 0 && (
-                      <span style={{ color: "var(--abh-steel)", fontSize: 12 }}>{T("لا توجد", "None")}</span>
-                    )}
-                  </div>
+                <Field label={T("موجّه لـ", "Assigned to")}>
+                  <Selectbox value={draft.assignedTo} onChange={(v: string) => setDraft((d) => ({ ...d, assignedTo: v }))}
+                    options={[{ value: "", label: T("بدون توجيه", "Unassigned") }, ...staff.map((s) => ({ value: s.id, label: s.name }))]}
+                    placeholder={T("اختر موظف", "Select staff")} />
                 </Field>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  <Field label={T("مستوى الاهتمام", "Interest level")}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {(["hot", "warm", "cold"] as const).map(k => {
-                        const m = QUALITY_META[k];
-                        const on = draft.quality === k;
-                        return (
-                          <span key={k}
-                            style={{ flex: 1, borderRadius: 10, padding: "8px 6px", fontSize: 10.5, textAlign: "center",
-                              border: `1px solid ${on ? m.color : "rgba(255,255,255,.1)"}`,
-                              background: on ? `${m.color}15` : "rgba(255,255,255,.02)",
-                              color: on ? m.color : "var(--abh-platinum)", opacity: on ? 1 : 0.5 }}>
-                            {isAr ? m.ar : m.en}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </Field>
-
-                  <Field label={T("المرحلة", "Stage")}>
-                    <Selectbox value={draft.stage} onChange={(v: Stage) => setDraft((d) => ({ ...d, stage: v }))}
-                      options={BOARD_STAGES.map(s => ({ value: s, label: isAr ? STAGE_META[s].ar : STAGE_META[s].en }))} placeholder="" />
-                  </Field>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.08)" }}>
+                <span style={{ opacity: !dirty || saving ? 0.45 : 1, pointerEvents: !dirty || saving ? "none" : "auto", transition: "opacity .2s" }}>
+                    <Pill onClick={saveChanges}>
+                    {saving ? T("جارٍ الحفظ…", "Saving…") : dirty ? T("حفظ التعديلات", "Save changes") : T("لا تعديلات", "No changes")}
+                    </Pill>
+                </span>
                 </div>
-
-                <label style={{ display: "flex", alignItems: "center", gap: 10, opacity: 0.7 }}>
-                  <input type="checkbox" checked={draft.priceObjection} disabled />
-                  <span style={{ fontSize: 13, color: "var(--abh-ivory)" }}>{T("معترض على السعر", "Objected to the price")}</span>
-                </label>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)" }}>
-                <Pill onClick={saveChanges} disabled={!dirty || saving}>
-                  {saving ? T("جارٍ الحفظ…", "Saving…") : dirty ? T("حفظ التعديلات", "Save changes") : T("لا تعديلات", "No changes")}
-                </Pill>
-              </div>
             </div>
           )}
 
