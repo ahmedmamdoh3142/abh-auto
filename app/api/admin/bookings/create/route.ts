@@ -331,7 +331,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      ok: true, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal,
+      ok: true, bookingId: booking.id, reference: booking.reference, total, giftsCharge, customTotal, commissionTotal,
       customerCaptured, manualDiscountAmount, bankDiscount, bankCode,
     });
   } catch (err) {

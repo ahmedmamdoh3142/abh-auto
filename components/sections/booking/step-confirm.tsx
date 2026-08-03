@@ -162,7 +162,7 @@ export function StepConfirm({
           <div className="sticky top-28">
             <SubLabel>{t('step4.paymentTitle')}</SubLabel>
             <div className="mt-5 space-y-3">
-              {PAYMENT_METHODS.filter(method => method !== 'card').map((m, i) => {
+              {PAYMENT_METHODS.map((m, i) => {
                 const disabled = PAYMENT_DISABLED.has(m);
                 return (
                   <PaymentRow key={m} method={m} on={data.payment === m} disabled={disabled}

@@ -282,6 +282,28 @@ export default function NewBookingClient({
 
   const [busy, setBusy] = useState(false);
 
+  // (جديد) لينك الدفع — بيظهر بعد إنشاء حجز بطريقة "بطاقة" فقط
+  const [lastCardBooking, setLastCardBooking] = useState<{ id: string; reference: string } | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+
+  const genLink = async (bookingId: string) => {
+    setLinkBusy(true);
+    try {
+      const r = await fetch(`/api/admin/bookings/${bookingId}/payment-link`, { method: "POST" });
+      const j = await r.json();
+      if (j.ok) {
+        await navigator.clipboard.writeText(j.linkUrl);
+        toast(T("تم نسخ لينك الدفع", "Payment link copied"));
+      } else {
+        toast(T("فشل توليد اللينك", "Failed to generate link"), "bad");
+      }
+    } catch {
+      toast(T("فشل توليد اللينك", "Failed to generate link"), "bad");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
   const total = useMemo(() => {
     let svc = 0; let svcOriginal = 0; let saved = 0; let onReq = false;
     for (const s of chosenServices) {
@@ -343,6 +365,9 @@ export default function NewBookingClient({
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "fail");
       toast(T(`تم إنشاء الحجز ${j.reference}`, `Booking ${j.reference} created`));
+      if (payment === "card" && j.bookingId) {
+        setLastCardBooking({ id: j.bookingId, reference: j.reference });
+      }
       setChosen(new Set()); setGifts([]); setCustomItems([]); setModel(""); setBrandId(""); setColorKey(""); setPlate("");
       setDate(""); setTime(""); setTowMode(""); setTowAddress("");
       setDiscountKind("none"); setDiscountValue(""); setDiscountReason("");
@@ -914,6 +939,19 @@ export default function NewBookingClient({
                 <div style={{ fontSize: 11, color: "#e7b4b4", marginTop: 10, textAlign: "center" }}>{T("أكمل البيانات المطلوبة بالأعلى.", "Complete the required fields above.")}</div>
               )}
             </div>
+
+            {/* (جديد) ظهور بعد إنشاء حجز بطاقة — لينك دفع تبعته للعميل */}
+            {lastCardBooking && (
+              <div style={{ marginTop: 14, borderRadius: 14, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.06)", padding: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--abh-ivory)", marginBottom: 8 }}>
+                  {T(`حجز ${lastCardBooking.reference} — دفع بالبطاقة`, `Booking ${lastCardBooking.reference} — card payment`)}
+                </div>
+                <button onClick={() => genLink(lastCardBooking.id)} disabled={linkBusy}
+                  style={{ width: "100%", borderRadius: 999, border: "1px solid rgba(159,212,176,.4)", background: "rgba(159,212,176,.1)", color: "var(--abh-ivory)", padding: "10px 16px", fontSize: 12, fontWeight: 600, cursor: linkBusy ? "default" : "pointer" }}>
+                  {linkBusy ? T("جارٍ التوليد…", "Generating…") : T("توليد ونسخ لينك الدفع", "Generate & copy payment link")}
+                </button>
+              </div>
+            )}
           </div>
         </aside>
       </div>

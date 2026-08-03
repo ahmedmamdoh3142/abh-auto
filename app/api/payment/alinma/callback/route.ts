@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const success = responseCode === "000" || responseCode === "001";
+  const success = responseCode === "000";
 
   const rows = await query<any>(
     `SELECT id, total FROM bookings WHERE reference = $1 LIMIT 1`,
