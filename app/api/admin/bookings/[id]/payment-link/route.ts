@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       amount: Number(booking.total).toFixed(2),
       currency: "SAR",
       description: `ABH Auto booking ${booking.reference}`,
-      customer: { email: booking.customer_email, mobile: booking.customer_phone },
+      customer: { email: booking.customer_email, mobile: booking.customer_phone, addressCountry: "SA", addressCity: "Jeddah" },
       receiptUrl,
     });
 

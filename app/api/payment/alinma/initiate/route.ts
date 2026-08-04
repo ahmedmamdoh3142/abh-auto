@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       amount: Number(booking.total).toFixed(2),
       currency: "SAR",
       description: `ABH Auto booking ${booking.reference}`,
-      customer,
+      customer: { ...customer, addressCountry: "SA", addressCity: "Jeddah" },
       receiptUrl,
     });
 
