@@ -116,8 +116,9 @@ export async function createPayRequest(input: PayRequestInput) {
     throw new Error(`AlinmaPay pay-request failed: ${json?.responseDescription ?? "unknown"}`);
   }
 
-  return {
-    transactionId: json.transactionId as string,
-    linkUrl: json.paymentLink?.linkUrl as string,
-  };
+  const transactionId = json.transactionId as string;
+  const rawLink = json.paymentLink?.linkUrl as string;
+  const linkUrl = rawLink ? `${rawLink}${transactionId}` : rawLink;
+
+  return { transactionId, linkUrl };
 }
