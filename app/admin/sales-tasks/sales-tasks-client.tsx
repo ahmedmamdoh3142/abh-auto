@@ -10,6 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
+import { printSalesTasksReport } from "@/lib/admin/sales-tasks-print";
 
 type Stage = "new" | "contacted" | "follow_up" | "negotiating" | "won" | "lost";
 type Quality = "hot" | "warm" | "cold" | null;
@@ -77,6 +78,7 @@ const checkIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill
 const carIco = (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14M5 17a2 2 0 1 0 0 .01M19 17a2 2 0 1 0 0 .01M5 17V9l2-5h10l2 5v8"/></svg>);
 const staleIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>);
 const userIco = (s = 11) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
+const reportIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>);
 
 export default function SalesTasksClient({ locale, services, brands, staff, currentUserId, currentUserName, currentUserRole }: {
   locale?: string; services: Service[]; brands: Brand[]; staff: StaffMember[];
@@ -103,6 +105,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
 
   const [stats, setStats] = useState<{ total: number; won: number; lost: number } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
+  const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
 
   const buildParams = (withFilters: boolean) => {
     const params = new URLSearchParams();
@@ -133,6 +138,30 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         setStats({ total: all.length, won: all.filter((t) => t.stage === "won").length, lost: all.filter((t) => t.stage === "lost").length });
       }
     } finally { setStatsLoading(false); }
+  };
+
+  // (جديد) تصدير تقرير PDF بأسماء وأرقام وإيميلات العملاء المهتمين — لإعادة الاستهداف الإعلاني
+  const exportReport = () => {
+    const source = tasks.filter((t) => {
+      if (reportScope === "hot") return t.quality === "hot";
+      if (reportScope === "hot_warm") return t.quality === "hot" || t.quality === "warm";
+      return true;
+    });
+    printSalesTasksReport({
+      isAr,
+      title: T("تقرير العملاء المحتملين", "Prospective Customers Report"),
+      subtitle: T("لإعادة الاستهداف في الحملات الإعلانية", "For retargeting in ad campaigns"),
+      rows: source.map((t) => ({
+        customerName: t.customerName,
+        customerPhone: t.customerPhone,
+        customerEmail: t.customerEmail,
+        customerCity: t.customerCity,
+        quality: t.quality,
+        stage: t.stage,
+        services: t.services.map((s) => s.name),
+        createdAt: t.createdAt,
+      })),
+    });
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, dateFrom, dateTo, scope, assignedFilter]);
@@ -166,7 +195,18 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
       <PageHeader title={T("متابعة المبيعات", "Sales Follow-up")}
         subtitle={T("تاسكات العملاء المحتملين — كل تاسك موجّه لموظف مسؤول عنه.", "Prospective customer tasks — each task is routed to one responsible staff member.")}
         seed="sales-tasks-hero"
-        action={<Pill icon={Ic.plus} onClick={() => setCreating(true)}>{T("تاسك جديد", "New task")}</Pill>} />
+        action={
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <select value={reportScope} onChange={(e) => setReportScope(e.target.value as any)}
+              style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "9px 12px", fontSize: 11.5, color: "var(--abh-ivory)", outline: "none", cursor: "pointer" }}>
+              <option value="all" style={{ background: "#0c0d0e" }}>{T("كل العملاء", "All leads")}</option>
+              <option value="hot_warm" style={{ background: "#0c0d0e" }}>{T("مستعدين + مهتمين", "Hot + warm")}</option>
+              <option value="hot" style={{ background: "#0c0d0e" }}>{T("مستعدين للشراء فقط", "Hot only")}</option>
+            </select>
+            <Ghost icon={() => reportIco(15)} onClick={exportReport}>{T("تقرير الاستهداف PDF", "Retargeting PDF")}</Ghost>
+            <Pill icon={Ic.plus} onClick={() => setCreating(true)}>{T("تاسك جديد", "New task")}</Pill>
+          </div>
+        } />
 
       {/* فلتر التاريخ + إحصائيات */}
       <div style={{ ...card, padding: 18, marginBottom: 20 }}>
@@ -513,7 +553,8 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
 
   const toggleSvc = (id: number) => setSelectedServices((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const phoneOk = phone.trim() && isValidPhone(phone);
-  const valid = name.trim() && phoneOk;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const valid = name.trim() && phoneOk && emailOk;
 
   const submit = async () => {
     if (!valid || busy) return;
@@ -554,8 +595,9 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
         </Field>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Field label={T("الإيميل (اختياري)", "Email (optional)")}>
+          <Field label={T("الإيميل / اسم الحساب *", "Email / account name *")}>
             <Input dir="ltr" value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="name@email.com" style={{ textAlign: "left" }} />
+            {email.trim() && !emailOk && <p style={{ margin: "6px 2px 0", fontSize: 11, color: "#e7b4b4" }}>{T("إيميل غير صحيح", "Invalid email")}</p>}
           </Field>
           <Field label={T("المدينة (اختياري)", "City (optional)")}>
             <Input value={city} onChange={(e: any) => setCity(e.target.value)} placeholder={T("جدة", "Jeddah")} />
@@ -607,7 +649,7 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
           <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
           <Pill onClick={submit}>{busy ? T("جارٍ الإنشاء…", "Creating…") : T("إنشاء التاسك", "Create task")}</Pill>
         </div>
-        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل ورقم تليفون صحيح مطلوبان.", "Customer name and a valid phone are required.")}</p>}
+        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل ورقم تليفون وإيميل صحيحين مطلوبين.", "Customer name, a valid phone, and a valid email are required.")}</p>}
       </div>
     </Modal>
   );
