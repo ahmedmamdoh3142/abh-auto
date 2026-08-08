@@ -308,7 +308,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
                   <span className="abh-num" style={{ fontSize: 11.5, color: meta.color, fontWeight: 600 }}>{items.length}</span>
                 </div>
                 <div className="abh-col" style={{ gap: 10 }}>
-                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} onOpen={() => setOpenTaskId(t.id)} />)}
+                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} onOpen={() => setOpenTaskId(t.id)} />)}
                   {items.length === 0 && <div style={{ fontSize: 11.5, color: "var(--abh-steel)", textAlign: "center", padding: "24px 0" }}>{T("لا تاسكات", "No tasks")}</div>}
                 </div>
               </div>
@@ -317,7 +317,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         </div>
       ) : (
         <div style={{ borderRadius: 20, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
-          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} onOpen={() => setOpenTaskId(t.id)} />)}
+          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} currentUserId={currentUserId} onOpen={() => setOpenTaskId(t.id)} />)}
           {tasks.length === 0 && <div style={{ padding: 48, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد تاسكات مطابقة.", "No matching tasks.")}</div>}
         </div>
       )}
@@ -374,9 +374,10 @@ function Avatar({ name, size = 34 }: { name: string; size?: number }) {
 }
 
 /* ═══════ كارت التاسك المفتوح ═══════ */
-function TaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; onOpen: () => void }) {
+function TaskCard({ t, isAr, T, currentUserId, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; onOpen: () => void }) {
   const q = t.quality ? QUALITY_META[t.quality] : null;
   const stale = isStale(t);
+  const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
   return (
     <button onClick={onOpen} className="abh-lift"
       style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 10, borderRadius: 16, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.09)"}`, background: stale ? "linear-gradient(160deg,rgba(232,207,154,.05),rgba(255,255,255,.02))" : "rgba(255,255,255,.025)", padding: 14, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
@@ -394,6 +395,12 @@ function TaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: strin
           </span>
         )}
       </div>
+
+      {createdByMe && (
+        <span style={{ alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 9.5, color: "#9cc3e0", borderRadius: 999, border: "1px solid rgba(156,195,224,.4)", background: "rgba(156,195,224,.1)", padding: "2px 9px" }}>
+          {T("أنشأتها انت وموجّهة لزميل", "Created by you, routed to a colleague")}
+        </span>
+      )}
 
       {t.vehicleBrandName && (
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
@@ -488,9 +495,10 @@ function ClosedGrid({ tasks, isAr, T, onOpen }: { tasks: Task[]; isAr: boolean; 
 }
 
 /* ═══════ صف عرض القائمة ═══════ */
-function ListRow({ t, i, isAr, T, onOpen }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; onOpen: () => void }) {
+function ListRow({ t, i, isAr, T, currentUserId, onOpen }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; onOpen: () => void }) {
   const meta = STAGE_META[t.stage];
   const stale = isStale(t);
+  const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
   return (
     <button onClick={onOpen} style={{ width: "100%", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent", cursor: "pointer" }}>
       <span style={{ height: 8, width: 8, borderRadius: 999, background: meta.color, flexShrink: 0 }} />
@@ -498,6 +506,7 @@ function ListRow({ t, i, isAr, T, onOpen }: { t: Task; i: number; isAr: boolean;
         <span style={{ fontSize: 13.5, color: "var(--abh-ivory)" }}>{t.customerName}</span>
         <span dir="ltr" style={{ marginInlineStart: 10, fontSize: 11, color: "var(--abh-steel)" }}>{t.customerPhone}</span>
       </div>
+      {createdByMe && <span style={{ fontSize: 9.5, color: "#9cc3e0", borderRadius: 999, border: "1px solid rgba(156,195,224,.4)", background: "rgba(156,195,224,.1)", padding: "2px 8px", flexShrink: 0 }}>{T("من إنشائك", "By you")}</span>}
       {stale && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, color: "#e8cf9a" }}>{staleIco(11)}{T("راكد", "Stale")}</span>}
       <span style={{ fontSize: 11.5, color: "var(--abh-platinum)", flexShrink: 0 }}>{isAr ? meta.ar : meta.en}</span>
       <span style={{ fontSize: 11, color: "var(--abh-steel)", flexShrink: 0, minWidth: 90, textAlign: isAr ? "left" : "right" }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</span>

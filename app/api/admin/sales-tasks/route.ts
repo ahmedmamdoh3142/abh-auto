@@ -24,9 +24,10 @@ export async function GET(request: Request) {
 
   const fullAccess = hasFullAccess(admin);
   if (!fullAccess || scope !== "all") {
-    // موظف عادي، أو أدمن مختار "تاسكاتي فقط" — يشوف بس اللي موجّه له
-    where.push(`t.assigned_to = $${i++}`);
-    params.push(admin.id);
+    // موظف عادي، أو أدمن مختار "تاسكاتي فقط" — يشوف اللي موجّه له + اللي هو نفسه أنشأه
+    // (حتى لو وجّهه لزميل تاني) عشان يقدر يتابع ويعدّل ويضيف كومنتات عليه.
+    where.push(`(t.assigned_to = $${i++} OR t.created_by = $${i++})`);
+    params.push(admin.id, admin.id);
   } else if (assignedTo === "unassigned") {
     where.push(`t.assigned_to IS NULL`);
   } else if (assignedTo) {
