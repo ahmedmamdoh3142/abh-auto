@@ -562,7 +562,7 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
 
   const toggleSvc = (id: number) => setSelectedServices((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const phoneOk = phone.trim() && isValidPhone(phone);
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const emailOk = email.trim().length > 0;
   const valid = name.trim() && phoneOk && emailOk;
 
   const submit = async () => {
@@ -604,9 +604,8 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
         </Field>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Field label={T("الإيميل / اسم الحساب *", "Email / account name *")}>
-            <Input dir="ltr" value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="name@email.com" style={{ textAlign: "left" }} />
-            {email.trim() && !emailOk && <p style={{ margin: "6px 2px 0", fontSize: 11, color: "#e7b4b4" }}>{T("إيميل غير صحيح", "Invalid email")}</p>}
+          <Field label={T("اسم الحساب / الإيميل *", "Account name / email *")}>
+            <Input dir="ltr" value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder={T("مثال: ahmed_2024", "e.g. ahmed_2024")} style={{ textAlign: "left" }} />
           </Field>
           <Field label={T("المدينة (اختياري)", "City (optional)")}>
             <Input value={city} onChange={(e: any) => setCity(e.target.value)} placeholder={T("جدة", "Jeddah")} />
@@ -658,7 +657,7 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
           <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
           <Pill onClick={submit}>{busy ? T("جارٍ الإنشاء…", "Creating…") : T("إنشاء التاسك", "Create task")}</Pill>
         </div>
-        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل ورقم تليفون وإيميل صحيحين مطلوبين.", "Customer name, a valid phone, and a valid email are required.")}</p>}
+        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل، رقم تليفون صحيح، واسم الحساب مطلوبين.", "Customer name, a valid phone, and an account name are required.")}</p>}
       </div>
     </Modal>
   );
