@@ -77,6 +77,12 @@ type PayRequestInput = {
 };
 
 export async function createPayRequest(input: PayRequestInput) {
+  if (!TERMINAL_ID || !PASSWORD || !MERCHANT_KEY) {
+    throw new Error(
+      `AlinmaPay env vars missing: terminal=${!!TERMINAL_ID} password=${!!PASSWORD} key=${!!MERCHANT_KEY}`
+    );
+  }
+
   const signature = buildRequestSignature({
     trackId: input.orderId,
     amount: input.amount,
@@ -110,10 +116,18 @@ export async function createPayRequest(input: PayRequestInput) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = await res.json();
 
-  if (json?.responseCode !== "000" && json?.responseCode !== "001") {
-    throw new Error(`AlinmaPay pay-request failed: ${json?.responseDescription ?? "unknown"}`);
+  const raw = await res.text();
+  let json: any;
+  try { json = JSON.parse(raw); } catch { json = null; }
+
+  // يطبع شكل الرد الحقيقي من البنك في لوج السيرفر — احذفه بعد ما تنتهي من التشخيص
+  console.error("[AlinmaPay pay-request]", res.status, raw);
+
+  if (!json || (json.responseCode !== "000" && json.responseCode !== "001")) {
+    throw new Error(
+      `AlinmaPay pay-request failed [${res.status} / code ${json?.responseCode ?? "?"}]: ${json?.responseDescription ?? raw.slice(0, 300)}`
+    );
   }
 
   const transactionId = json.transactionId as string;

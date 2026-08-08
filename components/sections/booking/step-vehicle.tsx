@@ -11,12 +11,12 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
-import { Check, ChevronDown, Plus, Car, Search } from 'lucide-react';
+import { Check, ChevronDown, Plus, Car, Search, ShieldCheck, Wrench } from 'lucide-react';
 
 import { COLORS, type Brand, type VehicleSize } from '@/lib/booking-data';
 import type { DbColor } from '@/lib/booking-data-db';
 import type { Vehicle } from '@/components/shared/auth-provider';
-import type { BookingState } from './booking-flow';
+import type { BookingState, WarrantyCoverage } from './booking-flow';
 import { PrimaryPill } from './booking-flow';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -48,6 +48,7 @@ const FALLBACK_COLORS: DbColor[] = COLORS.map((c) => ({ key: c.key, hex: c.hex, 
 
 export function StepVehicle({
   t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors, onAddCustomModel,
+  maintenanceCovered = [], onStartMaintenance,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -59,6 +60,9 @@ export function StepVehicle({
   brands: Brand[];
   colors?: DbColor[];
   onAddCustomModel: (brandId: string, model: string, size: VehicleSize) => void;
+  /** (جديد) الضمانات السارية على اللوحة الحالية — لعرض بانر «صيانة مجانية». */
+  maintenanceCovered?: WarrantyCoverage[];
+  onStartMaintenance?: (w: WarrantyCoverage) => void;
 }) {
   const palette = colors && colors.length > 0 ? colors : FALLBACK_COLORS;
   const brand = brands.find((b) => b.id === data.brandId);
@@ -152,9 +156,14 @@ export function StepVehicle({
               </button>
             </div>
 
+            {/* (جديد) بانر صيانة الضمان لسيارة الجراج المختارة */}
+            {maintenanceCovered.length > 0 && !data.isMaintenance && (
+              <MaintenanceBanner isAr={isAr} covered={maintenanceCovered} onStart={onStartMaintenance} />
+            )}
+
             <div className="mt-10">
               <button onClick={onNext} disabled={!complete} data-cursor="hover" className={complete ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
-                <PrimaryPill>{t('step1.continue')}</PrimaryPill>
+                <PrimaryPill>{data.isMaintenance ? (isAr ? 'متابعة لطلب الصيانة' : 'Continue to service request') : t('step1.continue')}</PrimaryPill>
               </button>
             </div>
           </div>
@@ -274,9 +283,20 @@ export function StepVehicle({
               </Field>
             </div>
 
+            {/* (جديد) بانر صيانة الضمان — يظهر فقط لو اللوحة دي مغطّاة بضمان ساري */}
+            {maintenanceCovered.length > 0 && !data.isMaintenance && (
+              <MaintenanceBanner isAr={isAr} covered={maintenanceCovered} onStart={onStartMaintenance} />
+            )}
+            {data.isMaintenance && (
+              <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.07] px-5 py-4">
+                <ShieldCheck className="h-5 w-5 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
+                <span className="text-[0.78rem] text-ivory/90">{isAr ? 'وضع صيانة الضمان مفعّل لهذه السيارة.' : 'Warranty service mode is active for this car.'}</span>
+              </div>
+            )}
+
             <div className="mt-10">
               <button onClick={onNext} disabled={!complete} data-cursor="hover" className={complete ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
-                <PrimaryPill>{t('step1.continue')}</PrimaryPill>
+                <PrimaryPill>{data.isMaintenance ? (isAr ? 'متابعة لطلب الصيانة' : 'Continue to service request') : t('step1.continue')}</PrimaryPill>
               </button>
             </div>
           </div>
@@ -346,6 +366,31 @@ function Cross() {
       <span className={`${arm} bottom-0 right-0 h-px w-4`} />
       <span className={`${arm} bottom-0 right-0 h-4 w-px`} />
     </div>
+  );
+}
+
+/** (جديد) بانر «صيانة ضمان مجانية» — يظهر لما تكون اللوحة الحالية مغطّاة بضمان ساري. */
+function MaintenanceBanner({ isAr, covered, onStart }: {
+  isAr: boolean;
+  covered: { bookingItemId: number; serviceId: number; serviceName: string; expiresAt: string }[];
+  onStart?: (w: { bookingItemId: number; serviceId: number; serviceName: string; expiresAt: string }) => void;
+}) {
+  const w = covered[0];
+  return (
+    <button type="button" data-cursor="hover" onClick={() => onStart?.(w)}
+      className="group/mw relative mt-6 flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-[#9fd4b0]/30 bg-gradient-to-br from-[#9fd4b0]/[0.08] via-white/[0.02] to-transparent p-5 text-start transition-all duration-300 hover:-translate-y-0.5 hover:border-[#9fd4b0]/60">
+      <span className="grid h-12 w-12 flex-none place-items-center rounded-xl border border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.1]">
+        <ShieldCheck className="h-6 w-6 text-[#9fd4b0]" strokeWidth={1.6} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.58rem] uppercase tracking-[0.2em] text-[#9fd4b0]/85">{isAr ? 'سيارتك مغطّاة بالضمان' : 'This car is under warranty'}</span>
+        <span className="mt-1 block font-display text-lg leading-none text-ivory">{isAr ? 'صيانة الضمان مجانية' : 'Free warranty service'}</span>
+        <span className="mt-1 block truncate text-[0.68rem] text-platinum/55">
+          {isAr ? `تغطية: ${w?.serviceName ?? ''}${covered.length > 1 ? ` +${covered.length - 1}` : ''}` : `Covers: ${w?.serviceName ?? ''}${covered.length > 1 ? ` +${covered.length - 1}` : ''}`}
+        </span>
+      </span>
+      <Wrench className="h-5 w-5 flex-none text-[#9fd4b0]/70 transition-transform duration-300 group-hover/mw:rotate-12" strokeWidth={1.6} />
+    </button>
   );
 }
 

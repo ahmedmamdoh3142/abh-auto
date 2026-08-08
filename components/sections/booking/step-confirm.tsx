@@ -612,55 +612,118 @@ function BankDiscountField({ isAr, data, set, t }: {
     setDigits(''); setError(null);
   };
 
+  // ── حالة: تم التحقق ──
   if (data.bankVerified) {
     return (
-      <div className="mt-3 flex items-center justify-between rounded-2xl border border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.07] px-4 py-3">
-        <span className="inline-flex items-center gap-2 text-sm text-ivory">
-          <ShieldCheck className="h-4 w-4 text-[#9fd4b0]" strokeWidth={2} />
-          {isAr ? `تم التحقق — خصم عملاء البنك الأهلي ${data.bankDiscountPercent}%` : `Verified — bank customer discount ${data.bankDiscountPercent}%`}
-        </span>
-        <button data-cursor="hover" onClick={clear} aria-label="remove"
-          className="grid h-7 w-7 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
-          <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
-      </div>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}
+        className="relative mt-4 overflow-hidden rounded-2xl border border-[#9fd4b0]/40 bg-gradient-to-br from-[#9fd4b0]/[0.1] via-[#9fd4b0]/[0.03] to-transparent px-5 py-4">
+        <span aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#9fd4b0]/50 to-transparent" />
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-3">
+            <span className="grid h-10 w-10 flex-none place-items-center rounded-full border border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.12]">
+              <ShieldCheck className="h-5 w-5 text-[#9fd4b0]" strokeWidth={2} />
+            </span>
+            <span>
+              <span className="block text-sm font-medium text-ivory">
+                {isAr ? 'تم التحقق من بطاقة البنك الأهلي' : 'Saudi National Bank card verified'}
+              </span>
+              <span className="mt-0.5 block text-xs text-[#9fd4b0]">
+                {isAr ? `خصم ${data.bankDiscountPercent}% مُطبَّق على طلبك` : `${data.bankDiscountPercent}% off applied to your order`}
+              </span>
+            </span>
+          </span>
+          <button data-cursor="hover" onClick={clear} aria-label="remove"
+            className="grid h-7 w-7 flex-none place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-[#7c1a1a]/60 hover:text-[#e7b4b4]">
+            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+        </div>
+      </motion.div>
     );
   }
 
-  return (
-    <div className="mt-3">
-      {open ? (
-        <div>
-          <p className="mb-2 text-[0.66rem] leading-relaxed text-platinum/55">
-            {isAr ? 'عميل البنك الأهلي السعودي؟ اكتب أول 8 أرقام من كارتك للتحقق — خصم 20% لا يُجمع مع أي خصم آخر.'
-              : "Saudi National Bank customer? Enter your card's first 8 digits to verify — 20% off, not combinable with other discounts."}
-          </p>
-          <div className="flex gap-2.5">
-            <input
-              value={digits} dir="ltr" inputMode="numeric" maxLength={8}
-              onChange={(e) => { setDigits(e.target.value.replace(/\D/g, '').slice(0, 8)); setError(null); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
-              className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-3 font-display text-sm tracking-[0.14em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
-            <button data-cursor="hover" onClick={check} disabled={checking || digits.length < 8}
-              className={`inline-flex flex-none items-center gap-2 rounded-2xl border px-5 py-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] transition-all duration-300 ${
-                checking || digits.length < 8
-                  ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-steel/50'
-                  : 'border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.08] text-ivory hover:border-[#9fd4b0]/70 hover:bg-[#9fd4b0]/[0.14]'
-              }`}>
-              {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />}
-              {isAr ? 'تحقّق' : 'Verify'}
-            </button>
-          </div>
-          {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
+  // ── حالة: مفتوح (بيكتب رقم الكارت) ──
+  if (open) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}
+        className="relative mt-4 overflow-hidden rounded-2xl border border-[#9fd4b0]/35 bg-gradient-to-br from-[#9fd4b0]/[0.07] via-white/[0.02] to-transparent p-5">
+        <div className="mb-3 flex items-center gap-3">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-full border border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.1]">
+            <ShieldCheck className="h-5 w-5 text-[#9fd4b0]" strokeWidth={1.8} />
+          </span>
+          <span>
+            <span className="block text-sm font-medium text-ivory">{isAr ? 'تحقق من بطاقة البنك الأهلي' : 'Verify your Saudi National Bank card'}</span>
+            <span className="mt-0.5 block text-xs text-platinum/55">
+              {isAr ? 'أول 8 أرقام فقط — خصم 20%، لا يُجمع مع خصومات أخرى' : 'First 8 digits only — 20% off, not combinable'}
+            </span>
+          </span>
+          <button data-cursor="hover" onClick={() => setOpen(false)} aria-label="close"
+            className="ms-auto grid h-7 w-7 flex-none place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-white/30 hover:text-ivory">
+            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
         </div>
-      ) : (
-        <button data-cursor="hover" onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/70 transition-colors hover:border-[#9fd4b0]/40 hover:text-ivory">
-          <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
-          {isAr ? 'أنا عميل البنك الأهلي السعودي' : "I'm a Saudi National Bank customer"}
-        </button>
-      )}
-    </div>
+        <div className="flex gap-2.5">
+          <input
+            value={digits} dir="ltr" inputMode="numeric" maxLength={8} autoFocus
+            onChange={(e) => { setDigits(e.target.value.replace(/\D/g, '').slice(0, 8)); setError(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
+            placeholder={isAr ? 'مثال: 4567 1234' : 'e.g. 4567 1234'}
+            className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-3 font-display text-sm tracking-[0.14em] text-ivory placeholder:font-sans placeholder:tracking-normal placeholder:text-steel/60 outline-none transition-colors focus:border-[#9fd4b0]/50 focus:bg-white/[0.05]" />
+          <button data-cursor="hover" onClick={check} disabled={checking || digits.length < 8}
+            className={`inline-flex flex-none items-center gap-2 rounded-2xl border px-5 py-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] transition-all duration-300 ${
+              checking || digits.length < 8
+                ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-steel/50'
+                : 'border-[#9fd4b0]/40 bg-[#9fd4b0]/[0.1] text-ivory hover:border-[#9fd4b0]/70 hover:bg-[#9fd4b0]/[0.16]'
+            }`}>
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />}
+            {isAr ? 'تحقّق' : 'Verify'}
+          </button>
+        </div>
+        {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
+        <div className="mt-3 flex items-center gap-1.5 text-[0.62rem] text-platinum/45">
+          <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
+          {isAr ? 'بياناتك مشفّرة ولا تُحفظ بالكامل — أول 8 أرقام فقط للتحقق.' : 'Your data is encrypted — only the first 8 digits are used for verification.'}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ── حالة: بانر العرض المغلق ──
+  return (
+    <>
+      <motion.button
+        type="button" onClick={() => setOpen(true)} data-cursor="hover"
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
+        className="bank-offer-card group/bk relative mt-4 flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-[#9fd4b0]/25 bg-gradient-to-br from-[#9fd4b0]/[0.08] via-white/[0.02] to-transparent p-4 text-start transition-all duration-300 hover:-translate-y-0.5 hover:border-[#9fd4b0]/55">
+        <span aria-hidden className="bank-offer-shimmer pointer-events-none absolute inset-0" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#9fd4b0]/40 to-transparent" />
+
+        <span className="relative grid h-12 w-12 flex-none place-items-center rounded-xl border border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.1]">
+          <ShieldCheck className="h-6 w-6 text-[#9fd4b0]" strokeWidth={1.6} />
+        </span>
+
+        <span className="relative min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 text-[0.55rem] uppercase tracking-[0.18em] text-[#9fd4b0]/85">
+            <Sparkles className="h-2.5 w-2.5" strokeWidth={1.8} />
+            {isAr ? 'عرض حصري لعملاء البنك الأهلي السعودي' : 'Exclusive Saudi National Bank offer'}
+          </span>
+          <span className="mt-1 block font-display text-lg leading-none text-ivory">
+            {isAr ? 'وفّر 20% على طلبك' : 'Save 20% on your order'}
+          </span>
+          <span className="mt-1 block text-[0.68rem] text-platinum/55">
+            {isAr ? 'اربط بطاقتك البنكية للتحقق الفوري' : 'Link your bank card for instant verification'}
+          </span>
+        </span>
+
+        <span className="relative inline-flex flex-none items-center gap-1.5 rounded-full bg-gradient-to-br from-[#c3ecd1] to-[#9fd4b0] px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-obsidian transition-transform duration-300 group-hover/bk:scale-[1.04]">
+          {isAr ? 'تحقق الآن' : 'Verify now'}
+        </span>
+      </motion.button>
+      <style>{`
+        .bank-offer-shimmer{background:linear-gradient(115deg,transparent 42%,rgba(159,212,176,0.14) 50%,transparent 58%);background-size:280% 100%;animation:bankSweep 6s ease-in-out infinite;}
+        @keyframes bankSweep{0%{background-position:140% 0}100%{background-position:-140% 0}}
+        @media (prefers-reduced-motion: reduce){ .bank-offer-shimmer{ animation:none; } }
+      `}</style>
+    </>
   );
 }
 

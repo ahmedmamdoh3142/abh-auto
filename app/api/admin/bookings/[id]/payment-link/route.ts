@@ -45,8 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
 
     return NextResponse.json({ ok: true, linkUrl });
-  } catch (err) {
+  } catch (err: any) {
     console.error("admin payment-link failed:", err);
-    return NextResponse.json({ ok: false, error: "gateway_error" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: err?.message ?? "gateway_error" }, { status: 500 });
   }
 }

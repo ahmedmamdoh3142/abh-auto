@@ -43,8 +43,10 @@ import {
 
 import { StepVehicle } from './step-vehicle';
 import { StepServices } from './step-services';
+import { StepMaintenance } from './step-maintenance';
 import { StepDetails } from './step-details';
 import { StepConfirm } from './step-confirm';
+import { StepMaintenanceConfirm } from './step-maintenance-confirm';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const CINEMATIC = '/images/cta-bg.webp';
@@ -88,7 +90,14 @@ export interface BookingState {
   bankCardDigits: string | null;
   bankCode: string | null;
   bankDiscountPercent: number;
+  /** (جديد) صيانة الضمان — لما تكون true، خطوة الخدمات والدفع تتبدّل بخطوات الصيانة. */
+  isMaintenance: boolean;
+  maintenanceWarranty: WarrantyCoverage | null;
+  problemDescription: string;
 }
+
+/** (جديد) شكل موحّد لتغطية الضمان — تايب مستقل بسطر واحد عشان يبقى آمن مع النسخ/اللصق. */
+export type WarrantyCoverage = { bookingItemId: number; serviceId: number; serviceName: string; expiresAt: string };
 
 const INITIAL: BookingState = {
   brandId: '', model: '', colorKey: '', plate: '', size: 'large',
@@ -102,6 +111,7 @@ const INITIAL: BookingState = {
   whatsappOptIn: undefined,
   gifts: [],
   bankVerified: false, bankCardDigits: null, bankCode: null, bankDiscountPercent: 0,
+  isMaintenance: false, maintenanceWarranty: null, problemDescription: '',
 };
 
 const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
@@ -194,6 +204,63 @@ export function BookingFlow({
       return next;
     });
   }, [sizeOf]);
+
+  // ── (جديد) صيانة الضمان: تحقّق من تغطية اللوحة الحالية كل ما تتغيّر ──
+  const [maintenanceCovered, setMaintenanceCovered] = useState<WarrantyCoverage[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const digits = (data.plate.match(/[0-9\u0660-\u0669]/g) || []).join('');
+    if (!member || digits.length < 3) { setMaintenanceCovered([]); return; }
+    (async () => {
+      try {
+        const j = await fetch(`/api/vehicles/warranty?plate=${encodeURIComponent(data.plate)}&locale=${locale}`).then((r) => r.json());
+        if (alive && j?.ok) setMaintenanceCovered(j.warranties ?? []);
+      } catch { /* صامت */ }
+    })();
+    return () => { alive = false; };
+  }, [member, data.plate, locale]);
+
+  // لو السيارة اتغيّرت وبقت مش مغطاة بينما كنا في وضع الصيانة، نرجع لحجز عادي تلقائيًا
+  useEffect(() => {
+    if (data.isMaintenance && maintenanceCovered.length === 0) {
+      setData((d) => ({ ...d, isMaintenance: false, maintenanceWarranty: null }));
+    }
+  }, [maintenanceCovered, data.isMaintenance]);
+
+  const startMaintenance = useCallback((w: WarrantyCoverage) => {
+    set({ isMaintenance: true, maintenanceWarranty: w, services: [], gifts: [], promoCode: null, promoKind: null, promoDiscount: 0 });
+  }, [set]);
+
+  const cancelMaintenance = useCallback(() => {
+    set({ isMaintenance: false, maintenanceWarranty: null, problemDescription: '' });
+  }, [set]);
+
+  const [maintenanceReference, setMaintenanceReference] = useState<string | null>(null);
+
+  const confirmMaintenance = useCallback(async () => {
+    try {
+      const res = await fetch('/api/maintenance/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleLabel: `${effectiveBrands.find((b) => b.id === data.brandId)?.name ?? ''} ${data.model}`.trim(),
+          plate: data.plate, brandId: data.brandId, model: data.model,
+          size: data.size, colorKey: data.colorKey,
+          bookingItemId: data.maintenanceWarranty?.bookingItemId ?? null,
+          problemDescription: data.problemDescription,
+          branch: data.branch, date: data.date, time: data.time,
+          name: data.name, phone: data.phone, email: data.email, city: data.city,
+        }),
+      });
+      const json = await res.json();
+      if (!json?.ok) { trackBookingError(json?.error ?? 'maintenance_failed'); return; }
+      setMaintenanceReference(json.reference ?? json.requestId ?? null);
+      setDone(true);
+      requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    } catch (e) {
+      console.error('maintenance request failed:', e);
+      trackBookingError('maintenance_network_error');
+    }
+  }, [data, effectiveBrands]);
 
   const revalidatePromo = useCallback(async (state: BookingState) => {
     if (!state.promoCode) return;
@@ -381,7 +448,7 @@ export function BookingFlow({
 
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });
-    setStep(0); setMaxReached(0); setDone(false); setReference(null);
+    setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [categories]);
 
@@ -400,7 +467,9 @@ export function BookingFlow({
 
             <AnimatePresence mode="wait">
               {done ? (
-                <StepSuccess key="success" t={t} data={data} total={total} isAr={isAr} onReset={reset} reference={reference} />
+                <StepSuccess key="success" t={t} data={data} total={total} isAr={isAr} onReset={reset}
+                  reference={data.isMaintenance ? maintenanceReference : reference}
+                  mode={data.isMaintenance ? 'maintenance' : 'booking'} />
               ) : (
                 <motion.div key={step}
                   initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
@@ -410,18 +479,28 @@ export function BookingFlow({
                   {step === 0 && (
                     <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} brands={effectiveBrands}
                       colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
-                      onAddCustomModel={onAddCustomModel} />
+                      onAddCustomModel={onAddCustomModel}
+                      maintenanceCovered={maintenanceCovered} onStartMaintenance={startMaintenance} />
                   )}
                   {step === 1 && (
-                    <StepServices t={t} isAr={isAr} data={data} set={set} total={total}
-                      categories={categories} services={SERVICES} onBack={() => go(0)} onNext={() => go(2)} />
+                    data.isMaintenance ? (
+                      <StepMaintenance isAr={isAr} data={data} set={set} onBack={() => go(0)} onNext={() => go(2)}
+                        onCancelMaintenance={cancelMaintenance} />
+                    ) : (
+                      <StepServices t={t} isAr={isAr} data={data} set={set} total={total}
+                        categories={categories} services={SERVICES} onBack={() => go(0)} onNext={() => go(2)} />
+                    )
                   )}
                   {step === 2 && (
                     <StepDetails t={t} isAr={isAr} data={data} set={set} onBack={() => go(1)} onNext={() => go(3)} />
                   )}
                   {step === 3 && (
-                    <StepConfirm t={t} isAr={isAr} data={data} total={total} set={set}
-                      services={SERVICES} onBack={() => go(2)} onConfirm={confirmBooking} />
+                    data.isMaintenance ? (
+                      <StepMaintenanceConfirm isAr={isAr} data={data} onBack={() => go(2)} onSubmit={confirmMaintenance} />
+                    ) : (
+                      <StepConfirm t={t} isAr={isAr} data={data} total={total} set={set}
+                        services={SERVICES} onBack={() => go(2)} onConfirm={confirmBooking} />
+                    )
                   )}
                 </motion.div>
               )}
@@ -520,12 +599,14 @@ function StepRail({ step, maxReached, labels, onJump }: { step: number; maxReach
   );
 }
 
-function StepSuccess({ t, data, total, isAr, onReset, reference }: {
+function StepSuccess({ t, data, total, isAr, onReset, reference, mode = 'booking' }: {
   t: ReturnType<typeof useTranslations>; data: BookingState;
   total: { services: number; tow: number; grand: number }; isAr: boolean; onReset: () => void; reference: string | null;
+  mode?: 'booking' | 'maintenance';
 }) {
   const ref = reference ?? `ABH-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   const brand = LIB_BRANDS.find((b) => b.id === data.brandId);
+  const isMaint = mode === 'maintenance';
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative px-6 py-16 text-center md:px-10 md:py-24">
       <span aria-hidden className="pointer-events-none absolute left-1/2 top-1/3 -z-10 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-platinum/[0.07] blur-[120px]" />
@@ -540,20 +621,31 @@ function StepSuccess({ t, data, total, isAr, onReset, reference }: {
         </span>
       </motion.div>
       <motion.h2 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7, ease: EASE }}
-        className="font-display text-4xl font-light uppercase tracking-tight text-ivory md:text-5xl">{t('success.title')}</motion.h2>
+        className="font-display text-4xl font-light uppercase tracking-tight text-ivory md:text-5xl">
+        {isMaint ? (isAr ? 'استلمنا طلبك' : 'Request received') : t('success.title')}
+      </motion.h2>
       <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.7, ease: EASE }}
-        className="mx-auto mt-4 max-w-[44ch] text-platinum/70">{t('success.subtitle')}</motion.p>
+        className="mx-auto mt-4 max-w-[44ch] text-platinum/70">
+        {isMaint ? (isAr ? 'هنراجع طلب الصيانة ونتواصل معك خلال ٢٤ ساعة للتأكيد.' : "We'll review your service request and confirm within 24 hours.") : t('success.subtitle')}
+      </motion.p>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.7, ease: EASE }}
         className="mx-auto mt-10 inline-flex flex-col items-center gap-5 rounded-3xl border border-white/[0.08] bg-white/[0.03] px-8 py-7 md:flex-row md:gap-10">
         <div className="text-center md:text-start">
-          <div className="text-[0.55rem] uppercase tracking-[0.28em] text-steel">{t('success.refLabel')}</div>
+          <div className="text-[0.55rem] uppercase tracking-[0.28em] text-steel">{isMaint ? (isAr ? 'رقم الطلب' : 'Request no.') : t('success.refLabel')}</div>
           <div dir="ltr" className="mt-1.5 font-display text-2xl tracking-[0.18em] text-ivory">{ref}</div>
         </div>
         <span aria-hidden className="hidden h-10 w-px bg-white/10 md:block" />
-        <div className="text-center md:text-start">
-          <div className="text-[0.55rem] uppercase tracking-[0.28em] text-steel">{t('step4.total')}</div>
-          <div dir="ltr" className="mt-1.5 font-display text-2xl text-ivory tabular-nums">{currencyFmt(total.grand)} <span className="text-base text-platinum/70">{t('currency')}</span></div>
-        </div>
+        {isMaint ? (
+          <div className="text-center md:text-start">
+            <div className="text-[0.55rem] uppercase tracking-[0.28em] text-steel">{isAr ? 'الحالة' : 'Status'}</div>
+            <div className="mt-1.5 font-display text-2xl text-[#e8d6a8]">{isAr ? 'قيد المراجعة' : 'Under review'}</div>
+          </div>
+        ) : (
+          <div className="text-center md:text-start">
+            <div className="text-[0.55rem] uppercase tracking-[0.28em] text-steel">{t('step4.total')}</div>
+            <div dir="ltr" className="mt-1.5 font-display text-2xl text-ivory tabular-nums">{currencyFmt(total.grand)} <span className="text-base text-platinum/70">{t('currency')}</span></div>
+          </div>
+        )}
         {brand && (
           <>
             <span aria-hidden className="hidden h-10 w-px bg-white/10 md:block" />

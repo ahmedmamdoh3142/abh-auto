@@ -295,10 +295,11 @@ export default function NewBookingClient({
         await navigator.clipboard.writeText(j.linkUrl);
         toast(T("تم نسخ لينك الدفع", "Payment link copied"));
       } else {
-        toast(T("فشل توليد اللينك", "Failed to generate link"), "bad");
+        // هنا هيبان السبب الحقيقي بدل رسالة عامة (مؤقت للتشخيص، ممكن تبسّطه بعدين)
+        toast(j.error || T("فشل توليد اللينك", "Failed to generate link"), "bad");
       }
-    } catch {
-      toast(T("فشل توليد اللينك", "Failed to generate link"), "bad");
+    } catch (e: any) {
+      toast(e?.message || T("فشل توليد اللينك", "Failed to generate link"), "bad");
     } finally {
       setLinkBusy(false);
     }

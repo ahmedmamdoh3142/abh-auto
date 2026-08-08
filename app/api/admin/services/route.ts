@@ -31,6 +31,9 @@ function arYears(n: number) { return n === 1 ? "سنة" : n === 2 ? "سنتين"
 function arDays(n: number) { return n === 1 ? "يوم" : n === 2 ? "يومين" : n >= 3 && n <= 10 ? "أيام" : "يوم"; }
 const warrantyLoc = (y?: number): Loc | null => (y && y > 0 ? { ar: `ضمان ${y} ${arYears(y)}`, en: `${y}-Year Warranty` } : null);
 const durationLoc = (d?: number): Loc | null => (d && d > 0 ? { ar: `${d} ${arDays(d)}`, en: `${d} ${d === 1 ? "day" : "days"}` } : null);
+// (جديد) نفس رقم الضمان (سنوات) بالشهور — يُستخدم في نظام صيانة الضمان (warranty_months)
+// عشان يفضل متزامن مع warranty_duration النصي تلقائيًا كل مرة تتحفظ فيها الخدمة.
+const warrantyMonthsOf = (y?: number): number | null => (y && y > 0 ? y * 12 : null);
 
 function makeSlug(b: Body): string {
   const base = (b.name?.en || b.name?.ar || "service")
@@ -74,13 +77,14 @@ export async function POST(request: Request) {
     const rows = await query<{ id: number }>(
       `INSERT INTO services
          (category_id, surface, slug, name, tagline, description, duration, warranty_duration,
-          image, card_image, badge, pricing_model, is_on_request, is_featured, is_active, sort)
+          image, card_image, badge, pricing_model, is_on_request, is_featured, is_active, sort, warranty_months)
        VALUES ($1,'catalog',$2,$3::jsonb,$3::jsonb,$4::jsonb,$5::jsonb,$6::jsonb,
-               $7,$8,$9,$10::public.pricing_model,$11,$12,$13,$14)
+               $7,$8,$9,$10::public.pricing_model,$11,$12,$13,$14,$15)
        RETURNING id`,
       [
         b.categoryId, slug, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
         b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false, b.sort || 0,
+        warrantyMonthsOf(b.warrantyYears),
       ]
     );
     const id = rows[0].id;
@@ -106,11 +110,12 @@ export async function PATCH(request: Request) {
          category_id=$2, name=$3::jsonb, tagline=$3::jsonb, description=$4::jsonb,
          duration=$5::jsonb, warranty_duration=$6::jsonb, image=$7, card_image=$8, badge=$9,
          pricing_model=$10::public.pricing_model, is_on_request=$11, is_featured=$12,
-         is_active=$13, updated_at=now()
+         is_active=$13, warranty_months=$14, updated_at=now()
        WHERE id=$1`,
       [
         b.id, b.categoryId, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
         b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false,
+        warrantyMonthsOf(b.warrantyYears),
       ]
     );
     // الأسعار والمشمولات تتبعت بس لو موجودة في الطلب (التبديل السريع للحالة مايبعتش الكل)

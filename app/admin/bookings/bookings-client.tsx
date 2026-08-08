@@ -77,6 +77,7 @@ const mini = (d: string | string[], s = 14, sw = 1.7) => (
 const I = {
   phone: (s = 14) => mini("M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.8 2z", s),
   mail: (s = 14) => mini(["M4 4h16v16H4z", "M22 6l-10 7L2 6"], s),
+   link: (s = 14) => mini(["M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"], s),
   wallet: (s = 14) => mini(["M21 12V7H5a2 2 0 0 1 0-4h14v4", "M3 5v14a2 2 0 0 0 2 2h16v-5", "M18 12a2 2 0 0 0 0 4h4v-4z"], s),
   user: (s = 14) => mini(["M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2", "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8"], s),
   whats: (s = 14) => mini(["M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2z", "M8.5 8.5c0 4 3 7 7 7 .6 0 1-.6 1-1l-.2-1.6a.6.6 0 0 0-.8-.4l-1.4.5a5.6 5.6 0 0 1-2.6-2.6l.5-1.4a.6.6 0 0 0-.4-.8L9.5 7.5c-.4 0-1 .4-1 1z"], s),
@@ -233,7 +234,7 @@ function followupColorOf(b: any): string {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onFollowUp }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onFollowUp, onGenLink, linkBusy }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
@@ -353,6 +354,11 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
           {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
+          {!isCancelled && !pay.paid && (
+            <button onClick={(e) => !linkBusy && stop(e, () => onGenLink(b.id))} title={isAr ? "نسخ لينك الدفع" : "Copy payment link"} style={qIcon("#6ba8f5")}>
+              {I.link(15)}
+            </button>
+          )}
           {/* لسه ما اتستلمش → زرّ الاستلام */}
           {needsWorkOrder && (
             <button onClick={(e) => stop(e, () => onReceive(b.id))} style={qBtn(true)}>
@@ -505,7 +511,7 @@ function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
 }
 
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onConfirmPay }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onConfirmPay, onGenLink, linkBusy }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -639,6 +645,11 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
             <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onConfirmPay(b)}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
+            {!pay.paid && b.status !== "cancelled" && (
+              <Ghost icon={() => I.link(15)} onClick={() => onGenLink(b.id)}>
+                {linkBusy ? T("جارٍ التوليد…", "Generating…") : T("لينك الدفع", "Payment link")}
+              </Ghost>
+            )}
             {canModify && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
             {canModify && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
           </div>
@@ -874,6 +885,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const [confirmPayId, setConfirmPayId] = useState<string | null>(null);
   const [followupId, setFollowupId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkBusyId, setLinkBusyId] = useState<string | null>(null);
   const mobile = useMediaQuery("(max-width: 640px)");
 
   const fmtDate = (iso: string) => {
@@ -881,10 +893,11 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     const d = new Date(iso); if (isNaN(+d)) return iso;
     return d.toLocaleDateString(isAr ? "ar-EG" : "en-US", { weekday: "short", day: "numeric", month: "long" });
   };
-  const tabs: [string, string][] = [["all", T("الكل", "All")], ["needs_intake", T("بانتظار الاستلام", "Needs intake")], ["needs_assign", T("بانتظار التخصيص", "Needs assign")], ["in_service", T("قيد التشغيل", "In service")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["followup", T("قيد المتابعة", "Following up")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
+  const tabs: [string, string][] = [["all", T("الكل", "All")], ["needs_intake", T("بانتظار الاستلام", "Needs intake")], ["needs_assign", T("بانتظار التخصيص", "Needs assign")], ["in_service", T("قيد التشغيل", "In service")], ["unpaid", T("بانتظار الدفع", "Awaiting payment")], ["paid", T("مدفوع", "Paid")], ["followup", T("قيد المتابعة", "Following up")], ["completed", T("مكتملة", "Completed")], ["cancelled", T("ملغية", "Cancelled")]];
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
     c.unpaid = list.filter((b) => b.payment !== "paid" && b.status !== "cancelled").length;
+    c.paid = list.filter((b) => b.payment === "paid" && b.status !== "cancelled").length;
     // بانتظار الاستلام = لسه ملوش رقم أمر عمل (ما اتستلمش)
     c.needs_intake = list.filter((b) => !b.workOrderNo && b.status !== "cancelled" && b.status !== "completed").length;
     // بانتظار التخصيص = اتستلم (عنده WO) بس لسه ما بدأش التشغيل
@@ -904,6 +917,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
     let r = list.filter((b) => {
       const matchTab = tab === "all" ? true
         : tab === "unpaid" ? (b.payment !== "paid" && b.status !== "cancelled")
+        : tab === "paid" ? (b.payment === "paid" && b.status !== "cancelled")
         : tab === "needs_intake" ? (!b.workOrderNo && b.status !== "cancelled" && b.status !== "completed")
         : tab === "needs_assign" ? (b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed")
         : tab === "in_service" ? (["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled")
@@ -942,12 +956,33 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   }
 
   const openConfirmPay = (b: any) => setConfirmPayId(b.id);
-  const confirmPaymentWithDiscount = async (id: string, discount?: { kind: string; value: number; reason?: string }) => {
-    await mutate(id, { action: "confirm_pay", discount });
-    setConfirmPayId(null);
-  };
+const confirmPaymentWithDiscount = async (id: string, discount?: { kind: string; value: number; reason?: string }) => {
+  await mutate(id, { action: "confirm_pay", discount });
+  setConfirmPayId(null);
+};
 
-  async function addFollowupNote(id: string, channel: string, note: string) {
+// (جديد) توليد لينك دفع ونسخه — عشان تبعته للعميل يدفع بيه أونلاين
+async function genPaymentLink(id: string) {
+  setLinkBusyId(id);
+  try {
+    const res = await fetch(`/api/admin/bookings/${id}/payment-link`, { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "fail");
+    await navigator.clipboard.writeText(data.linkUrl);
+    toast(T("تم نسخ لينك الدفع", "Payment link copied"));
+  } catch (e: any) {
+    toast(
+      e?.message === "already_paid" ? T("الحجز مدفوع بالفعل", "Already paid")
+        : e?.message === "zero_amount" ? T("قيمة الحجز صفر", "Booking total is zero")
+        : T("فشل توليد اللينك", "Failed to generate link"),
+      "bad"
+    );
+  } finally {
+    setLinkBusyId(null);
+  }
+}
+
+async function addFollowupNote(id: string, channel: string, note: string) {
     setBusy(true);
     try {
       const res = await fetch("/api/admin/bookings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "followup_add", channel, note }) });
@@ -1064,7 +1099,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onFollowUp={setFollowupId} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} />
           ))}
         </div>
       ) : (
@@ -1072,7 +1107,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onConfirmPay={openConfirmPay} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} />}
       {confirmPayBooking && (
         <ConfirmPaymentModal b={confirmPayBooking} busy={busy} isAr={isAr} ccy={ccy}
           onClose={() => setConfirmPayId(null)} onConfirm={confirmPaymentWithDiscount} />

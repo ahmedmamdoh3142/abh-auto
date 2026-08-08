@@ -827,6 +827,8 @@ function Garage({ t, tb, member, colors }: { t: Tr; tb: Tr; member: Mem; colors:
 function VehicleCard({ t, v, colors, onEdit, onRemove, compact }: { t: Tr; v: Vehicle; colors: DbColor[]; onEdit?: () => void; onRemove?: () => void; compact?: boolean }) {
   const brand = BRANDS.find((b: any) => b.id === v.brandId);
   const color = colors.find((c) => c.key === v.colorKey);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const maintenanceCount = v.maintenanceCount ?? v.maintenanceHistory?.length ?? 0;
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={`group relative overflow-hidden rounded-[26px] border border-white/[0.08] transition-colors duration-300 hover:border-white/20 ${compact ? 'h-[200px]' : 'h-[260px]'}`}>
@@ -852,10 +854,53 @@ function VehicleCard({ t, v, colors, onEdit, onRemove, compact }: { t: Tr; v: Ve
         <div className="min-w-0">
           <h3 className="font-display text-2xl uppercase leading-none text-ivory">{brand?.name ?? '—'}</h3>
           <div className="mt-1 truncate font-display text-sm uppercase text-platinum">{v.model}{v.year && <span className="text-steel"> · {v.year}</span>}</div>
+          {maintenanceCount > 0 && (
+            <button type="button" data-cursor="hover" onClick={(e) => { e.stopPropagation(); setHistoryOpen(true); }}
+              title={`${maintenanceCount} صيانة ضمان`}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#9fd4b0]/35 bg-[#9fd4b0]/[0.1] px-2.5 py-1 text-[0.55rem] uppercase tracking-[0.12em] text-[#9fd4b0]">
+              <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
+              {maintenanceCount}
+            </button>
+          )}
         </div>
         {v.plate && <LicensePlate text={v.plate} />}
       </div>
+      {historyOpen && (
+        <MaintenanceHistoryModal vehicleName={`${brand?.name ?? ''} ${v.model}`.trim()} history={v.maintenanceHistory ?? []} onClose={() => setHistoryOpen(false)} />
+      )}
     </motion.div>
+  );
+}
+
+/** (جديد) مودال يعرض سجل طلبات صيانة الضمان لسيارة معيّنة — التاريخ، الحالة، وسبب الرفض لو موجود. */
+function MaintenanceHistoryModal({ vehicleName, history, onClose }: {
+  vehicleName: string;
+  history: NonNullable<Vehicle['maintenanceHistory']>;
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={vehicleName} onClose={onClose}>
+      <div className="space-y-3">
+        {history.length === 0 && <p className="text-sm text-platinum/60">—</p>}
+        {history.map((h) => {
+          const tone = h.status === 'approved' ? { c: '#9fd4b0', label: 'مقبولة / Approved' }
+            : h.status === 'rejected' ? { c: '#e7b4b4', label: 'مرفوضة / Rejected' }
+            : { c: '#e8d6a8', label: 'قيد المراجعة / Pending' };
+          return (
+            <div key={h.id} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[0.72rem] text-platinum/60">{new Date(h.date).toLocaleDateString()}</span>
+                <span className="rounded-full px-2.5 py-1 text-[0.55rem] uppercase tracking-[0.12em]" style={{ color: tone.c, background: `${tone.c}1a`, border: `1px solid ${tone.c}55` }}>{tone.label}</span>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-ivory/85">{h.problem}</p>
+              {h.status === 'rejected' && h.rejectionReason && (
+                <p className="mt-2 text-[0.74rem] text-[#e7b4b4]">سبب الرفض: {h.rejectionReason}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
 

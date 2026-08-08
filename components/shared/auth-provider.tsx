@@ -21,6 +21,16 @@ export interface Vehicle {
   colorKey: string;
   plate: string;
   year: string;
+  /** (جديد) عدد مرات صيانة الضمان المطلوبة لهذه السيارة. */
+  maintenanceCount?: number;
+  /** (جديد) سجل طلبات الصيانة — تاريخ كل طلب وحالته وسببه لو اتّرفض. */
+  maintenanceHistory?: {
+    id: string;
+    date: string;
+    problem: string;
+    status: 'pending' | 'approved' | 'rejected';
+    rejectionReason?: string;
+  }[];
 }
 
 export type BookingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';

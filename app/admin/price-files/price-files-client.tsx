@@ -604,32 +604,68 @@ function EditorRows({ svc, sizes, editorMap, setCell, isPublic, isAr, T, ccy }: 
   const availSizes = (sizes.length ? sizes.map((s: SizeOpt) => s.code) : SIZE_ORDER) as SizeKey[];
   const sizeLabel = (code: string) => sizes.find((s: SizeOpt) => s.code === code)?.label || code;
   const cellInput: React.CSSProperties = { width: "100%", borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "8px 10px", fontSize: 13, color: "var(--abh-ivory)", outline: "none", textAlign: isAr ? "right" : "left" };
-  const col2 = isPublic ? T("السعر القديم", "Old price") : T("العمولة", "Commission");
-  const field2: keyof CellVals = isPublic ? "old" : "commission";
+  const pctInput: React.CSSProperties = { ...cellInput, borderColor: "rgba(194,160,78,.35)", background: "rgba(194,160,78,.06)" };
+
+  const col2 = isPublic ? T("قبل الخصم", "Before") : T("السعر", "Price");
+  const col3 = isPublic ? T("نسبة الخصم %", "Discount %") : T("نسبة العمولة %", "Commission %");
+  const col4 = isPublic ? T("بعد الخصم", "After") : T("العمولة", "Commission");
 
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.12)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: 8, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
-        <span>{T("الحجم", "Size")}</span><span>{T("السعر", "Price")}</span><span>{col2}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 8, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
+        <span>{T("الحجم", "Size")}</span><span>{col2}</span><span style={{ color: "#c2a04e" }}>{col3}</span><span>{col4}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {availSizes.map((size) => {
           const c = editorMap[`${svc.id}:${size}`] ?? { price: 0, old: 0, commission: 0 };
+
+          if (isPublic) {
+            const old = c.old || 0;
+            const price = c.price || 0;
+            const pct = old > 0 ? Math.max(0, Math.round((1 - price / old) * 1000) / 10) : 0;
+            const setPct = (newPct: number) => {
+              const clamped = Math.max(0, Math.min(95, newPct));
+              const base = old > 0 ? old : price;
+              if (!(old > 0)) setCell(svc.id, size, "old", base);
+              setCell(svc.id, size, "price", Math.max(0, Math.round(base * (1 - clamped / 100))));
+            };
+            return (
+              <div key={size} style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "var(--abh-platinum)", minWidth: 52 }}>{sizeLabel(size)}</span>
+                <input type="number" min={0} value={old || ""} placeholder="0" dir="ltr" style={cellInput}
+                  onChange={(e) => setCell(svc.id, size, "old", Math.max(0, +e.target.value))} />
+                <input type="number" min={0} max={95} value={pct || ""} placeholder="0" dir="ltr" style={pctInput}
+                  onChange={(e) => setPct(+e.target.value)} />
+                <input type="number" min={0} value={price || ""} placeholder="0" dir="ltr" style={cellInput}
+                  onChange={(e) => setCell(svc.id, size, "price", Math.max(0, +e.target.value))} />
+              </div>
+            );
+          }
+
+          const price = c.price || 0;
+          const commission = c.commission || 0;
+          const pct = price > 0 ? Math.round((commission / price) * 1000) / 10 : 0;
+          const setPct = (newPct: number) => {
+            const clamped = Math.max(0, newPct);
+            setCell(svc.id, size, "commission", Math.round((price * clamped) / 100));
+          };
           return (
-            <div key={size} style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: 8, alignItems: "center" }}>
+            <div key={size} style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 11, color: "var(--abh-platinum)", minWidth: 52 }}>{sizeLabel(size)}</span>
-              <input type="number" min={0} value={c.price || ""} placeholder="0" dir="ltr" style={cellInput}
+              <input type="number" min={0} value={price || ""} placeholder="0" dir="ltr" style={cellInput}
                 onChange={(e) => setCell(svc.id, size, "price", Math.max(0, +e.target.value))} />
-              <input type="number" min={0} value={c[field2] || ""} placeholder="0" dir="ltr" style={cellInput}
-                onChange={(e) => setCell(svc.id, size, field2, Math.max(0, +e.target.value))} />
+              <input type="number" min={0} value={pct || ""} placeholder="0" dir="ltr" style={pctInput}
+                onChange={(e) => setPct(+e.target.value)} />
+              <input type="number" min={0} value={commission || ""} placeholder="0" dir="ltr" style={cellInput}
+                onChange={(e) => setCell(svc.id, size, "commission", Math.max(0, +e.target.value))} />
             </div>
           );
         })}
       </div>
       <div style={{ marginTop: 8, fontSize: 10, color: "var(--abh-steel)", lineHeight: 1.7 }}>
         {isPublic
-          ? T(`القيم بالـ${ccy}. السعر القديم يظهر مشطوبًا للخصم.`, `Values in ${ccy}. Old price shows as a strikethrough discount.`)
-          : T(`القيم بالـ${ccy}. «العمولة» = ما يخصّ الطرف على كل بيعة.`, `Values in ${ccy}. “Commission” = earned per sale.`)}
+          ? T(`القيم بالـ${ccy}. عدّل النسبة أو السعر بعد الخصم — بيتحسبوا أوتوماتيك مع بعض.`, `Values in ${ccy}. Edit the % or the after-price — they auto-calculate together.`)
+          : T(`القيم بالـ${ccy}. عدّل النسبة أو رقم العمولة — بيتحسبوا أوتوماتيك مع بعض.`, `Values in ${ccy}. Edit the % or the commission amount — they auto-calculate together.`)}
       </div>
     </div>
   );

@@ -388,10 +388,10 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
                           {s.onRequest ? <span style={{ fontSize: 14, color: "var(--abh-platinum)" }}>{T("السعر عند الطلب", "Price on request")}</span> : (
                             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                               <span style={{ fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", width: "100%" }}>{T("يبدأ من", "From")}</span>
+                              {so > 0 && <span className="abh-num" dir="ltr" style={{ fontSize: 13, color: "var(--abh-steel)", textDecoration: "line-through" }}>{EGP(so)}</span>}
+                              {disc > 0 && <Chip tone="ok">-{disc}%</Chip>}
                               <span className="abh-num" dir="ltr" style={{ fontSize: 24, color: "var(--abh-ivory)" }}>{EGP(sp)}</span>
                               <span style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{ccy}</span>
-                              {so > 0 && <span className="abh-num" dir="ltr" style={{ fontSize: 12, color: "var(--abh-steel)", textDecoration: "line-through" }}>{EGP(so)}</span>}
-                              {disc > 0 && <Chip tone="ok">-{disc}%</Chip>}
                             </div>
                           )}
                           <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", flexShrink: 0 }}><Toggle on={s.active} onChange={(v) => toggleActive(s, v)} /></label>
@@ -425,12 +425,14 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
   }
   const availSizes = (sizes.length ? sizes.map((s) => s.code) : ["small", "medium", "large"]) as SizeKey[];
   const cellInput: React.CSSProperties = { width: "100%", borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "8px 10px", fontSize: 13, color: "var(--abh-ivory)", outline: "none", textAlign: isAr ? "right" : "left" };
+  const pctInput: React.CSSProperties = { ...cellInput, borderColor: "rgba(194,160,78,.35)", background: "rgba(194,160,78,.06)" };
 
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.12)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: 8, alignItems: "center", fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 8, alignItems: "center", fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 6 }}>
         <span>{T("الحجم", "Size")}</span>
         <span>{T("السعر", "Price")}</span>
+        <span style={{ color: "#c2a04e" }}>{T("نسبة العمولة %", "Comm. %")}</span>
         <span>{T("العمولة", "Commission")}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -438,16 +440,28 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
           const k = `${svc.id}:${size}`;
           const cell = draft[k] ?? { price: 0, commission: 0 };
           const pub = pubPrice(size);
+          const price = cell.price || 0;
+          const commission = cell.commission || 0;
+          const pct = price > 0 ? Math.round((commission / price) * 1000) / 10 : 0;
+
+          const setPct = (newPct: number) => {
+            const clamped = Math.max(0, newPct);
+            setCell(svc.id!, size, "commission", Math.round((price * clamped) / 100));
+          };
+
           return (
-            <div key={size} style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: 8, alignItems: "center" }}>
+            <div key={size} style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 11, color: "var(--abh-platinum)", whiteSpace: "nowrap", minWidth: 52 }}>
                 {sizeLabel(size)}
                 {pub > 0 && <span dir="ltr" style={{ display: "block", fontSize: 9, color: "var(--abh-steel)" }} className="abh-num">{T("عام:", "Pub:")} {EGP(pub)}</span>}
               </span>
-              <input type="number" min={0} value={cell.price || ""} placeholder="0"
+              <input type="number" min={0} value={price || ""} placeholder="0"
                 onChange={(e) => setCell(svc.id!, size, "price", Math.max(0, +e.target.value))}
                 dir="ltr" style={cellInput} />
-              <input type="number" min={0} value={cell.commission || ""} placeholder="0"
+              <input type="number" min={0} value={pct || ""} placeholder="0"
+                onChange={(e) => setPct(+e.target.value)}
+                dir="ltr" style={pctInput} />
+              <input type="number" min={0} value={commission || ""} placeholder="0"
                 onChange={(e) => setCell(svc.id!, size, "commission", Math.max(0, +e.target.value))}
                 dir="ltr" style={cellInput} />
             </div>
@@ -455,8 +469,8 @@ function PartnerPriceEditor({ svc, sizes, draft, setCell, sizeLabel, T, ccy, isA
         })}
       </div>
       <div style={{ marginTop: 8, fontSize: 10, color: "var(--abh-steel)", lineHeight: 1.7 }}>
-        {T(`القيم بالـ${ccy}. «السعر» = ما يُدفع. «العمولة» = ما يخصّ الطرف على كل بيعة. اترك السعر والعمولة 0 للرجوع للسعر العام.`,
-           `Values in ${ccy}. “Price” = paid amount. “Commission” = earned per sale. Leave price & commission 0 to fall back to public.`)}
+        {T(`القيم بالـ${ccy}. «السعر» = ما يُدفع. عدّل النسبة أو رقم العمولة — بيتحسبوا أوتوماتيك مع بعض. اترك السعر والعمولة 0 للرجوع للسعر العام.`,
+           `Values in ${ccy}. “Price” = paid amount. Edit the % or the commission amount — they auto-calculate together. Leave price & commission at 0 to fall back to public.`)}
       </div>
     </div>
   );
@@ -503,22 +517,35 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${availSizes.length}, 1fr)`, gap: 12 }}>
               {availSizes.map((size) => {
                 const p = f.prices[size] || { price: 0, old: 0 };
-                const disc = p.old > p.price && p.price > 0 ? Math.round((1 - p.price / p.old) * 100) : 0;
+                const pct = p.old > 0 ? Math.max(0, Math.round((1 - (p.price || 0) / p.old) * 1000) / 10) : 0;
+
+                const setPct = (newPct: number) => {
+                  const clamped = Math.max(0, Math.min(95, newPct));
+                  const base = p.old > 0 ? p.old : p.price;
+                  if (!(p.old > 0)) setPrice(size, "old", base);
+                  setPrice(size, "price", Math.max(0, Math.round(base * (1 - clamped / 100))));
+                };
+
                 return (
                   <div key={size} style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                       <span style={{ fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-ivory)" }}>{sizeLabel(size)}</span>
-                      {disc > 0 && <Chip tone="ok">-{disc}%</Chip>}
+                      {pct > 0 && <Chip tone="ok">-{pct}%</Chip>}
                     </div>
-                    <div style={{ fontSize: 9.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 5 }}>{T("السعر الجديد", "New price")}</div>
-                    <Input type="number" value={p.price} onChange={(e: any) => setPrice(size, "price", Math.max(0, +e.target.value))} dir="ltr" style={{ textAlign: isAr ? "right" : "left", marginBottom: 10 }} />
-                    <div style={{ fontSize: 9.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 5 }}>{T("السعر القديم (اختياري)", "Old price (optional)")}</div>
-                    <Input type="number" value={p.old} onChange={(e: any) => setPrice(size, "old", Math.max(0, +e.target.value))} dir="ltr" style={{ textAlign: isAr ? "right" : "left" }} />
+
+                    <div style={{ fontSize: 9.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 5 }}>{T("السعر قبل الخصم", "Price before")}</div>
+                    <Input type="number" value={p.old || ""} placeholder="0" onChange={(e: any) => setPrice(size, "old", Math.max(0, +e.target.value))} dir="ltr" style={{ textAlign: isAr ? "right" : "left", marginBottom: 10 }} />
+
+                    <div style={{ fontSize: 9.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#c2a04e", marginBottom: 5 }}>{T("نسبة الخصم %", "Discount %")}</div>
+                    <Input type="number" value={pct || ""} placeholder="0" onChange={(e: any) => setPct(+e.target.value)} dir="ltr" style={{ textAlign: isAr ? "right" : "left", marginBottom: 10 }} />
+
+                    <div style={{ fontSize: 9.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 5 }}>{T("السعر بعد الخصم", "Price after")}</div>
+                    <Input type="number" value={p.price || ""} placeholder="0" onChange={(e: any) => setPrice(size, "price", Math.max(0, +e.target.value))} dir="ltr" style={{ textAlign: isAr ? "right" : "left" }} />
                   </div>
                 );
               })}
             </div>
-            <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T(`القيم بالـ${ccy}. اترك السعر القديم صفر لو مفيش خصم.`, `Values in ${ccy}. Leave old price 0 if not on sale.`)}</p>
+            <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T(`القيم بالـ${ccy}. عدّل النسبة أو السعر بعد الخصم مباشرة — بيحسبوا بعض أوتوماتيك. اترك السعر قبل الخصم صفر لو مفيش خصم.`, `Values in ${ccy}. Edit the % or the after-price directly — they auto-calculate each other. Leave "before" at 0 if there's no discount.`)}</p>
           </div>
         )}
 

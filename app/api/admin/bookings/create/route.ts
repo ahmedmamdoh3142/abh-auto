@@ -146,7 +146,7 @@ export async function POST(request: Request) {
 
     // أسعار الخدمات حسب الحجم
     const priceRows = await query<any>(
-      `SELECT s.id, s.slug, s.name, s.is_on_request,
+      `SELECT s.id, s.slug, s.name, s.is_on_request, s.warranty_months,
               sp.price AS price, sp.old_price AS old_price
        FROM services s
        LEFT JOIN service_prices sp ON sp.service_id = s.id AND sp.size_code = $2
@@ -168,7 +168,15 @@ export async function POST(request: Request) {
       subtotal += unit;
       commissionTotal += commission;
       const nameSnapshot = r.name ? JSON.stringify(r.name) : null;
-      return { serviceId: r.id, slug: r.slug, unit, nameSnapshot, commission };
+      // (جديد) ضمان البند — من تاريخ الحجز المجدول + مدة ضمان الخدمة بالشهور.
+      const warrantyMonths = r.warranty_months != null ? Number(r.warranty_months) : null;
+      let warrantyExpiresAt: string | null = null;
+      if (warrantyMonths && warrantyMonths > 0) {
+        const start = date ? new Date(date) : new Date();
+        start.setMonth(start.getMonth() + warrantyMonths);
+        warrantyExpiresAt = start.toISOString();
+      }
+      return { serviceId: r.id, slug: r.slug, unit, nameSnapshot, commission, warrantyMonths, warrantyExpiresAt };
     });
 
     const beforePromo = subtotal + towingCost;
@@ -274,12 +282,35 @@ export async function POST(request: Request) {
     );
     const booking = bookingRows[0];
 
+    // ── (جديد) حفظ السيارة تلقائيًا في جراج العميل لو عنده حساب (مسجّل أو زائر التقطناه) ──
+    if (effectiveUserId && brandId && model) {
+      const plateDigitsSave = (plate || "").match(/[0-9\u0660-\u0669]/g)?.join("") ?? "";
+      const plateLettersSave = (plate || "").replace(/[0-9\u0660-\u0669]/g, "").replace(/\s+/g, " ").trim();
+      try {
+        const existingVehicle = await query<{ id: string }>(
+          `SELECT id FROM vehicles
+            WHERE user_id = $1 AND brand_id = $2 AND lower(model) = lower($3)
+              AND ($4 = '' OR plate_digits = $4)
+            LIMIT 1`,
+          [effectiveUserId, brandId, model, plateDigitsSave]
+        );
+        if (!existingVehicle[0]) {
+          await query(
+            `INSERT INTO vehicles (user_id, brand_id, model, color_code, plate, plate_digits, plate_letters)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [effectiveUserId, brandId, model, colorCode, plate, plateDigitsSave, plateLettersSave]
+          );
+        }
+      } catch (e) { console.error("auto-save vehicle failed:", e); }
+    }
+
     for (const it of items) {
       await query(
         `INSERT INTO booking_items
-           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
-         VALUES ($1,$2,$3,$4,$5,$6,1,$6,$7)`,
-        [booking.id, it.serviceId, it.slug, it.nameSnapshot, sizeCode, it.unit, it.commission]
+           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot,
+            warranty_months, warranty_expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,1,$6,$7,$8,$9)`,
+        [booking.id, it.serviceId, it.slug, it.nameSnapshot, sizeCode, it.unit, it.commission, it.warrantyMonths, it.warrantyExpiresAt]
       );
     }
 

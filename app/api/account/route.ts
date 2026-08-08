@@ -21,14 +21,39 @@ export async function GET() {
        FROM vehicles WHERE user_id = $1 ORDER BY created_at DESC`,
       [user.id]
     );
-    const vehicles = vRows.map((v) => ({
-      id: v.id,
-      brandId: v.brand_id ?? "",
-      model: v.model ?? "",
-      colorKey: v.color_code ?? "",
-      plate: v.plate ?? "",
-      year: v.year ?? "",
-    }));
+
+    // (جديد) سجل طلبات صيانة الضمان — بنربطها بكل عربية بمطابقة رقم اللوحة
+    const normalizePlate = (p: string) => (p || "").replace(/[^0-9A-Za-z\u0621-\u064A]/g, "").toLowerCase();
+    const mrRows = await query<any>(
+      `SELECT id, plate, problem_description, status, rejection_reason, created_at
+         FROM maintenance_requests
+        WHERE user_id = $1
+        ORDER BY created_at DESC`,
+      [user.id]
+    );
+
+    const vehicles = vRows.map((v) => {
+      const plateNorm = normalizePlate(v.plate ?? "");
+      const history = mrRows
+        .filter((m) => plateNorm !== "" && normalizePlate(m.plate ?? "") === plateNorm)
+        .map((m) => ({
+          id: m.id,
+          date: m.created_at,
+          problem: m.problem_description,
+          status: m.status as "pending" | "approved" | "rejected",
+          rejectionReason: m.rejection_reason || undefined,
+        }));
+      return {
+        id: v.id,
+        brandId: v.brand_id ?? "",
+        model: v.model ?? "",
+        colorKey: v.color_code ?? "",
+        plate: v.plate ?? "",
+        year: v.year ?? "",
+        maintenanceCount: history.length,
+        maintenanceHistory: history,
+      };
+    });
 
     // الحجوزات مع أسماء الخدمات من booking_items.name_snapshot
     const bRows = await query<any>(
