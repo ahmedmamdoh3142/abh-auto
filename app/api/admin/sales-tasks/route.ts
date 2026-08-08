@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     const vehicleSize = ["small", "medium", "large"].includes(b.vehicleSize) ? b.vehicleSize : null;
     const assignedTo = b.assignedTo ? String(b.assignedTo) : null;
 
-    if (!customerName || !customerPhone) {
+    if (!customerName || !customerPhone || !customerEmail) {
       return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 400 });
     }
 

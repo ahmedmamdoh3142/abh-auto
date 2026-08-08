@@ -244,7 +244,9 @@ export async function POST(request: Request) {
     const customTotal = customItems.reduce((s, c) => s + c.price, 0);
 
     const total = Math.max(0, beforePromo - manualDiscountAmount - bankDiscount) + giftsCharge + customTotal;
-    const paidImmediately = paymentMethod !== "cash";
+    // (مهم) "card" = دفع أونلاين عبر لينك بوابة الدفع — يفضل pending لحد ما الـ callback
+    // يوصل من البنك ويأكّد الدفع فعليًا. باقي طرق الدفع (غير cash) بتتأكد يدويًا فورًا.
+    const paidImmediately = paymentMethod !== "cash" && paymentMethod !== "card";
     const paymentStatus = paidImmediately ? "paid" : "pending";
 
     const bookingRows = await query<{ id: string; reference: string }>(
