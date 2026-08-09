@@ -17,6 +17,7 @@ export async function GET(request: Request) {
   const dateTo = url.searchParams.get("dateTo");
   const scope = url.searchParams.get("scope"); // "mine" | "all"
   const assignedTo = url.searchParams.get("assignedTo"); // staff id | "unassigned"
+  const leadSource = url.searchParams.get("leadSource"); // facebook | tiktok | instagram | whatsapp
 
   const where: string[] = [];
   const params: any[] = [];
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
   }
 
   if (stage && stage !== "all") { where.push(`t.stage = $${i++}::sales_task_stage`); params.push(stage); }
+  if (leadSource && leadSource !== "all") { where.push(`t.lead_source = $${i++}`); params.push(leadSource); }
   if (q) {
     where.push(`(t.customer_name ILIKE $${i} OR t.customer_phone ILIKE $${i})`);
     params.push(`%${q}%`); i++;
@@ -45,7 +47,7 @@ export async function GET(request: Request) {
 
   const sql = `
     SELECT t.id, t.customer_name, t.customer_phone, t.customer_email, t.customer_city,
-           t.services_snapshot, t.quality, t.price_objection, t.initial_note,
+           t.services_snapshot, t.quality, t.price_objection, t.initial_note, t.lead_source,
            t.vehicle_brand_id, t.vehicle_brand_name, t.vehicle_model, t.vehicle_size,
            t.stage, t.assigned_to, au.name AS assigned_name,
            t.created_by, t.created_at, t.updated_at,
@@ -72,6 +74,7 @@ export async function GET(request: Request) {
       quality: r.quality,
       priceObjection: !!r.price_objection,
       initialNote: r.initial_note,
+      leadSource: r.lead_source,
       vehicleBrandId: r.vehicle_brand_id,
       vehicleBrandName: r.vehicle_brand_name,
       vehicleModel: r.vehicle_model,
@@ -112,13 +115,14 @@ export async function POST(request: Request) {
     const quality = ["hot", "warm", "cold"].includes(b.quality) ? b.quality : null;
     const priceObjection = b.priceObjection === true;
     const initialNote = b.initialNote ? String(b.initialNote).trim().slice(0, 2000) : null;
+    const leadSource = ["facebook", "tiktok", "instagram", "whatsapp"].includes(b.leadSource) ? b.leadSource : null;
     const vehicleBrandId = b.vehicleBrandId ? String(b.vehicleBrandId) : null;
     const vehicleBrandName = b.vehicleBrandName ? String(b.vehicleBrandName) : null;
     const vehicleModel = b.vehicleModel ? String(b.vehicleModel) : null;
     const vehicleSize = ["small", "medium", "large"].includes(b.vehicleSize) ? b.vehicleSize : null;
     const assignedTo = b.assignedTo ? String(b.assignedTo) : null;
 
-    if (!customerName || !customerPhone || !customerEmail) {
+    if (!customerName || !customerPhone) {
       return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 400 });
     }
 
@@ -127,13 +131,13 @@ export async function POST(request: Request) {
          (customer_name, customer_phone, customer_email, customer_city,
           services_snapshot, quality, price_objection, initial_note,
           vehicle_brand_id, vehicle_brand_name, vehicle_model, vehicle_size,
-          assigned_to, created_by)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6::sales_task_quality,$7,$8,$9,$10,$11,$12,$13,$14)
+          assigned_to, created_by, lead_source)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::sales_task_quality,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING id`,
       [customerName, customerPhone, customerEmail, customerCity,
        JSON.stringify(services), quality, priceObjection, initialNote,
        vehicleBrandId, vehicleBrandName, vehicleModel, vehicleSize,
-       assignedTo, admin.id]
+       assignedTo, admin.id, leadSource]
     );
 
     return NextResponse.json({ ok: true, id: rows[0].id });

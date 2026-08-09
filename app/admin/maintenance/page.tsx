@@ -13,12 +13,9 @@ import { requirePermission } from "@/lib/admin/guard";
 export const dynamic = "force-dynamic";
 
 export default async function MaintenancePage() {
-  // (ملاحظة) الحل الصح: ضيف "maintenance" لتعريف PermKey في lib/admin/guard.ts
-  // زي باقي المفاتيح ("bookings", "bookings_new"...). الـ`as any` هنا حل مؤقت بس
-  // عشان يبني من غير ما تلمس ملف الـguard دلوقتي — امسحها لما تضيف المفتاح صح.
-  await requirePermission("maintenance" as any);
+  await requirePermission("maintenance");
   const locale = (await getLocale()) as Locale;
-
+  
   const rows = await query<any>(
     `SELECT mr.id, mr.vehicle_label, mr.plate, mr.brand_id, mr.model, mr.size_code,
             mr.warranty_service_name, mr.warranty_expires_at, mr.problem_description,

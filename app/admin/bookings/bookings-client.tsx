@@ -18,6 +18,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
 import { printBookingInvoice } from "@/lib/admin/invoice-print";
+import { printBookingWarranty } from "@/lib/admin/warranty-print";
 import { brandImg } from "@/lib/brand-image";
 
 /* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
@@ -88,6 +89,7 @@ const I = {
   pdf: (s = 14) => mini(["M14 3v4a1 1 0 0 0 1 1h4", "M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z", "M9 13h6", "M9 17h4"], s),
   print: (s = 14) => mini(["M6 9V3h12v6", "M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"], s),
   receipt: (s = 14) => mini(["M4 2v20l2-1.5L8 22l2-1.5L12 22l2-1.5L16 22l2-1.5L20 22V2l-2 1.5L16 2l-2 1.5L12 2l-2 1.5L8 2 6 3.5 4 2z", "M8 7h8", "M8 11h8", "M8 15h5"], s),
+  shield: (s = 14) => mini("M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z", s),
   chevL: (s = 16) => mini("M15 18l-6-6 6-6", s),
   chevR: (s = 16) => mini("M9 18l6-6-6-6", s),
   back: (s = 15) => mini(["M19 12H5", "M12 19l-7-7 7-7"], s),
@@ -234,7 +236,7 @@ function followupColorOf(b: any): string {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onFollowUp, onGenLink, linkBusy }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onPrintWarranty, onFollowUp, onGenLink, linkBusy }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
@@ -387,6 +389,9 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
             </button>
           )}
           <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
+          {pay.paid && (
+            <button onClick={(e) => stop(e, () => onPrintWarranty(b))} title={isAr ? "طباعة بطاقة الضمان" : "Print warranty card"} style={qIcon("#3ecd8e")}>{I.shield(15)}</button>
+          )}
           <span style={{ position: "relative", display: "inline-flex" }}>
             <button onClick={(e) => stop(e, () => onFollowUp(b.id))} title={isAr ? "المتابعة" : "Follow-up"} style={qIcon(followupColor)}>{I.bubble(15)}</button>
             {b.followups && b.followups.length > 0 && (
@@ -511,7 +516,7 @@ function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
 }
 
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onConfirmPay, onGenLink, linkBusy }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onPrintWarranty, onConfirmPay, onGenLink, linkBusy }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -644,6 +649,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
             <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
             <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
+            {pay.paid && <Ghost icon={() => I.shield(15)} onClick={() => onPrintWarranty(b)}>{T("بطاقة الضمان", "Warranty card")}</Ghost>}
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onConfirmPay(b)}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
             {!pay.paid && b.status !== "cancelled" && (
               <Ghost icon={() => I.link(15)} onClick={() => onGenLink(b.id)}>
@@ -1023,6 +1029,12 @@ async function addFollowupNote(id: string, channel: string, note: string) {
     } catch (e) { console.error("print failed:", e); toast(T("تعذّر فتح الطباعة", "Couldn't open print"), "bad"); }
   };
 
+  const printWarranty = (b: any) => {
+    try {
+      printBookingWarranty(b, { isAr, ccy });
+    } catch (e) { console.error("warranty print failed:", e); toast(T("تعذّر فتح بطاقة الضمان", "Couldn't open warranty card"), "bad"); }
+  };
+
   const exportCsv = () => {
     const head = ["reference", "vehicle", "plate", "customer", "phone", "email", "city", "branch", "date", "time", "status", "payment", "total"];
     const rows = filtered.map((b) => [b.reference, b.vehicle, b.plate, b.customer, b.phone, b.email, b.city, b.branch, b.date, b.time, b.status, b.payment, b.total]
@@ -1099,7 +1111,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} />
           ))}
         </div>
       ) : (
@@ -1107,7 +1119,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} />}
       {confirmPayBooking && (
         <ConfirmPaymentModal b={confirmPayBooking} busy={busy} isAr={isAr} ccy={ccy}
           onClose={() => setConfirmPayId(null)} onConfirm={confirmPaymentWithDiscount} />

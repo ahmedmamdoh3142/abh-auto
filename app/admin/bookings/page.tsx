@@ -26,6 +26,7 @@ export default async function BookingsPage() {
             b.subtotal, b.towing_code, b.towing_cost, b.towing_address, b.total,
             b.payment_method_code, b.payment_status, b.cancel_reason, b.notes,
             b.promo_code, b.promo_discount, b.promo_kind, b.invoice_number,
+            b.delivered_at,
             b.manual_discount_kind, b.manual_discount_value, b.manual_discount_amount, b.manual_discount_reason,
             md.name AS manual_discount_by_name,
             b.followup_status, b.followup_outcome, b.followup_closed_at,
@@ -47,7 +48,9 @@ export default async function BookingsPage() {
                          SELECT 1 FROM booking_bundle_gifts g
                          WHERE g.booking_id = bi.booking_id
                            AND g.gift_service_id = bi.service_id
-                       )
+                       ),
+                       'warrantyMonths', bi.warranty_months,
+                       'warrantyExpiresAt', bi.warranty_expires_at
                      ) ORDER BY bi.id)
               FROM booking_items bi WHERE bi.booking_id = b.id
             ), '[]') AS items,
@@ -120,6 +123,8 @@ export default async function BookingsPage() {
     manualDiscountBy: b.manual_discount_by_name || "",
     // رقم الفاتورة المتسلسل (يُصرَف من الداتابيز عند تأكيد الدفع) — للطباعة.
     invoiceNumber: b.invoice_number != null ? Number(b.invoice_number) : undefined,
+    // تاريخ استلام العميل لمركبته — بداية سريان الضمان.
+    deliveredAt: b.delivered_at ? new Date(b.delivered_at).toISOString() : "",
     // نظام متابعة الحجز — حالة المتابعة + القرار النهائي + الخط الزمني.
     followupStatus: b.followup_status || "none",
     followupOutcome: b.followup_outcome || "",
@@ -135,6 +140,8 @@ export default async function BookingsPage() {
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,
       isGift: !!it.isGift,
+      warrantyMonths: it.warrantyMonths != null ? Number(it.warrantyMonths) : null,
+      warrantyExpiresAt: it.warrantyExpiresAt ? new Date(it.warrantyExpiresAt).toISOString() : null,
     })).filter((s: any) => s.name),
   }));
 

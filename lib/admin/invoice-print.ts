@@ -129,10 +129,6 @@ function payInfo(status: string | undefined, isAr: boolean) {
     default: return { label: isAr ? "بانتظار الدفع" : "Awaiting payment", color: "#b9810f", bg: "#fdf3df" };
   }
 }
-function statusLabel(s: string | undefined, isAr: boolean) {
-  const m: Record<string, [string, string]> = { upcoming: ["قادم", "Upcoming"], active: ["قيد التنفيذ", "In progress"], completed: ["مكتمل", "Completed"], cancelled: ["ملغي", "Cancelled"] };
-  const v = m[s || ""] || ["—", "—"]; return isAr ? v[0] : v[1];
-}
 function payMethodLabel(c: string | undefined, isAr: boolean) {
   const m: Record<string, [string, string]> = { cash: ["نقدًا بالفرع", "Cash at branch"], applePay: ["Apple Pay", "Apple Pay"], tabby: ["Tabby", "Tabby"], tamara: ["Tamara", "Tamara"] };
   const v = m[c || ""]; return v ? (isAr ? v[0] : v[1]) : (c || "—");
@@ -166,7 +162,7 @@ function zatcaQrBase64(totalInclVat: number, vatAmount: number): string {
 }
 
 /* شعار أبيض (على خلفية غامقة): صورة لو متوفّرة، وإلا نص فخم احتياطي. */
-function logoLight(height = 48) {
+function logoLight(height = 66) {
   const fallback = `<div style="line-height:1;">
       <div style="font:700 26px Georgia,serif;letter-spacing:1.5px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div>
       <div style="font-size:9px;letter-spacing:7px;color:#cbcdcd;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
@@ -176,7 +172,7 @@ function logoLight(height = 48) {
   return `<img src="${LOGO_LIGHT_SRC}" alt="ABH AUTO" style="height:${height}px;width:auto;display:block;" onerror="this.outerHTML=${fb}"/>`;
 }
 /* لوجو أسود للإيصال — أكبر وبدون كونتينر (على خلفية بيضاء). */
-function logoDark(height = 62) {
+function logoDark(height = 86) {
   const fallback = `<div style="line-height:1;text-align:center;">
       <div style="font:800 30px Georgia,serif;letter-spacing:1.5px;color:#000;">ABH<span style="color:#000;">.</span></div>
       <div style="font-size:10px;letter-spacing:8px;color:#000;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div>
@@ -296,8 +292,7 @@ function a4Html(b: InvoiceBooking, isAr: boolean, ccy: string) {
               <span style="height:8px;width:8px;border-radius:99px;background:${pay.color};"></span>${esc(pay.label)}
             </span>
             <div style="margin-top:12px;font-size:11.5px;color:#6c7077;line-height:2;">
-              ${T("طريقة الدفع", "Payment method")}: <b style="color:#15161a;">${esc(payMethodLabel(b.paymentMethod, isAr))}</b><br/>
-              ${T("حالة الحجز", "Booking status")}: <b style="color:#15161a;">${esc(statusLabel(b.status, isAr))}</b>
+              ${T("طريقة الدفع", "Payment method")}: <b style="color:#15161a;">${esc(payMethodLabel(b.paymentMethod, isAr))}</b>
             </div>
             ${qr ? `<div style="margin-top:14px;display:flex;align-items:center;gap:12px;border-top:1px dashed #e7e3d8;padding-top:12px;">
               <div id="zatca-qr" style="width:96px;height:96px;flex:0 0 auto;"></div>
@@ -389,7 +384,7 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
   return `
   <div style="width:76mm;margin:0 auto;background:#fff;color:#15161a;font-family:'Helvetica Neue',Arial,'Tahoma','Segoe UI',sans-serif;direction:${dir};padding:3mm 2mm;">
     <!-- ═══ الهيدر (كما هو: لوجو أسود بلا كونتينر) ═══ -->
-    <div style="text-align:center;margin-bottom:6px;">${logoDark(64)}</div>
+    <div style="text-align:center;margin-bottom:6px;">${logoDark(86)}</div>
 
     <!-- بيانات الشركة -->
     <div style="text-align:center;font-size:11px;color:#000;line-height:1.6;font-weight:600;">
@@ -460,8 +455,7 @@ function receiptHtml(b: InvoiceBooking, isAr: boolean, ccy: string) {
         <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:99px;background:${pay.bg};color:${pay.color};font-size:11.5px;font-weight:700;"><span style="height:7px;width:7px;border-radius:99px;background:${pay.color};"></span>${esc(pay.label)}</span>
       </div>
       <div style="margin-top:9px;font-size:11px;color:#6c7077;line-height:1.9;text-align:center;">
-        ${T("طريقة الدفع", "Method")}: <b style="color:#15161a;">${esc(payMethodLabel(b.paymentMethod, isAr))}</b><br/>
-        ${T("حالة الحجز", "Status")}: <b style="color:#15161a;">${esc(statusLabel(b.status, isAr))}</b>
+        ${T("طريقة الدفع", "Method")}: <b style="color:#15161a;">${esc(payMethodLabel(b.paymentMethod, isAr))}</b>
       </div>
     ${cardClose}
 

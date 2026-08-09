@@ -16,6 +16,7 @@ type NavGroup = { group: string; items: NavItem[] };
 const ICON_MAP: Record<PermKey, (x: any) => React.ReactNode> = {
   overview: Ic.grid, bookings: Ic.calendar, bookings_new: Ic.plus,
   sales_tasks: Ic.trending,
+  maintenance: Ic.check,
   partners: Ic.trending, accounts: Ic.users, content: Ic.type,
   services: Ic.sliders, price_files: Ic.calendar, promos: Ic.clock, offers: Ic.sparkle,
   inventory: Ic.grid,

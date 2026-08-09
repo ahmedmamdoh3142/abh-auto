@@ -15,6 +15,7 @@ import { printSalesTasksReport } from "@/lib/admin/sales-tasks-print";
 type Stage = "new" | "contacted" | "follow_up" | "negotiating" | "won" | "lost";
 type Quality = "hot" | "warm" | "cold" | null;
 type VehicleSize = "small" | "medium" | "large";
+type LeadSource = "facebook" | "tiktok" | "instagram" | "whatsapp" | null;
 type Service = { id: number; slug: string; name: string };
 type Model = { name: string; size: VehicleSize };
 type Brand = { id: string; name: string; models: Model[] };
@@ -24,7 +25,7 @@ type Task = {
   id: string;
   customerName: string; customerPhone: string; customerEmail: string | null; customerCity: string | null;
   services: { id: number; slug: string; name: string }[];
-  quality: Quality; priceObjection: boolean; initialNote: string | null;
+  quality: Quality; priceObjection: boolean; initialNote: string | null; leadSource: LeadSource;
   vehicleBrandId: string | null; vehicleBrandName: string | null; vehicleModel: string | null; vehicleSize: VehicleSize | null;
   stage: Stage;
   assignedTo: string | null; assignedName: string | null;
@@ -48,6 +49,13 @@ const QUALITY_META: Record<string, { ar: string; en: string; color: string }> = 
   hot:  { ar: "مستعد للشراء", en: "Ready to buy", color: "#e7b4b4" },
   warm: { ar: "مهتم",         en: "Interested",   color: "#e8cf9a" },
   cold: { ar: "استفسار فقط",  en: "Just inquiring", color: "#9cc3e0" },
+};
+
+const LEAD_SOURCE_META: Record<string, { ar: string; en: string; color: string }> = {
+  facebook:  { ar: "فيسبوك",   en: "Facebook",  color: "#6ea8e0" },
+  instagram: { ar: "انستجرام", en: "Instagram", color: "#d97aa8" },
+  tiktok:    { ar: "تيك توك",  en: "TikTok",    color: "#7fd6d0" },
+  whatsapp:  { ar: "واتساب",   en: "WhatsApp",  color: "#8fd19e" },
 };
 
 const SIZE_META: Record<VehicleSize, { ar: string; en: string }> = {
@@ -94,6 +102,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   const [view, setView] = useState<"board" | "list">("board");
 
   const [fStage, setFStage] = useState<Stage | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("");
   const [q, setQ] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -115,6 +124,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     if (scope === "all" && assignedFilter) params.set("assignedTo", assignedFilter);
     if (withFilters) {
       if (fStage !== "all") params.set("stage", fStage);
+      if (sourceFilter) params.set("leadSource", sourceFilter);
       if (q.trim()) params.set("q", q.trim());
     }
     if (dateFrom) params.set("dateFrom", dateFrom);
@@ -164,7 +174,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     });
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, dateFrom, dateTo, scope, assignedFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q]);
   useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [dateFrom, dateTo, scope, assignedFilter]);
 
@@ -275,6 +285,11 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
           })}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 170 }}>
+            <Selectbox value={sourceFilter} onChange={setSourceFilter}
+              options={[{ value: "", label: T("كل المصادر", "All sources") }, ...Object.entries(LEAD_SOURCE_META).map(([k, v]) => ({ value: k, label: isAr ? v.ar : v.en }))]}
+              placeholder={T("مصدر الليد", "Lead source")} />
+          </div>
           <div style={{ position: "relative", minWidth: 220 }}>
             <span style={{ position: "absolute", insetInlineStart: 14, top: "50%", transform: "translateY(-50%)", color: "var(--abh-steel)" }}><Ic.search s={15} /></span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T("ابحث بالاسم أو التليفون…", "Search name or phone…")}
@@ -323,7 +338,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
       )}
 
       {creating && (
-        <CreateTaskModal services={services} brands={brands} staff={staff} isAr={isAr} T={T} currentUserId={currentUserId}
+        <CreateTaskModal services={services} brands={brands} staff={staff} isAr={isAr} T={T} currentUserId={currentUserId} currentUserName={currentUserName}
           onClose={() => setCreating(false)}
           onCreated={() => { setCreating(false); load(); loadStats(); }} />
       )}
@@ -406,6 +421,12 @@ function TaskCard({ t, isAr, T, currentUserId, onOpen }: { t: Task; isAr: boolea
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
           {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
           {t.vehicleSize && <span style={{ opacity: .6 }}>· {isAr ? SIZE_META[t.vehicleSize].ar : SIZE_META[t.vehicleSize].en}</span>}
+        </div>
+      )}
+
+      {t.leadSource && LEAD_SOURCE_META[t.leadSource] && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10, borderRadius: 999, border: `1px solid ${LEAD_SOURCE_META[t.leadSource].color}55`, padding: "3px 10px", color: LEAD_SOURCE_META[t.leadSource].color, background: `${LEAD_SOURCE_META[t.leadSource].color}12` }}>
+          {isAr ? LEAD_SOURCE_META[t.leadSource].ar : LEAD_SOURCE_META[t.leadSource].en}
         </div>
       )}
 
@@ -542,8 +563,8 @@ function VehiclePicker({ brands, isAr, T, brandId, model, onChange }: {
 }
 
 /* ═══════ مودال إنشاء تاسك ═══════ */
-function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onClose, onCreated }: {
-  services: Service[]; brands: Brand[]; staff: StaffMember[]; isAr: boolean; T: (a: string, e: string) => string; currentUserId: string;
+function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, currentUserName, onClose, onCreated }: {
+  services: Service[]; brands: Brand[]; staff: StaffMember[]; isAr: boolean; T: (a: string, e: string) => string; currentUserId: string; currentUserName: string;
   onClose: () => void; onCreated: () => void;
 }) {
   const toast = useToast();
@@ -551,7 +572,8 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
-  const [assignedTo, setAssignedTo] = useState(staff.some((s) => s.id === currentUserId) ? currentUserId : "");
+  const [assignedTo, setAssignedTo] = useState(currentUserId);
+  const [leadSource, setLeadSource] = useState("");
   const [brandId, setBrandId] = useState(""); const [brandName, setBrandName] = useState("");
   const [model, setModel] = useState(""); const [size, setSize] = useState<VehicleSize | null>(null);
   const [selectedServices, setSelectedServices] = useState<Set<number>>(new Set());
@@ -560,10 +582,14 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const staffOptions = useMemo(() => {
+    if (staff.some((s) => s.id === currentUserId)) return staff;
+    return [{ id: currentUserId, name: `${currentUserName} (${T("أنا", "Me")})` }, ...staff];
+  }, [staff, currentUserId, currentUserName]); // eslint-disable-line
+
   const toggleSvc = (id: number) => setSelectedServices((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const phoneOk = phone.trim() && isValidPhone(phone);
-  const emailOk = email.trim().length > 0;
-  const valid = name.trim() && phoneOk && emailOk;
+  const valid = name.trim() && phoneOk;
 
   const submit = async () => {
     if (!valid || busy) return;
@@ -576,7 +602,7 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
           customerName: name, customerPhone: phone, customerEmail: email || null, customerCity: city || null,
           services: svcPayload, quality, priceObjection, initialNote: note.trim() || null,
           vehicleBrandId: brandId || null, vehicleBrandName: brandName || null, vehicleModel: model || null, vehicleSize: size,
-          assignedTo: assignedTo || null,
+          assignedTo: assignedTo || null, leadSource: leadSource || null,
         }),
       });
       const j = await res.json();
@@ -597,14 +623,21 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
           <PhoneInput isAr={isAr} value={phone} onChange={setPhone} error={phone.trim() && !phoneOk ? T("رقم غير صحيح", "Invalid number") : null} />
         </Field>
 
-        <Field label={T("التاسك موجّه لـ", "Task assigned to")}>
-          <Selectbox value={assignedTo} onChange={setAssignedTo}
-            options={[{ value: "", label: T("بدون توجيه", "Unassigned") }, ...staff.map((s) => ({ value: s.id, label: s.name }))]}
-            placeholder={T("اختر موظف مبيعات", "Select a staff member")} />
-        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <Field label={T("التاسك موجّه لـ", "Task assigned to")}>
+            <Selectbox value={assignedTo} onChange={setAssignedTo}
+              options={[{ value: "", label: T("بدون توجيه", "Unassigned") }, ...staffOptions.map((s) => ({ value: s.id, label: s.name }))]}
+              placeholder={T("اختر موظف مبيعات", "Select a staff member")} />
+          </Field>
+          <Field label={T("مصدر الليد", "Lead source")}>
+            <Selectbox value={leadSource} onChange={setLeadSource}
+              options={[{ value: "", label: T("غير محدد", "Not specified") }, ...Object.entries(LEAD_SOURCE_META).map(([k, v]) => ({ value: k, label: isAr ? v.ar : v.en }))]}
+              placeholder={T("منين جاء العميل؟", "Where did the lead come from?")} />
+          </Field>
+        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Field label={T("اسم الحساب / الإيميل *", "Account name / email *")}>
+          <Field label={T("اسم الحساب / الإيميل (اختياري)", "Account name / email (optional)")}>
             <Input dir="ltr" value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder={T("مثال: ahmed_2024", "e.g. ahmed_2024")} style={{ textAlign: "left" }} />
           </Field>
           <Field label={T("المدينة (اختياري)", "City (optional)")}>
@@ -657,7 +690,7 @@ function CreateTaskModal({ services, brands, staff, isAr, T, currentUserId, onCl
           <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
           <Pill onClick={submit}>{busy ? T("جارٍ الإنشاء…", "Creating…") : T("إنشاء التاسك", "Create task")}</Pill>
         </div>
-        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل، رقم تليفون صحيح، واسم الحساب مطلوبين.", "Customer name, a valid phone, and an account name are required.")}</p>}
+        {!valid && <p style={{ margin: 0, fontSize: 11.5, color: "var(--abh-steel)", textAlign: "end" }}>{T("اسم العميل ورقم تليفون صحيح مطلوبين.", "Customer name and a valid phone are required.")}</p>}
       </div>
     </Modal>
   );
@@ -692,11 +725,11 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
   const [draft, setDraft] = useState({
     stage: task.stage,
     assignedTo: task.assignedTo ?? "",
+    leadSource: task.leadSource ?? "",
   });
   const [saving, setSaving] = useState(false);
 
-  const dirty = useMemo(() => draft.stage !== task.stage || draft.assignedTo !== (task.assignedTo ?? ""), [draft, task.stage, task.assignedTo]);
-
+  const dirty = useMemo(() => draft.stage !== task.stage || draft.assignedTo !== (task.assignedTo ?? "") || draft.leadSource !== (task.leadSource ?? ""), [draft, task.stage, task.assignedTo, task.leadSource]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [newNote, setNewNote] = useState("");
@@ -721,7 +754,8 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
         body: JSON.stringify({
           stage: draft.stage,
           assignedTo: draft.assignedTo || null,
-          assignedToName: staff.find((s) => s.id === draft.assignedTo)?.name ?? null,
+          assignedToName: staff.find((s) => s.id === draft.assignedTo)?.name ?? (draft.assignedTo === currentUserId ? currentUserName : null),
+          leadSource: draft.leadSource || null,
         }),
       });
       const j = await res.json();
@@ -783,6 +817,7 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
               {task.customerEmail && <InfoRow label={T("الإيميل", "Email")} value={<span dir="ltr">{task.customerEmail}</span>} />}
               {task.customerCity && <InfoRow label={T("المدينة", "City")} value={task.customerCity} />}
               <InfoRow label={T("السيارة", "Vehicle")} value={vehicleLabel} />
+              <InfoRow label={T("مصدر الليد", "Lead source")} value={task.leadSource && LEAD_SOURCE_META[task.leadSource] ? (isAr ? LEAD_SOURCE_META[task.leadSource].ar : LEAD_SOURCE_META[task.leadSource].en) : "—"} />
               <InfoRow label={T("مستوى الاهتمام", "Interest level")} value={task.quality ? (isAr ? QUALITY_META[task.quality].ar : QUALITY_META[task.quality].en) : "—"} />
               <InfoRow label={T("اعتراض على السعر", "Price objection")} value={task.priceObjection ? T("نعم", "Yes") : T("لا", "No")} />
               <InfoRow label={T("الخدمات المهتم بها", "Interested services")} value={
@@ -805,15 +840,24 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
           {!isClosed && (
             <div style={{ borderRadius: 18, border: "1px solid rgba(203,205,205,.25)", background: "rgba(203,205,205,.04)", padding: 20 }}>
               <SectionTitle label={T("الحالة والتوجيه — قابل للتعديل", "Status & routing — editable")} accent />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
                 <Field label={T("المرحلة", "Stage")}>
                   <Selectbox value={draft.stage} onChange={(v: Stage) => setDraft((d) => ({ ...d, stage: v }))}
                     options={OPEN_STAGES.map((s) => ({ value: s, label: isAr ? STAGE_META[s].ar : STAGE_META[s].en }))} placeholder="" />
                 </Field>
                 <Field label={T("موجّه لـ", "Assigned to")}>
                   <Selectbox value={draft.assignedTo} onChange={(v: string) => setDraft((d) => ({ ...d, assignedTo: v }))}
-                    options={[{ value: "", label: T("بدون توجيه", "Unassigned") }, ...staff.map((s) => ({ value: s.id, label: s.name }))]}
+                    options={[
+                      { value: "", label: T("بدون توجيه", "Unassigned") },
+                      ...staff.map((s) => ({ value: s.id, label: s.name })),
+                      ...(staff.some((s) => s.id === currentUserId) ? [] : [{ value: currentUserId, label: `${currentUserName} (${T("أنا", "Me")})` }]),
+                    ]}
                     placeholder={T("اختر موظف", "Select staff")} />
+                </Field>
+                <Field label={T("مصدر الليد", "Lead source")}>
+                  <Selectbox value={draft.leadSource} onChange={(v: string) => setDraft((d) => ({ ...d, leadSource: v }))}
+                    options={[{ value: "", label: T("غير محدد", "Not specified") }, ...Object.entries(LEAD_SOURCE_META).map(([k, v]) => ({ value: k, label: isAr ? v.ar : v.en }))]}
+                    placeholder={T("اختر المصدر", "Select source")} />
                 </Field>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.08)" }}>

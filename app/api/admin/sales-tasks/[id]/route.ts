@@ -8,6 +8,10 @@ const STAGE_LABEL: Record<string, string> = {
   won: "تم الحجز", lost: "مرفوض",
 };
 const QUALITY_LABEL: Record<string, string> = { hot: "مستعد للشراء", warm: "مهتم", cold: "استفسار فقط" };
+const LEAD_SOURCES = new Set(["facebook", "tiktok", "instagram", "whatsapp"]);
+const LEAD_SOURCE_LABEL: Record<string, string> = {
+  facebook: "فيسبوك", tiktok: "تيك توك", instagram: "انستجرام", whatsapp: "واتساب",
+};
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const admin = await getAdminWithPerm("sales_tasks");
@@ -19,7 +23,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 
     const cur = await query<any>(
       `SELECT t.customer_name, t.customer_phone, t.stage, t.quality, t.price_objection,
-              t.vehicle_brand_name, t.vehicle_model, t.vehicle_size, t.assigned_to,
+              t.vehicle_brand_name, t.vehicle_model, t.vehicle_size, t.assigned_to, t.lead_source,
               (SELECT name FROM users WHERE id = t.assigned_to) AS assigned_name
        FROM sales_tasks t WHERE t.id = $1 LIMIT 1`,
       [id]
@@ -57,6 +61,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (typeof b.priceObjection === "boolean" && b.priceObjection !== before.price_objection) {
       sets.push(`price_objection = $${i++}`); vals.push(b.priceObjection);
       changes.push(`الاعتراض على السعر: ${b.priceObjection ? "نعم" : "لا"}`);
+    }
+    if ("leadSource" in b) {
+      const newSource = (b.leadSource === null || LEAD_SOURCES.has(b.leadSource)) ? b.leadSource : undefined;
+      if (newSource !== undefined && newSource !== before.lead_source) {
+        sets.push(`lead_source = $${i++}`); vals.push(newSource);
+        changes.push(`مصدر الليد: «${before.lead_source ? LEAD_SOURCE_LABEL[before.lead_source] : "—"}» → «${newSource ? LEAD_SOURCE_LABEL[newSource] : "—"}»`);
+      }
     }
     if ("vehicleBrandName" in b || "vehicleModel" in b || "vehicleSize" in b) {
       const newBrand = b.vehicleBrandName ?? before.vehicle_brand_name;

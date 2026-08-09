@@ -16,7 +16,8 @@ export type PermKey =
   | "inventory"
   | "promos"
   | "offers"
-  | "sales_tasks";
+  | "sales_tasks"
+  | "maintenance";
 
 export type AdminPage = {
   key: PermKey;
@@ -32,6 +33,7 @@ export const ADMIN_PAGES: AdminPage[] = [
   { key: "bookings",     href: "/admin/bookings",      ar: "الحجوزات",        en: "Bookings",           group: { ar: "الواجهة", en: "Overview" } },
   { key: "bookings_new", href: "/admin/bookings/new",  ar: "حجز جديد",        en: "New booking",        group: { ar: "الواجهة", en: "Overview" } },
   { key: "sales_tasks",  href: "/admin/sales-tasks",   ar: "متابعة المبيعات", en: "Sales follow-up",    group: { ar: "المبيعات", en: "Sales" } },
+  { key: "maintenance",  href: "/admin/maintenance",   ar: "صيانة الضمان",    en: "Warranty maintenance", group: { ar: "التشغيل", en: "Operations" } },
   { key: "partners",     href: "/admin/partners",      ar: "الشركاء",         en: "Partners",           group: { ar: "الشركاء والحسابات", en: "Partners & accounts" } },
   { key: "accounts",     href: "/admin/accounts",      ar: "الحسابات",        en: "Accounts",           group: { ar: "الشركاء والحسابات", en: "Partners & accounts" } },
   { key: "content",      href: "/admin/content",       ar: "نصوص الصفحات",    en: "Page content",       group: { ar: "محتوى الموقع", en: "Site content" } },
