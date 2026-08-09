@@ -26,6 +26,7 @@ export interface PromoCode {
   expiresAt: string | null;
   services: PromoServiceRule[]; // للنوعين service_*
   giftServiceId: number | null; // للنوع gift_service — الخدمة اللي تتضاف مجانًا
+  commissionPercent: number | null; // (جديد) عمولة مؤثر اختيارية — % من كل حجز مدفوع بهذا الكود
 }
 
 export type PromoError =
@@ -46,7 +47,8 @@ export async function getPromoByCode(codeInput: string): Promise<PromoCode | nul
     `SELECT id, code, kind, label, description,
             COALESCE(discount_percent,0) AS discount_percent,
             fixed_amount, min_order, max_uses, used_count,
-            per_user_limit, is_active, starts_at, expires_at, gift_service_id
+            per_user_limit, is_active, starts_at, expires_at, gift_service_id,
+            commission_percent
      FROM promo_codes WHERE lower(code) = lower($1) LIMIT 1`,
     [code]
   );
@@ -80,6 +82,7 @@ export async function getPromoByCode(codeInput: string): Promise<PromoCode | nul
       value: Number(s.value) || 0,
     })),
     giftServiceId: p.gift_service_id != null ? Number(p.gift_service_id) : null,
+    commissionPercent: p.commission_percent != null ? Number(p.commission_percent) : null,
   };
 }
 
@@ -211,15 +214,26 @@ export async function recordRedemption(args: {
   orderTotal: number;
   paidImmediately: boolean;
 }): Promise<void> {
+  // عمولة المؤثر (لو الكود عليه نسبة) — تُحسب وتُخزَّن كـ Snapshot وقت الاستخدام
+  let commissionAmount = 0;
+  if (args.promoId) {
+    const cRows = await query<any>(
+      `SELECT commission_percent FROM promo_codes WHERE id = $1`,
+      [args.promoId]
+    );
+    const pct = cRows[0]?.commission_percent != null ? Number(cRows[0].commission_percent) : 0;
+    if (pct > 0) commissionAmount = Math.max(0, Math.round((args.orderTotal * pct) / 100));
+  }
+
   await query(
     `INSERT INTO promo_redemptions
        (promo_id, code, booking_id, user_id, customer_name, customer_email,
-        order_subtotal, discount_amount, order_total, paid_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, CASE WHEN $10 THEN now() ELSE NULL END)`,
+        order_subtotal, discount_amount, order_total, commission_amount, paid_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $11 THEN now() ELSE NULL END)`,
     [
       args.promoId, args.code, args.bookingId, args.userId,
       args.customerName, args.customerEmail,
-      args.orderSubtotal, args.discountAmount, args.orderTotal,
+      args.orderSubtotal, args.discountAmount, args.orderTotal, commissionAmount,
       args.paidImmediately,
     ]
   );

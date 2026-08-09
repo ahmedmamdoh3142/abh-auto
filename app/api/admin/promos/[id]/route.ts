@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
               COALESCE(p.discount_percent,0) AS discount_percent,
               p.fixed_amount, p.min_order, p.max_uses, p.used_count, p.per_user_limit,
               p.is_active, p.starts_at, p.expires_at, p.created_at,
-              p.recipient_user_id, p.campaign_id,
+              p.recipient_user_id, p.campaign_id, p.commission_percent,
               ru.name  AS recipient_name,
               ru.phone AS recipient_phone,
               ru.email AS recipient_email,
@@ -86,7 +86,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       [id]
     );
 
-    // ── (جديد) لو الكود موجّه لشخص: هل استخدمه فعلًا؟ ──
+    // ── عمولة المؤثر: المستحق + سجل الصرف ──
+    const commissionEarnedRows = await query<any>(
+      `SELECT COALESCE(sum(commission_amount),0) AS earned
+       FROM promo_redemptions WHERE promo_id = $1 AND paid_at IS NOT NULL`,
+      [id]
+    );
+    const payoutRows = await query<any>(
+      `SELECT id, amount, method, reference, note, paid_at
+       FROM promo_commission_payouts WHERE promo_id = $1 ORDER BY paid_at DESC LIMIT 50`,
+      [id]
+    );
+    const commissionEarned = Number(commissionEarnedRows[0]?.earned) || 0;
+    const commissionPaid = payoutRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+    // ── لو الكود موجّه لشخص: هل استخدمه فعلًا؟ ──
     let recipient: any = null;
     if (p.recipient_user_id) {
       const usedRows = await query<any>(
@@ -124,8 +138,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         createdAt: new Date(p.created_at).toISOString(),
         campaignId: p.campaign_id ?? null,
         campaignLabel: p.campaign_label ?? null,
+        commissionPercent: p.commission_percent != null ? Number(p.commission_percent) : null,
       },
-      recipient, // ← بيانات المستلِم + هل استخدم (أو null لو الكود عام)
+      recipient,
+      commission: {
+        earned: commissionEarned,
+        paid: commissionPaid,
+        outstanding: Math.max(0, commissionEarned - commissionPaid),
+        payouts: payoutRows.map((r) => ({
+          id: String(r.id),
+          amount: Number(r.amount) || 0,
+          method: r.method ?? null,
+          reference: r.reference ?? null,
+          note: r.note ?? null,
+          paidAt: new Date(r.paid_at).toISOString(),
+        })),
+      },
       summary: {
         redemptions: Number(summary.redemptions) || 0,
         totalDiscount: Number(summary.total_discount) || 0,

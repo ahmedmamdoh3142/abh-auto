@@ -34,9 +34,14 @@ type Promo = {
   isActive: boolean; startsAt: string | null; expiresAt: string | null; createdAt: string;
   redemptions: number; totalDiscount: number; totalRevenue: number; lastUsedAt: string | null;
   services: SvcRule[];
-  recipient: Recipient | null;      // ← (جديد) الكود موجّه لهذا الشخص
-  campaignId: string | null;        // ← (جديد) من حملة؟
-  campaignLabel: string | null;     // ← (جديد) اسم الحملة
+  recipient: Recipient | null;      // ← الكود موجّه لهذا الشخص
+  campaignId: string | null;        // ← من حملة؟
+  campaignLabel: string | null;     // ← اسم الحملة
+  // ── (جديد) عمولة مؤثر اختيارية ──
+  commissionPercent: number | null;
+  commissionEarned: number;
+  commissionPaid: number;
+  commissionOutstanding: number;
 };
 type ServiceLite = { id: number; name: string; category: string; onRequest: boolean };
 
@@ -70,7 +75,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
   const [list, setList] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "paused" | "expired" | "targeted">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "paused" | "expired" | "targeted" | "commission">("all");
   const [editing, setEditing] = useState<Promo | null>(null);
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<Promo | null>(null);
@@ -106,6 +111,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
     else if (filter === "paused") l = l.filter((p) => !p.isActive);
     else if (filter === "expired") l = l.filter((p) => isExpired(p));
     else if (filter === "targeted") l = l.filter((p) => !!p.recipient);
+    else if (filter === "commission") l = l.filter((p) => p.commissionPercent != null);
     return l;
   }, [list, q, filter]);
 
@@ -138,6 +144,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
     { id: "all", label: T("الكل", "All"), n: list.length },
     { id: "active", label: T("نشطة", "Active"), n: list.filter((p) => p.isActive && !isExpired(p)).length },
     { id: "targeted", label: T("موجّهة لعميل", "Targeted"), n: list.filter((p) => !!p.recipient).length },
+    { id: "commission", label: T("عمولة مؤثر", "Affiliate"), n: list.filter((p) => p.commissionPercent != null).length },
     { id: "paused", label: T("موقوفة", "Paused"), n: list.filter((p) => !p.isActive).length },
     { id: "expired", label: T("منتهية", "Expired"), n: list.filter((p) => isExpired(p)).length },
   ];
@@ -245,7 +252,8 @@ function KpiCard({ label, value, unit, sub, icon: Icon, hi, tone, isAr }: any) {
 }
 const PROMO_CSS = `
 .abh-promo-kpis{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-.abh-promo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:18px; }
+.abh-promo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:18px; align-items:stretch; }
+.abh-promo-card{ height:100%; min-height:412px; display:flex; flex-direction:column; }
 @media (max-width:1100px){ .abh-promo-kpis{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:860px){
   .abh-promo-toolbar{ flex-direction:column; align-items:stretch; }
@@ -278,7 +286,7 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
         : `${p.discountPercent}%`;
 
   return (
-    <div className="abh-lift" style={{ position: "relative", overflow: "hidden", borderRadius: 20, border: `1px solid ${rec ? "rgba(203,205,205,.28)" : expired ? "rgba(231,180,180,.25)" : p.isActive ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.06)"}`, background: rec ? "linear-gradient(160deg,rgba(203,205,205,.05),rgba(255,255,255,.015))" : "rgba(255,255,255,.02)", padding: 20, opacity: p.isActive && !expired ? 1 : 0.72, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
+    <div className="abh-lift abh-promo-card" style={{ position: "relative", overflow: "hidden", borderRadius: 20, border: `1px solid ${rec ? "rgba(203,205,205,.28)" : expired ? "rgba(231,180,180,.25)" : p.isActive ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.06)"}`, background: rec ? "linear-gradient(160deg,rgba(203,205,205,.05),rgba(255,255,255,.015))" : "rgba(255,255,255,.02)", padding: 20, opacity: p.isActive && !expired ? 1 : 0.72, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
       {/* زخرفة الزاوية */}
       <span aria-hidden style={{ position: "absolute", insetInlineEnd: -30, top: -30, height: 90, width: 90, borderRadius: 999, background: "radial-gradient(circle,rgba(203,205,205,.1),transparent 70%)", pointerEvents: "none" }} />
 
@@ -331,6 +339,33 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
         </div>
       )}
 
+      {/* ── (جديد) شارة عمولة المؤثر ── */}
+      {p.commissionPercent != null && (
+        <div style={{ marginTop: 16, borderRadius: 14, border: "1px solid rgba(217,178,95,.3)", background: "rgba(217,178,95,.06)", padding: "12px 13px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase", color: "#e8d6a8" }}>
+              <Ic.trending s={12} />{T("عمولة مؤثر", "Affiliate")}
+            </span>
+            <span className="abh-num" dir="ltr" style={{ fontSize: 13, color: "#e8d6a8" }}>{p.commissionPercent}%</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", textAlign: align }}>{T("مستحقّ له", "Outstanding")}</div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 15, color: "#e8d6a8", marginTop: 3, textAlign: align }}>{EGP(p.commissionOutstanding)} <span style={{ fontSize: 9, color: "var(--abh-steel)" }}>{ccy}</span></div>
+            </div>
+            <div>
+              <div style={{ fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)", textAlign: align }}>{T("إجمالي العمولة", "Total earned")}</div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 15, color: "var(--abh-ivory)", marginTop: 3, textAlign: align }}>{EGP(p.commissionEarned)} <span style={{ fontSize: 9, color: "var(--abh-steel)" }}>{ccy}</span></div>
+            </div>
+          </div>
+          {p.commissionOutstanding > 0 && (
+            <button onClick={onStats} style={{ marginTop: 10, width: "100%", borderRadius: 10, border: "1px solid rgba(217,178,95,.4)", background: "rgba(217,178,95,.12)", padding: "8px 10px", fontSize: 11.5, color: "#e8d6a8", cursor: "pointer" }}>
+              {T("صرف العمولة", "Pay out commission")}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* شريط الاستخدام */}
       <div style={{ marginTop: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--abh-steel)", marginBottom: 6 }}>
@@ -363,8 +398,8 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
         </div>
       )}
 
-      {/* الأزرار */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+      {/* الأزرار — دايمًا في أسفل الكارت مهما كان المحتوى فوقها */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto", paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.06)" }}>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
           <Toggle on={p.isActive} onChange={onToggle} />
           <span style={{ fontSize: 11, color: "var(--abh-steel)" }}>{p.isActive ? T("مفعّل", "On") : T("موقوف", "Off")}</span>
@@ -406,6 +441,8 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
   const [isActive, setIsActive] = useState(promo?.isActive ?? true);
   const [startsAt, setStartsAt] = useState(promo?.startsAt ? promo.startsAt.slice(0, 10) : "");
   const [expiresAt, setExpiresAt] = useState(promo?.expiresAt ? promo.expiresAt.slice(0, 10) : "");
+  const [hasCommission, setHasCommission] = useState(promo?.commissionPercent != null);
+  const [commissionPercent, setCommissionPercent] = useState<number>(promo?.commissionPercent ?? 20);
 
   // خدمات مختارة: serviceId → { amountMode, value }
   const initSvc: Record<number, SvcRule> = {};
@@ -445,6 +482,7 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
       perUserLimit: perUserLimit === "" ? null : Number(perUserLimit),
       isActive, startsAt: startsAt || null, expiresAt: expiresAt || null,
       services: services_payload,
+      commissionPercent: hasCommission ? commissionPercent : null,
     });
   };
 
@@ -574,6 +612,29 @@ function PromoModal({ promo, services, T, ccy, isAr, onClose, onSave }: {
           </div>
         </div>
 
+        {/* ── (جديد) عمولة مؤثر — اختيارية تمامًا ── */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontSize: 10.5, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("عمولة مؤثر (اختياري)", "Affiliate commission (optional)")}</div>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <Toggle on={hasCommission} onChange={setHasCommission} />
+              <span style={{ fontSize: 11.5, color: "var(--abh-steel)" }}>{hasCommission ? T("مفعّلة", "On") : T("غير مفعّلة", "Off")}</span>
+            </label>
+          </div>
+          {hasCommission ? (
+            <>
+              <Field label={T("نسبة العمولة %", "Commission %")} hint={T("من إجمالي كل حجز مدفوع بهذا الكود", "Of every paid booking using this code")}>
+                <input type="number" min={1} max={100} value={commissionPercent || ""} onChange={(e) => setCommissionPercent(Math.max(0, Math.min(100, +e.target.value)))} dir="ltr" style={inp} />
+              </Field>
+              <div style={{ marginTop: 10, borderRadius: 12, border: "1px solid rgba(217,178,95,.3)", background: "rgba(217,178,95,.06)", padding: "11px 14px", fontSize: 11.5, color: "#e8d6a8", lineHeight: 1.7 }}>
+                {T("تُحسب العمولة تلقائيًا على كل حجز يُدفع فعليًا بهذا الكود، وتقدر تصرفها كاملة أو على دفعات من صفحة إحصائيات الكود.", "Commission is calculated automatically on every paid booking using this code. Pay it out in full or in installments from the code's stats page.")}
+              </div>
+            </>
+          ) : (
+            <p style={{ fontSize: 11, color: "var(--abh-steel)", margin: 0 }}>{T("فعّلها لو الكود ده هتبعته لمؤثر واتفقتوا على نسبة من الحجوزات.", "Turn this on if you're sending this code to an influencer with an agreed revenue share.")}</p>
+          )}
+        </div>
+
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <Toggle on={isActive} onChange={setIsActive} />
           <span style={{ fontSize: 13, color: "rgba(203,205,205,.8)" }}>{T("الكود مفعّل", "Code active")}</span>
@@ -597,15 +658,15 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
 }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [payoutOpen, setPayoutOpen] = useState(false);
 
-  useEffect(() => {
-    let alive = true; setLoading(true);
-    (async () => {
-      try { const j = await fetch(`/api/admin/promos/${promoId}?locale=${isAr ? "ar" : "en"}`).then((r) => r.json()); if (alive && j?.ok) setData(j); }
-      finally { if (alive) setLoading(false); }
-    })();
-    return () => { alive = false; };
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const j = await fetch(`/api/admin/promos/${promoId}?locale=${isAr ? "ar" : "en"}`).then((r) => r.json()); if (j?.ok) setData(j); }
+    finally { setLoading(false); }
   }, [promoId, isAr]);
+
+  useEffect(() => { load(); }, [load]);
 
   const txt = (v: any): string => (!v ? "" : typeof v === "string" ? v : (v[isAr ? "ar" : "en"] ?? v.ar ?? v.en ?? ""));
   const align = isAr ? "right" : "left";
@@ -653,6 +714,41 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
                   </a>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── (جديد) عمولة المؤثر ── */}
+          {data.promo.commissionPercent != null && (
+            <div style={{ borderRadius: 18, border: "1px solid rgba(217,178,95,.3)", background: "linear-gradient(160deg,rgba(217,178,95,.08),rgba(255,255,255,.015))", padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "#e8d6a8" }}>
+                  <Ic.trending s={13} />{T(`عمولة مؤثر — ${data.promo.commissionPercent}%`, `Affiliate commission — ${data.promo.commissionPercent}%`)}
+                </span>
+                {data.commission.outstanding > 0 ? (
+                  <Pill icon={Ic.check} onClick={() => setPayoutOpen(true)}>{T("صرف عمولة", "Pay out")}</Pill>
+                ) : (
+                  <Chip tone="ok" dot>{T("لا يوجد مستحقّ", "Nothing owed")}</Chip>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 12 }}>
+                <StatBox label={T("إجمالي العمولة", "Total earned")} value={EGP(data.commission.earned)} ccy={ccy} isAr={isAr} />
+                <StatBox label={T("تم صرفه", "Paid out")} value={EGP(data.commission.paid)} ccy={ccy} isAr={isAr} />
+                <StatBox label={T("متبقّي", "Outstanding")} value={EGP(data.commission.outstanding)} ccy={ccy} isAr={isAr} />
+              </div>
+              {data.commission.payouts.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 8, textAlign: align }}>{T("سجلّ الصرف", "Payout history")}</div>
+                  <div className="abh-col" style={{ gap: 6 }}>
+                    {data.commission.payouts.map((po: any) => (
+                      <div key={po.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 10, border: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.02)", padding: "8px 12px" }}>
+                        <span className="abh-num" dir="ltr" style={{ fontSize: 12.5, color: "#e8d6a8" }}>{EGP(po.amount)} {ccy}</span>
+                        <span style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{po.method || T("—", "—")}</span>
+                        <span style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{fmtDT(po.paidAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -731,6 +827,78 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
           </div>
         </div>
       )}
+      {payoutOpen && data && (
+        <CommissionPayoutModal
+          promoId={promoId}
+          outstanding={data.commission.outstanding}
+          ccy={ccy} T={T} isAr={isAr}
+          onClose={() => setPayoutOpen(false)}
+          onDone={() => { setPayoutOpen(false); load(); }}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/* ═══════════ مودال صرف عمولة المؤثر ═══════════ */
+function CommissionPayoutModal({ promoId, outstanding, ccy, T, isAr, onClose, onDone }: {
+  promoId: string; outstanding: number; ccy: string; T: (a: string, e: string) => string; isAr: boolean;
+  onClose: () => void; onDone: () => void;
+}) {
+  const toast = useToast();
+  const [amount, setAmount] = useState<number>(outstanding);
+  const [method, setMethod] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const inp: React.CSSProperties = { width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: isAr ? "right" : "left" };
+  const valid = amount > 0 && amount <= outstanding + 1;
+
+  async function submit() {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/admin/promos/${promoId}/commission-payouts`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, method: method || null, note: note || null }),
+      }).then((r) => r.json());
+      if (!r.ok) {
+        toast(r.error === "exceeds_outstanding" ? T("المبلغ أكبر من المستحقّ", "Amount exceeds outstanding") : T("فشل الصرف", "Payout failed"), "bad");
+        setSaving(false);
+        return;
+      }
+      toast(T("تم تسجيل الصرف", "Payout recorded"));
+      onDone();
+    } catch { toast(T("فشل الصرف", "Payout failed"), "bad"); setSaving(false); }
+  }
+
+  return (
+    <Modal title={T("صرف عمولة", "Pay out commission")} onClose={onClose}>
+      <div className="abh-col" style={{ gap: 16 }}>
+        <div style={{ borderRadius: 12, border: "1px solid rgba(217,178,95,.25)", background: "rgba(217,178,95,.06)", padding: "11px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--abh-steel)" }}>{T("المستحقّ حاليًا", "Currently owed")}</span>
+          <span className="abh-num" dir="ltr" style={{ fontSize: 16, color: "#e8d6a8" }}>{EGP(outstanding)} {ccy}</span>
+        </div>
+
+        <Field label={T("المبلغ المطلوب صرفه", "Amount to pay")} hint={ccy}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="number" min={1} max={outstanding} value={amount || ""} onChange={(e) => setAmount(Math.max(0, +e.target.value))} dir="ltr" style={inp} />
+            <Ghost onClick={() => setAmount(outstanding)}>{T("الكل", "Full")}</Ghost>
+          </div>
+        </Field>
+
+        <Field label={T("طريقة الدفع (اختياري)", "Payment method (optional)")}>
+          <input value={method} onChange={(e) => setMethod(e.target.value)} placeholder={T("تحويل بنكي، فودافون كاش…", "Bank transfer, wallet…")} style={inp} />
+        </Field>
+        <Field label={T("ملاحظة (اختياري)", "Note (optional)")}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} style={inp} />
+        </Field>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+          <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
+          <Pill icon={Ic.check} onClick={submit}>{saving ? T("جارٍ الصرف…", "Paying…") : T("تأكيد الصرف", "Confirm payout")}</Pill>
+        </div>
+      </div>
     </Modal>
   );
 }
