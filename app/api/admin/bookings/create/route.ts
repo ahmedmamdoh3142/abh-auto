@@ -211,13 +211,13 @@ export async function POST(request: Request) {
     }
 
     // ── هدايا البندلات — تُسعّر وتُتحقّق من جهة الخادم (نفس الموقع) ──
-    type GiftLine = { serviceId: number; slug: string; nameSnapshot: string | null; unit: number; bundleId: string; giftValue: number };
+    type GiftLine = { serviceId: number; slug: string; nameSnapshot: string | null; unit: number; bundleId: string; giftValue: number; warrantyMonths: number | null; warrantyExpiresAt: string | null };
     const giftLines: GiftLine[] = [];
     if (!partner && giftInputs.length > 0) {
       const bundleCache = new Map<string, Awaited<ReturnType<typeof getBundleById>>>();
       const giftSlugs = [...new Set(giftInputs.map((g) => g.slug))];
       const giftRows = await query<any>(
-        `SELECT s.id, s.slug, s.name, sp.price
+        `SELECT s.id, s.slug, s.name, s.warranty_months, sp.price
            FROM services s
            LEFT JOIN service_prices sp ON sp.service_id = s.id AND sp.size_code = $2
           WHERE s.surface = 'catalog' AND s.slug = ANY($1)`,
@@ -233,9 +233,18 @@ export async function POST(request: Request) {
         if (!bundle || !bundle.giftIds.includes(Number(row.id))) continue;
         const full = Number(row.price) || 0;
         const unit = giftChargeFor(full, bundle.giftPercent);
+        // (جديد) ضمان الهدية — نفس منطق البنود العادية.
+        const warrantyMonths = row.warranty_months != null ? Number(row.warranty_months) : null;
+        let warrantyExpiresAt: string | null = null;
+        if (warrantyMonths && warrantyMonths > 0) {
+          const start = date ? new Date(date) : new Date();
+          start.setMonth(start.getMonth() + warrantyMonths);
+          warrantyExpiresAt = start.toISOString();
+        }
         giftLines.push({
           serviceId: row.id, slug: row.slug, nameSnapshot: row.name ? JSON.stringify(row.name) : null,
           unit, bundleId: g.bundleId, giftValue: Math.max(0, full - unit),
+          warrantyMonths, warrantyExpiresAt,
         });
         seen.add(g.slug);
       }
@@ -319,9 +328,10 @@ export async function POST(request: Request) {
     for (const g of giftLines) {
       await query(
         `INSERT INTO booking_items
-           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot)
-         VALUES ($1,$2,$3,$4,$5,$6,1,$6,0)`,
-        [booking.id, g.serviceId, g.slug, g.nameSnapshot, sizeCode, g.unit]
+           (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot,
+            warranty_months, warranty_expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,1,$6,0,$7,$8)`,
+        [booking.id, g.serviceId, g.slug, g.nameSnapshot, sizeCode, g.unit, g.warrantyMonths, g.warrantyExpiresAt]
       );
       await query(
         `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
