@@ -204,7 +204,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     }).filter((g) => g.rows.length > 0);
 
     const title = isTemplateMode
-      ? (templateKind === "partner" ? T("ملف امتيازات الشركاء", "Partner privileges file") : T("ملف امتيازات المناديب", "Reps price book"))
+      ? (templateKind === "partner" ? T("ملف امتيازات الشركاء", "Partner privileges file") : T("ملف مميزات اخصائي المبيعات", "Reps price book"))
       : isPartnerMode
       ? (activePartner?.name ?? T("أسعار شركة", "Partner prices"))
       : T("قائمة الأسعار", "Price list");
@@ -257,7 +257,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
 
   // عنوان/وصف الوضع الحالي
   const modeTitle = isTemplateMode
-    ? (templateKind === "partner" ? T("ملف امتيازات الشركاء", "Partner privileges file") : T("ملف امتيازات المناديب", "Reps price book"))
+    ? (templateKind === "partner" ? T("ملف امتيازات الشركاء", "Partner privileges file") : T("ملف مميزات اخصائي المبيعات", "Reps price book"))
     : isPartnerMode
     ? T(`أسعار شركة «${activePartner?.name ?? ""}»`, `“${activePartner?.name ?? ""}” prices`)
     : T("الخدمات والأسعار", "Services & pricing");
@@ -289,7 +289,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
               options={[
                 { value: "", label: T("الأسعار العامة (الموقع)", "Public prices (website)") },
                 { value: TPL_PARTNER, label: T("📋 ملف امتيازات الشركاء", "📋 Partner privileges file") },
-                { value: TPL_REP, label: T("📋 ملف امتيازات المناديب", "📋 Reps price book") },
+                { value: TPL_REP, label: T("📋 ملف مميزات اخصائي المبيعات", "📋 Reps price book") },
                 ...partners.map((p) => ({ value: p.id, label: p.name })),
               ]}
               placeholder={T("اختر", "Select")}
