@@ -2,25 +2,7 @@
 
 /**
  * WarrantyPolicyView — صفحة "سياسة وشروط الضمان" العامة لـ ABH AUTO.
- * Path (مقترح): components/sections/warranty/warranty-policy-view.tsx
- *
- * دي الصفحة اللي هيتحط رابطها في الـFooter دايمًا ("سياسة وشروط الضمان")،
- * ويشير ليها الإقرار وقت الحجز ("أقر باطلاعي وموافقتي على سياسة وشروط الضمان")
- * وكمان جملة التحويل في شهادة الضمان المطبوعة ("راجع سياسة الضمان الكاملة على…").
- *
- * التصميم بيكمل نفس هوية الموقع تمامًا (obsidian + platinum) بدل ما يخترع
- * باليت جديدة — العنصر المميز هنا هو "لوحة التغطية" (Coverage Ledger):
- * جدول الخدمات ومدد الضمان معروض بشكل يحاكي حفر/نقش شهادة ورقية فاخرة
- * (hairline بلاتيني بين الصفوف) بدل جدول عادي، عشان يوصل إحساس إن الضمان
- * مستند رسمي وليس مجرد بند تسويقي.
- *
- * محتوى النص كله مأخوذ حرفيًا من "سياسة الضمان – ABH AUTO" المعتمدة
- * (الإصدار 1.0 — سريان أغسطس 2026)، ومترجم للإنجليزي بنفس المعنى للنسخة en.
- *
- * الاستخدام (لا يوجد [locale] في الراوتنج — اللغة بتتحل من next-intl عبر
- * كوكي/هيدر زي باقي الموقع). مثال app/warranty-policy/page.tsx:
- *   import { WarrantyPolicyView } from '@/components/sections/warranty/warranty-policy-view';
- *   export default function Page() { return <WarrantyPolicyView />; }
+ * (بدون زر "شهادتي الإلكترونية" وبدون فوتر مكرر – الفوتر موحد على الموقع)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -31,11 +13,10 @@ import {
   Sparkles, Sun, Droplets, FileText, ChevronDown,
   Calendar, ClipboardCheck, AlertTriangle, ScrollText,
 } from 'lucide-react';
-import { Logo } from '@/components/shared/logo';
 import { Button } from '@/components/ui/button';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const ACCENT = '#cbcdcd'; // platinum — نفس لون التدرّج المستخدم في زر Pill بالموقع
+const ACCENT = '#cbcdcd';
 const COVER_IMAGE = '/images/cta-bg.webp';
 const COMPANY_PHONE_HREF = 'tel:+966000000000'; // TODO: رقم التواصل الفعلي
 const POLICY_VERSION = '1.0';
@@ -52,7 +33,6 @@ const PAGE = {
   },
   heroBadgeNum: { ar: '12', en: '12' },
   heroBadgeSub: { ar: 'سنة أقصى تغطية', en: 'years max coverage' },
-  ctaCert: { ar: 'شهادتي الإلكترونية', en: 'My e-certificate' },
   ctaContact: { ar: 'تواصل مع فريق الضمان', en: 'Contact warranty team' },
   effective: { ar: 'الإصدار', en: 'Version' },
   effectiveDate: { ar: 'ساري من أغسطس 2026', en: 'Effective August 2026' },
@@ -222,7 +202,6 @@ export function WarrantyPolicyView() {
   const [active, setActive] = useState<string>(TOC[0].id);
   const reduce = useReducedMotion();
 
-  // يتابع أي قسم في العرض حاليًا عشان يضيء بنده في الـTOC
   useEffect(() => {
     const els = TOC.map((s) => document.getElementById(s.id)).filter(Boolean) as HTMLElement[];
     if (!els.length) return;
@@ -244,7 +223,6 @@ export function WarrantyPolicyView() {
 
   return (
     <main className="relative" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* ── Hero ── */}
       <section className="relative isolate overflow-hidden pb-16 pt-32 md:pb-20 md:pt-40">
         <div aria-hidden className="absolute inset-0 -z-20">
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${COVER_IMAGE}')`, filter: 'grayscale(0.75) brightness(0.32) contrast(1.1)' }} />
@@ -273,16 +251,13 @@ export function WarrantyPolicyView() {
               <p className="mt-5 max-w-[58ch] text-[0.95rem] leading-relaxed text-platinum/70">{T(PAGE.lead)}</p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/account" data-cursor="hover">
-                  <Button variant="primary" size="md" arrow>{T(PAGE.ctaCert)}</Button>
-                </Link>
                 <a href={COMPANY_PHONE_HREF} data-cursor="hover">
-                  <Button variant="ghost" size="md">{T(PAGE.ctaContact)}</Button>
+                  <Button variant="primary" size="md" arrow>{T(PAGE.ctaContact)}</Button>
                 </a>
               </div>
             </div>
 
-            {/* شارة التغطية القصوى — العنصر المميّز في الهيدر */}
+            {/* شارة التغطية القصوى */}
             <div className="relative flex-none self-stretch">
               <div className="relative flex h-full flex-col items-center justify-center gap-2 rounded-[28px] border px-10 py-9 text-center backdrop-blur-sm"
                 style={{ borderColor: `${ACCENT}55`, background: 'linear-gradient(180deg, rgba(203,205,205,0.08), rgba(203,205,205,0.02))' }}>
@@ -296,7 +271,7 @@ export function WarrantyPolicyView() {
         </div>
       </section>
 
-      {/* ── Sticky TOC ── */}
+      {/* Sticky TOC */}
       <div className="sticky top-[84px] z-30 border-y border-white/[0.06] bg-obsidian/80 backdrop-blur-xl">
         <div className="container">
           <nav className="flex gap-1 overflow-x-auto py-3" aria-label={isAr ? 'محتويات السياسة' : 'Policy contents'}>
@@ -321,7 +296,7 @@ export function WarrantyPolicyView() {
 
       <div className="container space-y-24 py-20 md:space-y-28 md:py-24">
 
-        {/* ── مدد الضمان: لوحة التغطية (Coverage Ledger) ── */}
+        {/* مدد الضمان */}
         <section id="coverage" className="scroll-mt-40">
           <SectionHead eyebrow={isAr ? '01' : '01'} title={T(TOC[0])} />
           <div className="mt-8 overflow-hidden rounded-[28px] border" style={{ borderColor: `${ACCENT}30` }}>
@@ -348,7 +323,7 @@ export function WarrantyPolicyView() {
           <p className="mt-4 max-w-[70ch] text-[0.8rem] leading-relaxed text-platinum/55">{T(COVERAGE_NOTE)}</p>
         </section>
 
-        {/* ── ماذا يغطي ضمانك ── */}
+        {/* ماذا يغطي */}
         <section id="covered" className="scroll-mt-40">
           <SectionHead eyebrow="02" title={T(TOC[1])} />
           <p className="mt-4 max-w-[72ch] text-sm leading-relaxed text-platinum/65">{T(COVERED_NOTE)}</p>
@@ -365,7 +340,7 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* ── تفاصيل كل خدمة ── */}
+        {/* تفاصيل كل خدمة */}
         <section id="services" className="scroll-mt-40">
           <SectionHead eyebrow="03" title={T(TOC[2])} />
           <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -382,7 +357,7 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* ── خطوات المطالبة ── */}
+        {/* خطوات المطالبة */}
         <section id="claim" className="scroll-mt-40">
           <SectionHead eyebrow="04" title={T(TOC[3])} />
           <div className="relative mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
@@ -404,7 +379,7 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* ── غير المشمول ── */}
+        {/* غير المشمول */}
         <section id="exclusions" className="scroll-mt-40">
           <SectionHead eyebrow="05" title={T(TOC[4])} />
           <div className="mt-8 overflow-hidden rounded-[26px] border border-[#7c1a1a]/25 bg-[#2a1414]/[0.12]">
@@ -429,7 +404,7 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* ── أحكام عامة ── */}
+        {/* أحكام عامة */}
         <section id="terms" className="scroll-mt-40">
           <SectionHead eyebrow="06" title={T(TOC[5])} />
           <div className="mt-8 space-y-3">
@@ -439,14 +414,8 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* ── إشعار الشهادة + رقم الإصدار ── */}
-        <div className="flex flex-col items-center gap-5 border-t border-white/[0.08] pt-14 text-center">
-          <Logo size={46} />
-          <p className="max-w-[60ch] text-[0.8rem] leading-relaxed text-platinum/55">
-            {isAr
-              ? 'تخضع كل شهادة ضمان إلكترونية صادرة عن ABH AUTO لهذه السياسة المعتمدة والموافَق عليها من العميل عند تنفيذ الخدمة.'
-              : 'Every ABH AUTO electronic warranty certificate is governed by this approved policy, agreed to by the customer at the time of service.'}
-          </p>
+        {/* رقم الإصدار فقط – بدون فوتر */}
+        <div className="flex flex-col items-center gap-3 border-t border-white/[0.08] pt-14 text-center">
           <div className="flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.03] px-4 py-2 text-[0.6rem] uppercase tracking-[0.16em] text-platinum/60">
             <span>{T(PAGE.effective)} {POLICY_VERSION}</span>
             <span className="h-1 w-1 rounded-full bg-platinum/30" />

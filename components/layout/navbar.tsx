@@ -3,25 +3,8 @@
 /**
  * Navbar — ABH Auto.
  *
- * Membership-aware: signed out shows the Login link + CTA; once a member signs
- * in, "Login" becomes a refined account chip (monogram + first name) opening a
- * dropdown (profile, bookings, member-since, sign-out). Mobile drawer mirrors
- * it. Account-menu copy reads from the `login.account` i18n block, so it lives
- * in the same block you paste wholesale — no separate `nav` edits required.
- *
- * Nav items may carry a `children` array (see lib/site-config.ts) — e.g.
- * "offers" bundles "Offers" + "Warranty" into one dropdown so the two links
- * aren't just sitting side by side as separate top-level items.
- *
- * إصلاح الأداء:
- *  • عنصر الـLCP على كل الصفحات كان لوجو الناف بار (logo3.webp). كان محبوسًا
- *    داخل motion.header بـinitial:{opacity:0} فما كان يظهر/يتحمّل غير بعد hydration
- *    framer (~1.8s تأخير → LCP عالي). شِلنا framer من الـheader وحوّلناه CSS مع
- *    backwards، فاللوجو يُرسم فورًا في الـHTML من أول فريم. ده يحسّن LCP على
- *    كل صفحة في الموقع، مش about بس.
- *  • onScroll ملفوف في requestAnimationFrame مع قفل ticking → لا forced reflow.
- *
- * Path: components/layout/navbar.tsx
+ * Membership-aware. Mobile drawer now uses a dropdown/accordion for nav items
+ * that have children (e.g. Offers + Warranty), matching the desktop behaviour.
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -50,8 +33,6 @@ export function Navbar() {
   const { member, hydrated } = useAuth();
 
   useEffect(() => {
-    // نلفّ قراءة scrollY في rAF حتى لا تحصل قراءة geometry وسط دورة كتابة Lenis
-    // (ده اللي كان بيسبّب forced reflow). قفل ticking يمنع تكديس الإطارات.
     let ticking = false;
     const onScroll = () => {
       if (ticking) return;
@@ -70,14 +51,10 @@ export function Navbar() {
     setOpen(false);
   }, [pathname]);
 
-  // Until the persisted session is read on the client we render the signed-out
-  // markup (matches SSR) to avoid a hydration mismatch.
   const showMember = hydrated && member;
 
   return (
     <>
-      {/* دخول الهيدر — CSS بدل framer عشان اللوجو (عنصر LCP) يظهر فورًا في HTML.
-          backwards = العنصر موجود بحالته النهائية قبل بدء التأخير، فاللوجو لا يُؤجَّل. */}
       <style>{`
         .nav-enter{animation:navEnter .8s cubic-bezier(.16,1,.3,1) .2s backwards;}
         @keyframes navEnter{from{opacity:0;transform:translateY(-40px)}to{opacity:1;transform:none}}
@@ -94,7 +71,6 @@ export function Navbar() {
               : 'max-w-7xl bg-transparent border border-transparent',
           )}
         >
-          {/* logo — يصغر بنعومة عند تلمّ الناف بار (scrolled) */}
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
             <span
               className="block overflow-hidden transition-[width] duration-700 ease-out"
@@ -104,7 +80,6 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* Center nav */}
           <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => {
               const hasChildren = 'children' in link && !!link.children?.length;
@@ -138,7 +113,6 @@ export function Navbar() {
             })}
           </nav>
 
-          {/* Right side */}
           <div className="flex items-center gap-2 md:gap-3">
             <LocaleSwitcher />
 
@@ -158,7 +132,6 @@ export function Navbar() {
               </Button>
             </Link>
 
-            {/* Mobile toggle */}
             <button
               onClick={() => setOpen(true)}
               className="lg:hidden h-10 w-10 rounded-full glass flex items-center justify-center"
@@ -209,26 +182,14 @@ export function Navbar() {
                     initial={{ y: 30, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.1 + i * 0.06, duration: 0.6, ease: EASE }}
-                    className="flex flex-col items-center gap-3"
+                    className="flex flex-col items-center"
                   >
                     {hasChildren ? (
-                      <>
-                        <span className="font-display text-3xl tracking-tight text-ivory">
-                          {t(link.key)}
-                        </span>
-                        <div className="flex items-center gap-6">
-                          {link.children!.map((c) => (
-                            <Link
-                              key={c.key}
-                              href={c.href}
-                              onClick={() => setOpen(false)}
-                              className="text-sm uppercase tracking-[0.14em] text-platinum/70 hover:text-ivory transition-colors"
-                            >
-                              {t(c.key)}
-                            </Link>
-                          ))}
-                        </div>
-                      </>
+                      <MobileNavAccordion
+                        link={link}
+                        t={t}
+                        onClose={() => setOpen(false)}
+                      />
                     ) : (
                       <Link
                         href={link.href}
@@ -267,7 +228,7 @@ export function Navbar() {
   );
 }
 
-/* ── Desktop dropdown for nav items with children (e.g. Offers + Warranty) ── */
+/* ── Desktop dropdown ── */
 type NavChild = { key: string; href: string };
 type NavItem = { key: string; href: string; children?: readonly NavChild[] };
 
@@ -348,6 +309,52 @@ function NavDropdown({ link, pathname, t }: { link: NavItem; pathname: string; t
   );
 }
 
+/* ── Mobile accordion for nav items with children ── */
+function MobileNavAccordion({ link, t, onClose }: { link: NavItem; t: (k: string) => string; onClose: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="flex flex-col items-center">
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center gap-2 font-display text-3xl tracking-tight text-ivory hover:text-platinum transition-colors"
+      >
+        {t(link.key)}
+        <ChevronDown
+          className={cn(
+            'h-5 w-5 text-platinum/70 transition-transform duration-300',
+            expanded && 'rotate-180'
+          )}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="overflow-hidden mt-3 flex flex-col items-center gap-3"
+          >
+            {link.children!.map((c) => (
+              <Link
+                key={c.key}
+                href={c.href}
+                onClick={() => {
+                  onClose();
+                  setExpanded(false);
+                }}
+                className="text-xl uppercase tracking-[0.1em] text-platinum/70 hover:text-ivory transition-colors"
+              >
+                {t(c.key)}
+              </Link>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* ── Monogram ── */
 function Monogram({ name, size = 32 }: { name: string; size?: number }) {
   return (
@@ -386,7 +393,6 @@ function AccountMenu({ member }: { member: Member }) {
       <button
         data-cursor="hover"
         onClick={() => setOpen((o) => !o)}
-        // اسم وحالة للزر: بدونها يقرأه الـscreen reader "button" فقط (فشل a11y)
         aria-label={`Account menu — ${firstName(member.name)}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -411,7 +417,6 @@ function AccountMenu({ member }: { member: Member }) {
           >
             <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-platinum/30 to-transparent" />
 
-            {/* header */}
             <div className="flex items-center gap-3.5 p-5">
               <Monogram name={member.name} size={44} />
               <div className="min-w-0">
