@@ -256,7 +256,7 @@ export function WarrantyPolicyView() {
               animate={{ opacity: [0, 0.7, 0], y: [10, -46, -92] }}
               transition={{ duration: p.duration, repeat: Infinity, ease: 'easeOut', delay: p.delay }} />
           ))}
-          <div className="glow-orb h-[32rem] w-[32rem] -left-40 -top-24" style={{ background: 'rgba(194,160,78,0.08)' }} />
+          <div className="glow-orb h-[32rem] w-[32rem] -left-40 -top-24" style={{ background: 'rgba(203,205,205,0.08)' }} />
         </div>
 
         <div className="container">
@@ -285,7 +285,7 @@ export function WarrantyPolicyView() {
             {/* شارة التغطية القصوى — العنصر المميّز في الهيدر */}
             <div className="relative flex-none self-stretch">
               <div className="relative flex h-full flex-col items-center justify-center gap-2 rounded-[28px] border px-10 py-9 text-center backdrop-blur-sm"
-                style={{ borderColor: `${ACCENT}55`, background: 'linear-gradient(180deg, rgba(194,160,78,0.08), rgba(194,160,78,0.02))' }}>
+                style={{ borderColor: `${ACCENT}55`, background: 'linear-gradient(180deg, rgba(203,205,205,0.08), rgba(203,205,205,0.02))' }}>
                 <span aria-hidden className="absolute inset-x-8 top-0 h-px" style={{ background: `linear-gradient(to right, transparent, ${ACCENT}aa, transparent)` }} />
                 <ShieldCheck className="h-7 w-7" style={{ color: ACCENT }} strokeWidth={1.5} />
                 <div dir="ltr" className="font-display text-[3.6rem] leading-none text-ivory">{T(PAGE.heroBadgeNum)}</div>
@@ -325,7 +325,7 @@ export function WarrantyPolicyView() {
         <section id="coverage" className="scroll-mt-40">
           <SectionHead eyebrow={isAr ? '01' : '01'} title={T(TOC[0])} />
           <div className="mt-8 overflow-hidden rounded-[28px] border" style={{ borderColor: `${ACCENT}30` }}>
-            <div className="relative overflow-hidden px-6 py-5 md:px-9" style={{ background: 'linear-gradient(180deg, rgba(194,160,78,0.1), rgba(194,160,78,0.02))' }}>
+            <div className="relative overflow-hidden px-6 py-5 md:px-9" style={{ background: 'linear-gradient(180deg, rgba(203,205,205,0.1), rgba(203,205,205,0.02))' }}>
               <span aria-hidden className="absolute inset-x-0 top-0 h-px" style={{ background: `linear-gradient(to right, transparent, ${ACCENT}88, transparent)` }} />
               <div className="flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5" style={{ color: ACCENT }} strokeWidth={1.6} />

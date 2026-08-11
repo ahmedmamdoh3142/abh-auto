@@ -9,6 +9,10 @@
  * it. Account-menu copy reads from the `login.account` i18n block, so it lives
  * in the same block you paste wholesale — no separate `nav` edits required.
  *
+ * Nav items may carry a `children` array (see lib/site-config.ts) — e.g.
+ * "offers" bundles "Offers" + "Warranty" into one dropdown so the two links
+ * aren't just sitting side by side as separate top-level items.
+ *
  * إصلاح الأداء:
  *  • عنصر الـLCP على كل الصفحات كان لوجو الناف بار (logo3.webp). كان محبوسًا
  *    داخل motion.header بـinitial:{opacity:0} فما كان يظهر/يتحمّل غير بعد hydration
@@ -103,6 +107,10 @@ export function Navbar() {
           {/* Center nav */}
           <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => {
+              const hasChildren = 'children' in link && !!link.children?.length;
+              if (hasChildren) {
+                return <NavDropdown key={link.key} link={link} pathname={pathname} t={t} />;
+              }
               const active = pathname === link.href;
               return (
                 <Link
@@ -193,22 +201,46 @@ export function Navbar() {
             </motion.div>
 
             <div className="relative h-full flex flex-col items-center justify-center gap-8 px-8">
-              {navLinks.map((link, i) => (
-                <motion.div
-                  key={link.key}
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.1 + i * 0.06, duration: 0.6, ease: EASE }}
-                >
-                  <Link
-                    href={link.href}
-                    onClick={() => setOpen(false)}
-                    className="font-display text-3xl tracking-tight text-ivory hover:text-platinum transition-colors"
+              {navLinks.map((link, i) => {
+                const hasChildren = 'children' in link && !!link.children?.length;
+                return (
+                  <motion.div
+                    key={link.key}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.1 + i * 0.06, duration: 0.6, ease: EASE }}
+                    className="flex flex-col items-center gap-3"
                   >
-                    {t(link.key)}
-                  </Link>
-                </motion.div>
-              ))}
+                    {hasChildren ? (
+                      <>
+                        <span className="font-display text-3xl tracking-tight text-ivory">
+                          {t(link.key)}
+                        </span>
+                        <div className="flex items-center gap-6">
+                          {link.children!.map((c) => (
+                            <Link
+                              key={c.key}
+                              href={c.href}
+                              onClick={() => setOpen(false)}
+                              className="text-sm uppercase tracking-[0.14em] text-platinum/70 hover:text-ivory transition-colors"
+                            >
+                              {t(c.key)}
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        onClick={() => setOpen(false)}
+                        className="font-display text-3xl tracking-tight text-ivory hover:text-platinum transition-colors"
+                      >
+                        {t(link.key)}
+                      </Link>
+                    )}
+                  </motion.div>
+                );
+              })}
 
               <motion.div
                 initial={{ y: 30, opacity: 0 }}
@@ -232,6 +264,87 @@ export function Navbar() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+/* ── Desktop dropdown for nav items with children (e.g. Offers + Warranty) ── */
+type NavChild = { key: string; href: string };
+type NavItem = { key: string; href: string; children?: readonly NavChild[] };
+
+function NavDropdown({ link, pathname, t }: { link: NavItem; pathname: string; t: (k: string) => string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = !!link.children?.some((c) => pathname === c.href);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        data-cursor="hover"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="relative flex items-center gap-1 px-4 py-2 group"
+      >
+        <span
+          className={cn(
+            'text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
+            active || open ? 'text-ivory' : 'text-platinum/70 group-hover:text-ivory',
+          )}
+        >
+          {t(link.key)}
+        </span>
+        <ChevronDown
+          className={cn('h-3 w-3 text-platinum/60 transition-transform duration-300', open && 'rotate-180')}
+          strokeWidth={1.8}
+        />
+        <span
+          className={cn(
+            'absolute left-1/2 -translate-x-1/2 bottom-1 h-px w-1 rounded-full bg-platinum transition-all duration-500',
+            active ? 'w-6 opacity-100' : 'opacity-0 group-hover:opacity-100 group-hover:w-6',
+          )}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.2, ease: EASE }}
+            className="absolute start-0 mt-3 w-52 overflow-hidden rounded-2xl border border-white/12 bg-[#0c0d0e]/95 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+          >
+            <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-platinum/30 to-transparent" />
+            <div className="p-2">
+              {link.children!.map((c) => {
+                const cActive = pathname === c.href;
+                return (
+                  <Link
+                    key={c.key}
+                    href={c.href}
+                    data-cursor="hover"
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      'flex items-center rounded-xl px-3.5 py-2.5 text-[0.78rem] uppercase tracking-[0.14em] transition-colors duration-200',
+                      cActive ? 'bg-white/[0.06] text-ivory' : 'text-platinum/75 hover:bg-white/[0.05] hover:text-ivory',
+                    )}
+                  >
+                    {t(c.key)}
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
