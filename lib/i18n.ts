@@ -13,31 +13,56 @@ import { query } from './db';
 export { locales, defaultLocale, localeDirection, localeLabels } from './locales';
 export type { Locale } from './locales';
 
-async function loadMessages(locale: Locale): Promise<Record<string, any>> {
-  // 1. جهّز base من ملف JSON (كل المفاتيح مضمونة)
-  let base: Record<string, any>;
-  try {
-    base = (await import(`../messages/${locale}.json`)).default;
-  } catch {
-    base = {};
+/**
+ * دمج عميق (recursive): بيحافظ على أي مفتاح موجود في base وناقص في override،
+ * وبيدّي الأولوية لقيم override لما نفس المفتاح موجود في الاتنين.
+ * الـ arrays بتتستبدل كاملة (مش بتتدمج عنصر بعنصر) عشان ده السلوك المتوقع لمصفوفات زي items/detail/all.
+ */
+function deepMerge<T extends Record<string, any>>(base: T, override: Record<string, any>): T {
+  const result: Record<string, any> = { ...base };
+
+  for (const key of Object.keys(override)) {
+    const baseVal = base?.[key];
+    const overrideVal = override[key];
+
+    const isPlainObject = (v: unknown) =>
+      typeof v === 'object' && v !== null && !Array.isArray(v);
+
+    if (isPlainObject(baseVal) && isPlainObject(overrideVal)) {
+      result[key] = deepMerge(baseVal, overrideVal);
+    } else {
+      result[key] = overrideVal;
+    }
   }
 
-  // 2. اجلب مفاتيح قاعدة البيانات وغطِّ بها فوق base (DB له الأولوية)
-  try {
-    const rows = await query<{ key: string; content: any }>(
+  return result as T;
+}
+
+async function loadMessages(locale: Locale): Promise<Record<string, any>> {
+  // نجيب الـ JSON والداتابيز في نفس الوقت بدل واحد ورا التاني
+  const [base, rows] = await Promise.all([
+    import(`../messages/${locale}.json`)
+      .then((m) => m.default as Record<string, any>)
+      .catch((err) => {
+        console.error(`Failed to load messages/${locale}.json:`, err);
+        return {} as Record<string, any>;
+      }),
+    query<{ key: string; content: any }>(
       `SELECT key, value->$1 AS content FROM content_blocks`,
       [locale]
-    );
-    for (const row of rows) {
-      if (row.content != null) {
-        base[row.key] = row.content; // يعدّل أو يضيف
-      }
-    }
-  } catch (err) {
-    console.error('DB merge failed, using JSON baseline:', err);
+    ).catch((err) => {
+      console.error(`content_blocks query failed (locale=${locale}):`, err);
+      return [] as { key: string; content: any }[];
+    }),
+  ]);
+
+  // نجمّع كل صفوف الداتابيز في object واحد، وبعدين دمج عميق مرة واحدة فوق base
+  const dbOverrides: Record<string, any> = {};
+  for (const row of rows) {
+    if (row.content != null) dbOverrides[row.key] = row.content;
   }
 
-  return base;
+  return deepMerge(base, dbOverrides);
 }
 
 export default getRequestConfig(async () => {
