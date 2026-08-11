@@ -220,7 +220,7 @@ export type PaymentMethod = 'card' | 'tabby' | 'tamara' | 'applePay' | 'cash';
 // وغير قابلة للاختيار لحد ما نفعّل بوابات الدفع. المتاح حاليًا: البطاقة (card) عبر
 // AlinmaPay، والدفع بالفرع (cash).
 export const PAYMENT_METHODS: PaymentMethod[] = ['card', 'tabby', 'tamara', 'applePay', 'cash'];
-export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby', 'applePay']);
+export const PAYMENT_DISABLED = new Set<PaymentMethod>(['tabby']);
 
 /** Time slots grouped by part of day; BOOKED simulates taken slots. */
 export const TIME_GROUPS: [string, string[]][] = [

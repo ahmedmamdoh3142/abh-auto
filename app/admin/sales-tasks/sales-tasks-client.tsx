@@ -7,7 +7,7 @@
  * كل تعديل (حالة/توجيه/بيانات/ملاحظة/إغلاق) بيتسجّل تلقائيًا في سجل النشاط بمين وإمتى بالظبط.
  * "راكد" (Stale): أي تاسك مفتوح ماتلمسش من 48 ساعة بيتعلّم بحد أصفر.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
 import { printSalesTasksReport } from "@/lib/admin/sales-tasks-print";
@@ -93,7 +93,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   currentUserId: string; currentUserName: string; currentUserRole: string;
 }) {
   const isAr = locale !== "en";
-  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const T = useCallback((ar: string, en: string) => (isAr ? ar : en), [isAr]);
   const toast = useToast();
   const isFullAccess = currentUserRole === "admin";
 
@@ -132,22 +132,39 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     return params;
   };
 
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const statsAbortRef = useRef<AbortController | null>(null);
+
   const load = async () => {
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setLoading(true);
     try {
-      const j = await fetch(`/api/admin/sales-tasks?${buildParams(true)}`).then((r) => r.json());
+      const j = await fetch(`/api/admin/sales-tasks?${buildParams(true)}`, { signal: controller.signal }).then((r) => r.json());
       if (j?.ok) setTasks(j.tasks);
-    } finally { setLoading(false); }
+    } catch (e: any) {
+      if (e?.name !== "AbortError") console.error(e);
+    } finally {
+      if (loadAbortRef.current === controller) setLoading(false);
+    }
   };
   const loadStats = async () => {
+    statsAbortRef.current?.abort();
+    const controller = new AbortController();
+    statsAbortRef.current = controller;
     setStatsLoading(true);
     try {
-      const j = await fetch(`/api/admin/sales-tasks?${buildParams(false)}`).then((r) => r.json());
+      const j = await fetch(`/api/admin/sales-tasks?${buildParams(false)}`, { signal: controller.signal }).then((r) => r.json());
       if (j?.ok) {
         const all: Task[] = j.tasks;
         setStats({ total: all.length, won: all.filter((t) => t.stage === "won").length, lost: all.filter((t) => t.stage === "lost").length });
       }
-    } finally { setStatsLoading(false); }
+    } catch (e: any) {
+      if (e?.name !== "AbortError") console.error(e);
+    } finally {
+      if (statsAbortRef.current === controller) setStatsLoading(false);
+    }
   };
 
   // (جديد) تصدير تقرير PDF بأسماء وأرقام وإيميلات العملاء المهتمين — لإعادة الاستهداف الإعلاني
@@ -222,11 +239,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
       <div style={{ ...card, padding: 18, marginBottom: 20 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, marginBottom: stats ? 16 : 0 }}>
           <span style={{ fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الفترة", "Period")}</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} dir="ltr"
-            style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "9px 12px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} dir="ltr" style={dateInputStyle} />
           <span style={{ color: "var(--abh-steel)", fontSize: 12 }}>{T("إلى", "to")}</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} dir="ltr"
-            style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "9px 12px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} dir="ltr" style={dateInputStyle} />
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "var(--abh-steel)", padding: "7px 14px", fontSize: 11.5, cursor: "pointer" }}>{T("مسح", "Clear")}</button>
           )}
@@ -323,7 +338,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
                   <span className="abh-num" style={{ fontSize: 11.5, color: meta.color, fontWeight: 600 }}>{items.length}</span>
                 </div>
                 <div className="abh-col" style={{ gap: 10 }}>
-                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} onOpen={() => setOpenTaskId(t.id)} />)}
+                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} />)}
                   {items.length === 0 && <div style={{ fontSize: 11.5, color: "var(--abh-steel)", textAlign: "center", padding: "24px 0" }}>{T("لا تاسكات", "No tasks")}</div>}
                 </div>
               </div>
@@ -332,7 +347,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         </div>
       ) : (
         <div style={{ borderRadius: 20, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
-          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} currentUserId={currentUserId} onOpen={() => setOpenTaskId(t.id)} />)}
+          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} />)}
           {tasks.length === 0 && <div style={{ padding: 48, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد تاسكات مطابقة.", "No matching tasks.")}</div>}
         </div>
       )}
@@ -354,6 +369,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
 }
 
 const quickBtnStyle: React.CSSProperties = { borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", color: "var(--abh-platinum)", padding: "7px 13px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" };
+const dateInputStyle: React.CSSProperties = { borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "9px 12px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" };
 function setThisMonth(setFrom: (v: string) => void, setTo: (v: string) => void) {
   const now = new Date(); const first = new Date(now.getFullYear(), now.getMonth(), 1);
   setFrom(first.toISOString().slice(0, 10)); setTo(now.toISOString().slice(0, 10));
@@ -378,7 +394,7 @@ function isStale(t: Task): boolean {
 }
 
 /* ═══════ أفاتار بالاسم ═══════ */
-function Avatar({ name, size = 34 }: { name: string; size?: number }) {
+const Avatar = React.memo(function Avatar({ name, size = 34 }: { name: string; size?: number }) {
   const color = avatarColor(name || "?");
   const initials = (name || "?").trim().slice(0, 1).toUpperCase();
   return (
@@ -386,15 +402,15 @@ function Avatar({ name, size = 34 }: { name: string; size?: number }) {
       <span className="abh-display" style={{ fontSize: size * 0.42, color }}>{initials}</span>
     </span>
   );
-}
+});
 
 /* ═══════ كارت التاسك المفتوح ═══════ */
-function TaskCard({ t, isAr, T, currentUserId, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; onOpen: () => void }) {
+const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void }) {
   const q = t.quality ? QUALITY_META[t.quality] : null;
   const stale = isStale(t);
   const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
   return (
-    <button onClick={onOpen} className="abh-lift"
+    <button onClick={() => onOpen(id)} className="abh-lift"
       style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 10, borderRadius: 16, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.09)"}`, background: stale ? "linear-gradient(160deg,rgba(232,207,154,.05),rgba(255,255,255,.02))" : "rgba(255,255,255,.025)", padding: 14, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
       {stale && <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 3, background: "linear-gradient(180deg,#e8cf9a,#d9b25f)" }} />}
 
@@ -452,15 +468,15 @@ function TaskCard({ t, isAr, T, currentUserId, onOpen }: { t: Task; isAr: boolea
       </div>
     </button>
   );
-}
+});
 
 /* ═══════ كارت احترافي للتاسكات المُقفلة (محجوز/مرفوض) — Grid ═══════ */
-function ClosedTaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; onOpen: () => void }) {
+const ClosedTaskCard = React.memo(function ClosedTaskCard({ t, isAr, T, id, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; id: string; onOpen: (id: string) => void }) {
   const won = t.closeResult === "won";
   const reason = t.closeReason ? LOST_REASONS.find((r) => r.code === t.closeReason) : null;
   const tone = won ? "#9fd4b0" : "#e7b4b4";
   return (
-    <button onClick={onOpen} className="abh-lift"
+    <button onClick={() => onOpen(id)} className="abh-lift"
       style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 12, borderRadius: 18,
         border: `1px solid ${tone}45`, background: `linear-gradient(160deg,${tone}0f,rgba(255,255,255,.015))`,
         padding: 18, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
@@ -503,25 +519,25 @@ function ClosedTaskCard({ t, isAr, T, onOpen }: { t: Task; isAr: boolean; T: (a:
       </div>
     </button>
   );
-}
+});
 function ClosedGrid({ tasks, isAr, T, onOpen }: { tasks: Task[]; isAr: boolean; T: (a: string, e: string) => string; onOpen: (id: string) => void }) {
   if (tasks.length === 0) {
     return <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد تاسكات في هذه القائمة.", "No tasks in this list.")}</div>;
   }
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
-      {tasks.map((t) => <ClosedTaskCard key={t.id} t={t} isAr={isAr} T={T} onOpen={() => onOpen(t.id)} />)}
+      {tasks.map((t) => <ClosedTaskCard key={t.id} t={t} isAr={isAr} T={T} id={t.id} onOpen={onOpen} />)}
     </div>
   );
 }
 
 /* ═══════ صف عرض القائمة ═══════ */
-function ListRow({ t, i, isAr, T, currentUserId, onOpen }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; onOpen: () => void }) {
+const ListRow = React.memo(function ListRow({ t, i, isAr, T, currentUserId, id, onOpen }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void }) {
   const meta = STAGE_META[t.stage];
   const stale = isStale(t);
   const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
   return (
-    <button onClick={onOpen} style={{ width: "100%", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent", cursor: "pointer" }}>
+    <button onClick={() => onOpen(id)} style={{ width: "100%", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent", cursor: "pointer" }}>
       <span style={{ height: 8, width: 8, borderRadius: 999, background: meta.color, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 13.5, color: "var(--abh-ivory)" }}>{t.customerName}</span>
@@ -533,7 +549,7 @@ function ListRow({ t, i, isAr, T, currentUserId, onOpen }: { t: Task; i: number;
       <span style={{ fontSize: 11, color: "var(--abh-steel)", flexShrink: 0, minWidth: 90, textAlign: isAr ? "left" : "right" }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</span>
     </button>
   );
-}
+});
 
 /* ═══════ اختيار الماركة/الموديل — يحسب الحجم أوتوماتيك ═══════ */
 function VehiclePicker({ brands, isAr, T, brandId, model, onChange }: {

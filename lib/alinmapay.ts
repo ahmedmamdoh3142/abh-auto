@@ -4,10 +4,24 @@ import crypto from "crypto";
 const TERMINAL_ID = process.env.ALINMA_TERMINAL_ID!;
 const PASSWORD = process.env.ALINMA_PASSWORD!;
 const MERCHANT_KEY = process.env.ALINMA_MERCHANT_KEY!; // hex string من البنك
-const BASE_URL =
+
+// المسار الأساسي (context path) بتاع البيئة — نبني منه رابط pay-request
+// (Hosted Page) ورابط apiUrl بتاع JS Checkout (نفس الأساس، تفرعين مختلفين).
+const CONTEXT_BASE =
   process.env.ALINMA_ENV === "production"
-    ? "https://pg.alinmapay.com.sa/Transactions/v2/payments/pay-request"
-    : "https://pg.alinmapay.com.sa/SB_Transactions/v2/payments/pay-request";
+    ? "https://pg.alinmapay.com.sa/Transactions"
+    : "https://pg.alinmapay.com.sa/SB_Transactions";
+
+const BASE_URL = `${CONTEXT_BASE}/v2/payments/pay-request`;
+
+// رابط سكريبت JS Checkout SDK. التوثيق أعطى اسم السانتباكس بس (sbalinmapay.js)
+// — اسم ملف الإنتاج لسه محتاج تأكيد من AlinmaPay. لحد التأكيد ممكن تحط الاسم
+// الصحيح في ALINMA_JS_SDK_URL بالـ .env (اختياري، له fallback تحت).
+const JS_SDK_URL =
+  process.env.ALINMA_JS_SDK_URL ||
+  (process.env.ALINMA_ENV === "production"
+    ? "https://pg.alinmapay.com.sa/alinmapay.js"
+    : "https://pg.alinmapay.com.sa/sbalinmapay.js");
 
 /** حالات الدفع المستخدمة في عمود bookings.payment_status */
 export const ALINMA_STATUS = {
@@ -135,4 +149,42 @@ export async function createPayRequest(input: PayRequestInput) {
   const linkUrl = rawLink ? `${rawLink}${transactionId}` : rawLink;
 
   return { transactionId, linkUrl };
+}
+
+/**
+ * يبني إعدادات JS Checkout (الكارت المدمج جوّه صفحتنا) لحجز معيّن.
+ * بيتولّد من السيرفر لحظة الطلب — التوقيع مرتبط بالمبلغ ورقم الحجز، مش تابت.
+ *
+ * ⚠️ ملحوظة أمان: SDK بتاع AlinmaPay بيحتاج terminalId/password ظاهرين في
+ * كود الصفحة (window.PG_CONFIG) عشان يشتغل من المتصفح مباشرة — ده تصميم
+ * AlinmaPay نفسه للـ JS Checkout، مش اختيار منّا. قلّلنا الأثر بتوليد
+ * الإعداد لحظيًا لكل عملية بدل ما يتكتب تابت في الكود.
+ */
+export function buildJsCheckoutConfig(input: {
+  orderId: string;
+  amount: string;
+  currency: string;
+  customerEmail?: string;
+  callbackUrl: string;
+}) {
+  const signature = buildRequestSignature({
+    trackId: input.orderId,
+    amount: input.amount,
+    currency: input.currency,
+  });
+
+  return {
+    terminalId: TERMINAL_ID,
+    password: PASSWORD,
+    signature,
+    apiUrl: CONTEXT_BASE,
+    callbackUrl: input.callbackUrl,
+    defaultAmount: input.amount,
+    defaultCurrency: input.currency,
+    customerEmail: input.customerEmail || "",
+    orderId: input.orderId,
+    defaultPaymentType: "1",
+    paymentMethods: "CARD",
+    sdkUrl: JS_SDK_URL,
+  };
 }

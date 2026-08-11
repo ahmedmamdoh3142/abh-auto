@@ -32,6 +32,7 @@ export const navLinks = [
   { key: 'about', href: '/about' },
   { key: 'offers', href: '/offers' },
   { key: 'contact', href: '/contact' },
+  { key: 'warranty', href: '/warranty-policy' },
   { key: 'booking', href: '/booking' },
 ] as const;
 
