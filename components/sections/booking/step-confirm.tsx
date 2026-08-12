@@ -46,9 +46,10 @@ export function StepConfirm({
   total: { services: number; tow: number; beforePromo: number; promoCut: number; bankCut: number; grand: number; onReq: boolean; saved: number; originalTotal: number };
   set: (patch: Partial<BookingState>) => void;
   services: DbServiceMeta[];
-  onBack: () => void; onConfirm: () => void;
+  onBack: () => void; onConfirm: () => Promise<boolean>;
 }) {
   const [processing, setProcessing] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const szL = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
   const sizeChip = `${isAr ? szL.ar : szL.en} · ${szL.tier}`;
@@ -60,7 +61,16 @@ export function StepConfirm({
   const confirm = () => {
     if (!data.payment) return;
     setProcessing(true);
-    setTimeout(onConfirm, 1100);
+    setPayError(null);
+    setTimeout(async () => {
+      const ok = await onConfirm();
+      if (!ok) {
+        setProcessing(false);
+        setPayError(isAr
+          ? 'حصل خطأ أثناء تأكيد الحجز، برجاء المحاولة مرة أخرى أو التواصل معنا.'
+          : 'Something went wrong confirming your booking. Please try again or contact us.');
+      }
+    }, 1100);
   };
 
   // هل نعرض سطر «الإجمالي قبل الخصم»؟ فقط لو فيه وفر فعلي.
@@ -323,6 +333,7 @@ export function StepConfirm({
             </div>
 
             {!data.payment && <p className="mt-3 text-[0.7rem] text-steel">{t('step4.selectPayment')}</p>}
+            {payError && <p className="mt-3 text-[0.7rem] text-[#e7b4b4]">{payError}</p>}
 
             <div className="mt-7 flex flex-col gap-3">
               <button onClick={confirm} disabled={!data.payment || processing} data-cursor="hover"

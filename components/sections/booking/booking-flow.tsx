@@ -391,7 +391,7 @@ export function BookingFlow({
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const confirmBooking = useCallback(async () => {
+  const confirmBooking = useCallback(async (): Promise<boolean> => {
     const brand = effectiveBrands.find((b) => b.id === data.brandId);
     const vehicleLabel = `${brand?.name ?? ''} ${data.model}`.trim();
 
@@ -434,18 +434,19 @@ export function BookingFlow({
     } catch (e) {
       console.error('booking save failed:', e);
       trackBookingError('network_error');
-      return;
+      return false;
     }
 
     if (!json?.ok || !json.reference) {
+      console.error('booking save rejected:', json);
       trackBookingError(json?.error ?? 'no_reference');
-      return;
+      return false;
     }
 
     // ── مسار الدفع بالبطاقة (AlinmaPay JS Checkout) — مدمج جوّه نفس الصفحة ──
     if (data.payment === 'card') {
       setCardCheckout({ bookingId: json.bookingId, reference: json.reference, amount: total.grand });
-      return; // الفورم المدمج هيظهر بدل خطوة التأكيد؛ onSuccess بتاعه هو اللي يقفل الحجز
+      return true; // الفورم المدمج هيظهر بدل خطوة التأكيد؛ onSuccess بتاعه هو اللي يقفل الحجز
     }
 
     // ── مسار Apple Pay (AlinmaPay Hosted Page) — بيحوّل العميل لصفحتهم المستضافة،
@@ -465,14 +466,15 @@ export function BookingFlow({
         const initJson = await initRes.json();
         if (initJson?.ok && initJson.redirectUrl) {
           window.location.href = initJson.redirectUrl;
-          return; // العميل غادر الصفحة
+          return true; // العميل غادر الصفحة
         }
+        console.error('alinma initiate rejected:', initJson);
         trackBookingError(initJson?.error ?? 'gateway_init_failed');
       } catch (e) {
         console.error('alinma initiate failed:', e);
         trackBookingError('gateway_init_failed');
       }
-      return;
+      return false;
     }
 
     // ── باقي طرق الدفع (cash) — نفس السلوك الحالي ──
@@ -501,8 +503,9 @@ export function BookingFlow({
 
     setDone(true);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return true;
   }, [member, addBooking, data, total.grand, total.tow, effectiveBrands, isAr, trackedServices]);
-
+  
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });
     setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null); setCardCheckout(null);

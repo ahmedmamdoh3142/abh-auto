@@ -364,8 +364,8 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {([
               ["all", T("كل الخطوط", "All tiers")],
-              ["signature", T("التوقيعية", "Signature")],
-              ["essential", T("المنتقاة", "Curated")],
+              ["signature", T("بريميوم", "Premium")],
+              ["essential", T("كلاسيك", "Classic")],
             ] as const).map(([val, label]) => {
               const on = tierFilter === val;
               return (
@@ -385,7 +385,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
               return (
                 <div key={s.id} style={{ opacity: s.active ? 1 : 0.55, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
                   <ImageCard image={s.image} seed={s.slug || txt(s.name)} height={isEditorMode ? 330 : 278}
-                    badge={s.featured ? T("مميّزة", "Featured") : (s.tier === "essential" ? T("المنتقاة", "Curated") : undefined)}
+                    badge={s.featured ? T("مميّزة", "Featured") : (s.tier === "essential" ? T("كلاسيك", "Classic") : undefined)}
                     topRight={<Chip tone="platinum">{catName(s.categoryId)}</Chip>}
                     actions={!isEditorMode ? <>
                       <IconBtn icon={Ic.pencil} label={T("تعديل", "Edit")} solid onClick={() => setEditing(s)} />
@@ -536,8 +536,8 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             {([
-              ["signature", T("التوقيعية", "Signature"), T("الخط الأساسي — 3 أسعار (صغير/متوسط/كبير)", "Flagship line — 3 prices (S/M/L)")],
-              ["essential", T("المنتقاة", "Curated"), T("خامة مُنتقاة بعناية — سعرين فقط (صغير+متوسط، وكبير)", "Carefully curated line — 2 prices (S+M, and L)")],
+              ["signature", T("بريميوم", "Premium"), T("الخط الأساسي — 3 أسعار (صغير/متوسط/كبير)", "Flagship line — 3 prices (S/M/L)")],
+["essential", T("كلاسيك", "Classic"), T("خط اقتصادي — سعرين فقط (صغير+متوسط، وكبير)", "Economy line — 2 prices (S+M, and L)")],
             ] as const).map(([val, label, hint]) => {
               const on = f.tier === val;
               return (

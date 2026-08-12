@@ -9,7 +9,7 @@ export interface TierMeta {
 export const TIERS: TierMeta[] = [
   {
     code: 'signature',
-    label: { en: 'Signature', ar: 'التوقيعية' },
+    label: { en: 'Premium', ar: 'بريميوم' },
     tagline: {
       en: 'Our flagship materials, with the longest warranty terms',
       ar: 'خاماتنا الرائدة، بأطول مدد الضمان',
@@ -17,7 +17,7 @@ export const TIERS: TierMeta[] = [
   },
   {
     code: 'essential', // الكود الداخلي ثابت — بيتخزن في tier_code بالداتابيز، متلمسوش
-    label: { en: 'Curated', ar: 'المنتقاة' },
+    label: { en: 'Classic', ar: 'كلاسيك' },
     tagline: {
       en: 'Same craftsmanship, carefully curated materials, a different warranty term',
       ar: 'نفس الحرفية، خامات مُنتقاة بعناية، بمدة ضمان مختلفة',
