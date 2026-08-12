@@ -57,3 +57,10 @@ const nextConfig = {
 };
 
 export default withNextIntl(nextConfig);
+
+// next.config.js
+module.exports = {
+  images: {
+    remotePatterns: [{ protocol: 'https', hostname: 'images.unsplash.com' }],
+  },
+};

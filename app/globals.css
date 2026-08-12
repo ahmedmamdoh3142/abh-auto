@@ -433,12 +433,6 @@
     filter: blur(120px);
   }
 
-  .cursor-luxury { cursor: none; }
-
-  @media (hover: none) {
-    .cursor-luxury-ring,
-    .cursor-luxury-dot { display: none !important; }
-  }
 }
 
 /* =========================================================

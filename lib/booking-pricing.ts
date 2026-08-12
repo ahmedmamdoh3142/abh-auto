@@ -1,5 +1,6 @@
 // دوال أسعار الحجز + النوع — آمنة للاستيراد في الـ client (لا تلمس قاعدة البيانات)
 import type { ServiceMeta, VehicleSize } from "@/lib/booking-data";
+import type { TierCode } from "@/lib/shared/tier";
 
 export interface DbServiceMeta extends ServiceMeta {
   id: number;            // معرّف الخدمة في القاعدة — مطلوب لربط أكواد الخصم بالخدمات
@@ -8,6 +9,8 @@ export interface DbServiceMeta extends ServiceMeta {
   prices: Record<VehicleSize, number>;
   oldPrices: Record<VehicleSize, number | null>;
   discountPercent: number; // لم يعد مستخدمًا في الحساب — الخصم يُحسب لكل حجم
+  /** (جديد) خط الخامة — Signature أو Essential */
+  tier: TierCode;
 }
 
 // السعر الحالي (بعد الخصم) للحجم

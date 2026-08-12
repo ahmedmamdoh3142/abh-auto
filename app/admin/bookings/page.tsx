@@ -16,7 +16,7 @@ import { requirePermission } from "@/lib/admin/guard";
 export const dynamic = "force-dynamic";
 
 export default async function BookingsPage() {
-  await requirePermission("bookings");
+  const admin = await requirePermission("bookings");
   const locale = (await getLocale()) as Locale;
 
   const rows = await query<any>(
@@ -29,6 +29,7 @@ export default async function BookingsPage() {
             b.delivered_at,
             b.manual_discount_kind, b.manual_discount_value, b.manual_discount_amount, b.manual_discount_reason,
             md.name AS manual_discount_by_name,
+            b.bank_discount_amount, b.bank_code, b.bank_bin_matched,
             b.followup_status, b.followup_outcome, b.followup_closed_at,
             b.created_at,
             -- بيانات العميل المُدخَلة في الحجز لها الأولوية (تدعم «احجز لصاحبك»)،
@@ -38,6 +39,10 @@ export default async function BookingsPage() {
             COALESCE(b.customer_email, u.email::text) AS customer_email,
             COALESCE(b.customer_city,  u.city_code)   AS customer_city,
             (b.user_id IS NULL) AS is_guest,
+            -- (جديد) جهة الحجز: دور صاحب الحساب (عميل/موظف/مدير/شريك/فني)،
+            -- واسم الشريك لو الحجز جه عن طريق شريك عمولة (bookings.partner_id).
+            u.role AS account_role,
+            pt.company_name AS via_partner_company,
             -- العناصر + علم «هدية» (لو الخدمة موجودة في booking_bundle_gifts لنفس الحجز)
             COALESCE((
               SELECT json_agg(json_build_object(
@@ -50,6 +55,7 @@ export default async function BookingsPage() {
                            AND g.gift_service_id = bi.service_id
                        ),
                        'warrantyMonths', bi.warranty_months,
+                       'warrantyKmLimit', bi.warranty_km_limit,
                        'warrantyExpiresAt', bi.warranty_expires_at
                      ) ORDER BY bi.id)
               FROM booking_items bi WHERE bi.booking_id = b.id
@@ -64,10 +70,20 @@ export default async function BookingsPage() {
                        'createdAt', f.created_at
                      ) ORDER BY f.created_at DESC)
               FROM booking_followups f WHERE f.booking_id = b.id
-            ), '[]') AS followups
+            ), '[]') AS followups,
+            -- أرقام الرول المستخدَمة في مهام الحجز (لو أي) — للتقرير النهائي وبطاقة الضمان
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'name', t.name_snapshot,
+                       'rollNo', t.roll_no
+                     ) ORDER BY t.id)
+              FROM booking_tasks t
+              WHERE t.booking_id = b.id AND t.uses_roll = true AND t.roll_no IS NOT NULL
+            ), '[]') AS rolls
      FROM bookings b
      LEFT JOIN users u ON u.id = b.user_id
      LEFT JOIN users md ON md.id = b.manual_discount_by
+     LEFT JOIN partners pt ON pt.id = b.partner_id
      ORDER BY b.created_at DESC
      LIMIT 300`
   );
@@ -101,6 +117,8 @@ export default async function BookingsPage() {
     email: b.customer_email || "",
     city: cityName[b.customer_city] || b.customer_city || "",
     isGuest: !!b.is_guest,
+    accountRole: b.account_role || "",
+    viaPartner: b.via_partner_company || "",
     date: b.scheduled_date ? new Date(b.scheduled_date).toISOString().slice(0, 10) : "",
     time: b.scheduled_time || "",
     subtotal: Number(b.subtotal) || 0,
@@ -121,10 +139,14 @@ export default async function BookingsPage() {
     manualDiscountAmount: Number(b.manual_discount_amount) || 0,
     manualDiscountReason: b.manual_discount_reason || "",
     manualDiscountBy: b.manual_discount_by_name || "",
+    bankDiscountAmount: Number(b.bank_discount_amount) || 0,
+    bankCode: b.bank_code || "",
     // رقم الفاتورة المتسلسل (يُصرَف من الداتابيز عند تأكيد الدفع) — للطباعة.
     invoiceNumber: b.invoice_number != null ? Number(b.invoice_number) : undefined,
     // تاريخ استلام العميل لمركبته — بداية سريان الضمان.
     deliveredAt: b.delivered_at ? new Date(b.delivered_at).toISOString() : "",
+    // تاريخ إنشاء الحجز — لعرضه في هوفر كرت الحجز.
+    createdAt: b.created_at ? new Date(b.created_at).toISOString() : "",
     // نظام متابعة الحجز — حالة المتابعة + القرار النهائي + الخط الزمني.
     followupStatus: b.followup_status || "none",
     followupOutcome: b.followup_outcome || "",
@@ -136,14 +158,19 @@ export default async function BookingsPage() {
       author: f.author || "",
       createdAt: f.createdAt,
     })),
-    services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
+    rolls: (Array.isArray(b.rolls) ? b.rolls : []).map((r: any) => ({
+      name: pick(r.name, locale) || "",
+      rollNo: r.rollNo || "",
+    })).filter((r: any) => r.rollNo),
+   services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,
       isGift: !!it.isGift,
       warrantyMonths: it.warrantyMonths != null ? Number(it.warrantyMonths) : null,
+      warrantyKmLimit: it.warrantyKmLimit != null ? Number(it.warrantyKmLimit) : null,
       warrantyExpiresAt: it.warrantyExpiresAt ? new Date(it.warrantyExpiresAt).toISOString() : null,
-    })).filter((s: any) => s.name),
+    })).filter((s: any) => s.name), 
   }));
 
-  return <BookingsClient initial={bookings} locale={locale} />;
+  return <BookingsClient initial={bookings} locale={locale} isSuperAdmin={admin.isSuperAdmin} />;
 }

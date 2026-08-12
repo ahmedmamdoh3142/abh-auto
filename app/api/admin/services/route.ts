@@ -8,6 +8,7 @@
  * • صورتان: image (عرضية) + card_image (طولية للكروت).
  */
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { cleanLoc, type Loc } from "@/lib/admin/i18n-json";
@@ -19,7 +20,10 @@ type Body = {
   prices?: Record<string, SizePrice>;
   includes?: Loc[];
   warrantyYears?: number; durationDays?: number;
+  warrantyKm?: number;
   image?: string; cardImage?: string; badge?: string;
+  /** (جديد) خط الخامة — signature (افتراضي) أو essential */
+  tier?: "signature" | "essential";
   onRequest?: boolean; featured?: boolean; active?: boolean; sort?: number;
 };
 
@@ -34,6 +38,8 @@ const durationLoc = (d?: number): Loc | null => (d && d > 0 ? { ar: `${d} ${arDa
 // (جديد) نفس رقم الضمان (سنوات) بالشهور — يُستخدم في نظام صيانة الضمان (warranty_months)
 // عشان يفضل متزامن مع warranty_duration النصي تلقائيًا كل مرة تتحفظ فيها الخدمة.
 const warrantyMonthsOf = (y?: number): number | null => (y && y > 0 ? y * 12 : null);
+// (جديد) سقف الكيلومترات — رقم صحيح موجب فقط، وإلا NULL (يعني ضمان بالسنين فقط بدون حد كيلومترات).
+const warrantyKmOf = (km?: number): number | null => (km && km > 0 ? Math.round(km) : null);
 
 function makeSlug(b: Body): string {
   const base = (b.name?.en || b.name?.ar || "service")
@@ -74,22 +80,24 @@ export async function POST(request: Request) {
     const slug = makeSlug(b);
     const pricingModel = b.onRequest ? "on_request" : "fixed";
 
+    const tierCode = b.tier === "essential" ? "essential" : "signature";
     const rows = await query<{ id: number }>(
       `INSERT INTO services
          (category_id, surface, slug, name, tagline, description, duration, warranty_duration,
-          image, card_image, badge, pricing_model, is_on_request, is_featured, is_active, sort, warranty_months)
+          image, card_image, badge, pricing_model, is_on_request, is_featured, is_active, sort, warranty_months, warranty_km_limit, tier_code)
        VALUES ($1,'catalog',$2,$3::jsonb,$3::jsonb,$4::jsonb,$5::jsonb,$6::jsonb,
-               $7,$8,$9,$10::public.pricing_model,$11,$12,$13,$14,$15)
+               $7,$8,$9,$10::public.pricing_model,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id`,
       [
         b.categoryId, slug, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
         b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false, b.sort || 0,
-        warrantyMonthsOf(b.warrantyYears),
+        warrantyMonthsOf(b.warrantyYears), warrantyKmOf(b.warrantyKm), tierCode,
       ]
     );
     const id = rows[0].id;
     await writePrices(id, b.prices, b.onRequest);
     await writeIncludes(id, b.includes);
+    revalidateTag("booking-catalog"); // (جديد) اظهر الخدمة الجديدة فورًا في صفحة الحجز
     return NextResponse.json({ ok: true, id, slug });
   } catch (err) {
     console.error("POST /api/admin/services failed:", err);
@@ -110,17 +118,19 @@ export async function PATCH(request: Request) {
          category_id=$2, name=$3::jsonb, tagline=$3::jsonb, description=$4::jsonb,
          duration=$5::jsonb, warranty_duration=$6::jsonb, image=$7, card_image=$8, badge=$9,
          pricing_model=$10::public.pricing_model, is_on_request=$11, is_featured=$12,
-         is_active=$13, warranty_months=$14, updated_at=now()
+         is_active=$13, warranty_months=$14, warranty_km_limit=$15, tier_code=$16, updated_at=now()
        WHERE id=$1`,
       [
         b.id, b.categoryId, j(b.name), j(b.description ?? null), j(durationLoc(b.durationDays)), j(warrantyLoc(b.warrantyYears)),
         b.image || null, b.cardImage || null, b.badge || null, pricingModel, !!b.onRequest, !!b.featured, b.active !== false,
-        warrantyMonthsOf(b.warrantyYears),
+        warrantyMonthsOf(b.warrantyYears), warrantyKmOf(b.warrantyKm),
+        b.tier === "essential" ? "essential" : "signature",
       ]
     );
     // الأسعار والمشمولات تتبعت بس لو موجودة في الطلب (التبديل السريع للحالة مايبعتش الكل)
     if (b.prices !== undefined) await writePrices(b.id, b.prices, b.onRequest);
     if (b.includes !== undefined) await writeIncludes(b.id, b.includes);
+    revalidateTag("booking-catalog"); // (جديد) عكس التعديل (سعر/تفعيل/اسم...) فورًا في صفحة الحجز
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("PATCH /api/admin/services failed:", err);
@@ -138,6 +148,7 @@ export async function DELETE(request: Request) {
     await query(`DELETE FROM service_prices WHERE service_id=$1`, [id]).catch(() => {});
     await query(`DELETE FROM service_includes WHERE service_id=$1`, [id]).catch(() => {});
     await query(`DELETE FROM services WHERE id=$1`, [id]);
+    revalidateTag("booking-catalog"); // (جديد) شيلها فورًا من صفحة الحجز
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/admin/services failed:", err);

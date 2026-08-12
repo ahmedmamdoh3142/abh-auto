@@ -27,8 +27,12 @@ type Svc = {
   name: Loc; description: Loc;
   prices: Record<SizeKey, SizePrice>;
   includes: Loc[];
-  warrantyYears: number; durationDays: number;
+  warrantyYears: number;
+  warrantyKm: number;
+  durationDays: number;
   image: string; cardImage: string; badge: string;
+  /** (جديد) خط الخامة — signature أو essential */
+  tier: "signature" | "essential";
   onRequest: boolean; featured: boolean; active: boolean; sort: number;
 };
 
@@ -75,8 +79,10 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
   const catName = (id: number | null) => categories.find((c) => c.id === id)?.label || "";
   const txt = (l: Loc) => (isAr ? l.ar || l.en : l.en || l.ar) || "";
   const sizeLabel = (code: string) => sizes.find((s) => s.code === code)?.label || code;
-  const shown = list.filter((s) => cat === 0 || s.categoryId === cat);
-
+  const [tierFilter, setTierFilter] = useState<"all" | "signature" | "essential">("all");
+  const shown = list.filter(
+    (s) => (cat === 0 || s.categoryId === cat) && (tierFilter === "all" || s.tier === tierFilter)
+  );
   const stats = useMemo(() => ({
     total: list.length,
     active: list.filter((s) => s.active).length,
@@ -354,6 +360,21 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
           })}
         </div>
 
+        {!isEditorMode && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {([
+              ["all", T("كل الخطوط", "All tiers")],
+              ["signature", T("التوقيعية", "Signature")],
+              ["essential", T("المنتقاة", "Curated")],
+            ] as const).map(([val, label]) => {
+              const on = tierFilter === val;
+              return (
+                <button key={val} onClick={() => setTierFilter(val)} style={{ borderRadius: 999, padding: "6px 14px", fontSize: 11, border: `1px solid ${on ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.08)"}`, color: on ? "#e8cf9a" : "rgba(203,205,205,.55)", background: on ? "rgba(232,207,154,.08)" : "transparent", cursor: "pointer", transition: "all .25s var(--abh-ease)" }}>{label}</button>
+              );
+            })}
+          </div>
+        )}
+
         {loadingPartner ? (
           <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("جارٍ تحميل الأسعار…", "Loading prices…")}</div>
         ) : (
@@ -364,7 +385,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
               return (
                 <div key={s.id} style={{ opacity: s.active ? 1 : 0.55, animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both` }}>
                   <ImageCard image={s.image} seed={s.slug || txt(s.name)} height={isEditorMode ? 330 : 278}
-                    badge={s.featured ? T("مميّزة", "Featured") : undefined}
+                    badge={s.featured ? T("مميّزة", "Featured") : (s.tier === "essential" ? T("المنتقاة", "Curated") : undefined)}
                     topRight={<Chip tone="platinum">{catName(s.categoryId)}</Chip>}
                     actions={!isEditorMode ? <>
                       <IconBtn icon={Ic.pencil} label={T("تعديل", "Edit")} solid onClick={() => setEditing(s)} />
@@ -382,6 +403,7 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
                         <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11, color: "rgba(203,205,205,.8)", flexWrap: "wrap" }}>
                           {s.durationDays > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Ic.clock s={12} />{s.durationDays} {T("يوم", "days")}</span>}
                           {s.warrantyYears > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Ic.sparkle s={12} />{T(`ضمان ${s.warrantyYears} سنوات`, `${s.warrantyYears}-yr warranty`)}</span>}
+                          {s.warrantyKm > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Ic.sparkle s={12} />{T(`أو ${s.warrantyKm.toLocaleString("ar-EG")} كم`, `or ${s.warrantyKm.toLocaleString()} km`)}</span>}
                           {s.includes.length > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Ic.check s={12} />{s.includes.length} {T("عنصر", "items")}</span>}
                         </div>
                         <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px solid rgba(255,255,255,.12)", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 10 }}>
@@ -484,28 +506,58 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
 }) {
   const [f, setF] = useState<Svc>(svc ?? {
     categoryId: categories[0]?.id ?? null, name: emptyLoc(), description: emptyLoc(),
-    prices: emptyPrices(), includes: [], warrantyYears: 0, durationDays: 0,
-    image: "", cardImage: "", badge: "", onRequest: false, featured: false, active: true, sort: 0,
+    prices: emptyPrices(), includes: [], warrantyYears: 0, warrantyKm: 0, durationDays: 0,
+    image: "", cardImage: "", badge: "", tier: "signature", onRequest: false, featured: false, active: true, sort: 0,
   });
   const set = (p: Partial<Svc>) => setF((s) => ({ ...s, ...p }));
   const setPrice = (size: SizeKey, field: "price" | "old", val: number) =>
-    setF((s) => ({ ...s, prices: { ...s.prices, [size]: { ...s.prices[size], [field]: val } } }));
+    setF((s) => {
+      const next = { ...s, prices: { ...s.prices, [size]: { ...s.prices[size], [field]: val } } };
+      // في خط Essential، "صغير" و"متوسط" سعر واحد موحّد — أي تعديل على صغير يُطبَّق على متوسط تلقائيًا
+      if (s.tier === "essential" && size === "small") {
+        next.prices = { ...next.prices, medium: { ...next.prices.medium, [field]: val } };
+      }
+      return next;
+    });
   const setInclude = (i: number, v: Loc) => setF((s) => ({ ...s, includes: s.includes.map((x, j) => (j === i ? v : x)) }));
   const addInclude = () => setF((s) => ({ ...s, includes: [...s.includes, emptyLoc()] }));
   const removeInclude = (i: number) => setF((s) => ({ ...s, includes: s.includes.filter((_, j) => j !== i) }));
   const valid = (f.name.ar || f.name.en) && f.categoryId != null;
 
-  const availSizes = sizes.length ? sizes.map((s) => s.code as SizeKey) : SIZE_ORDER;
+  const availSizes = (sizes.length ? sizes.map((s) => s.code as SizeKey) : SIZE_ORDER)
+    .filter((size) => !(f.tier === "essential" && size === "medium"));
 
   return (
     <Modal title={svc ? T("تعديل خدمة", "Edit service") : T("خدمة جديدة", "New service")} onClose={onClose} wide>
       <div className="abh-col" style={{ gap: 18 }}>
+        <div>
+          <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>
+            {T("خط الخامة", "Material tier")}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {([
+              ["signature", T("التوقيعية", "Signature"), T("الخط الأساسي — 3 أسعار (صغير/متوسط/كبير)", "Flagship line — 3 prices (S/M/L)")],
+              ["essential", T("المنتقاة", "Curated"), T("خامة مُنتقاة بعناية — سعرين فقط (صغير+متوسط، وكبير)", "Carefully curated line — 2 prices (S+M, and L)")],
+            ] as const).map(([val, label, hint]) => {
+              const on = f.tier === val;
+              return (
+                <button key={val} type="button" onClick={() => set({ tier: val })}
+                  style={{ flex: 1, textAlign: "start", borderRadius: 14, border: `1px solid ${on ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.08)"}`, background: on ? "rgba(232,207,154,.08)" : "rgba(255,255,255,.02)", padding: 14, cursor: "pointer" }}>
+                  <span style={{ display: "block", fontSize: 13, color: on ? "#e8cf9a" : "var(--abh-ivory)", fontWeight: on ? 600 : 400 }}>{label}</span>
+                  <span style={{ display: "block", fontSize: 10.5, color: "var(--abh-steel)", marginTop: 4, lineHeight: 1.5 }}>{hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <LocaleField label={T("اسم الخدمة", "Service name")} value={f.name} onChange={(v) => set({ name: v })} />
         <LocaleField label={T("شرح الخدمة", "Description")} value={f.description} onChange={(v) => set({ description: v })} multiline />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16 }}>
           <Field label={T("التصنيف", "Category")}><Selectbox value={f.categoryId} onChange={(v: number) => set({ categoryId: v })} options={categories.map((c) => ({ value: c.id, label: c.label }))} placeholder={T("اختر", "Select")} /></Field>
           <Field label={T("الضمان (سنوات)", "Warranty (years)")} hint={T("رقم فقط — تتبني الجملة تلقائيًا", "number only")}><Input type="number" value={f.warrantyYears} onChange={(e: any) => set({ warrantyYears: Math.max(0, +e.target.value) })} dir="ltr" style={{ textAlign: isAr ? "right" : "left" }} /></Field>
+          <Field label={T("سقف الكيلومترات", "KM limit")} hint={T("اختياري — اتركه صفر لضمان بالسنين فقط", "optional — 0 = years only")}><Input type="number" value={f.warrantyKm} onChange={(e: any) => set({ warrantyKm: Math.max(0, +e.target.value) })} dir="ltr" style={{ textAlign: isAr ? "right" : "left" }} /></Field>
           <Field label={T("المدة (أيام)", "Duration (days)")} hint={T("رقم فقط", "number only")}><Input type="number" value={f.durationDays} onChange={(e: any) => set({ durationDays: Math.max(0, +e.target.value) })} dir="ltr" style={{ textAlign: isAr ? "right" : "left" }} /></Field>
         </div>
 
@@ -529,7 +581,9 @@ function ServiceModal({ svc, categories, sizes, isAr, T, ccy, sizeLabel, onClose
                 return (
                   <div key={size} style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-ivory)" }}>{sizeLabel(size)}</span>
+                      <span style={{ fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-ivory)" }}>
+                        {f.tier === "essential" && size === "small" ? T("صغير + متوسط", "Small + Medium") : sizeLabel(size)}
+                      </span>
                       {pct > 0 && <Chip tone="ok">-{pct}%</Chip>}
                     </div>
 

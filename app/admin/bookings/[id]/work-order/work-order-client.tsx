@@ -92,6 +92,11 @@ export default function WorkOrderClient({ booking, locale }: { booking: any; loc
     try { await taskAction(task.id, { action: "set_time", estimatedMinutes: v }); }
     catch (e: any) { toast(e.message, "bad"); }
   }
+  async function setRoll(task: any, usesRoll: boolean, rollNo: string) {
+    setTasks((prev) => prev.map((t) => t.id !== task.id ? t : { ...t, usesRoll, rollNo }));
+    try { await taskAction(task.id, { action: "set_roll", usesRoll, rollNo }); }
+    catch (e: any) { toast(e.message, "bad"); load(true); }
+  }
   async function issueMaterial(task: any, itemId: number, quantity: number) {
     try { await taskAction(task.id, { action: "issue_material", itemId, quantity }); toast(T("تم صرف الخامة", "Issued")); setMatModal(null); await load(true); }
     catch (e: any) { toast(e.message, "bad"); }
@@ -294,6 +299,24 @@ export default function WorkOrderClient({ booking, locale }: { booking: any; loc
                       <span style={{ fontSize: 11, color: "var(--abh-steel)" }}>{T("دقيقة", "min")}</span>
                     </div>
                   </div>
+                  {/* رول القص (فينيل/رابر) */}
+                  <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: task.usesRoll ? 9 : 0 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11.5, color: "var(--abh-steel)" }}>{Ic.sparkle({ s: 13 })}{T("قص من رول؟", "Cut from a roll?")}</span>
+                      <button onClick={() => setRoll(task, !task.usesRoll, task.usesRoll ? "" : task.rollNo)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 12px", fontSize: 10.5, cursor: "pointer", border: `1px solid ${task.usesRoll ? "rgba(232,207,154,.4)" : "rgba(255,255,255,.15)"}`, background: task.usesRoll ? "rgba(232,207,154,.1)" : "transparent", color: task.usesRoll ? "#e8cf9a" : "var(--abh-platinum)" }}>
+                        {task.usesRoll ? T("نعم", "Yes") : T("لا", "No")}
+                      </button>
+                    </div>
+                    {task.usesRoll && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input defaultValue={task.rollNo || ""} dir="ltr" placeholder={T("رقم الرول", "Roll number")}
+                          onBlur={(e) => setRoll(task, true, e.target.value.trim())}
+                          style={{ flex: 1, borderRadius: 9, border: "1px solid rgba(232,207,154,.35)", background: "rgba(232,207,154,.05)", padding: "8px 12px", fontSize: 13, color: "var(--abh-ivory)", outline: "none", textAlign: "center" }} />
+                      </div>
+                    )}
+                  </div>
+
                   {/* وضع المتابعة: التقدّم + حالة الفنيين */}
                   {started && (() => {
                     const el = elapsedMin(task);

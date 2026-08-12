@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import { card, Pill, Ic, EGP, useToast, PageHeader, Field } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
 import { useBundles, isTriggerService, unlockedBundles, giftChargeFor, type Bundle, type ChosenGift } from "@/components/sections/booking/gift-picker";
+import { TierToggle } from "@/components/shared/tier-toggle";
 
 /* ───────── هوك media query (للتجاوب مع الموبايل) ───────── */
 function useMediaQuery(query: string) {
@@ -41,7 +42,7 @@ function useMediaQuery(query: string) {
 type SizeCode = "small" | "medium" | "large";
 type Model = { name: string; size: SizeCode };
 type Brand = { id: string; name: string; models: Model[] };
-type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; active?: boolean; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number>; includes?: string[] };
+type Service = { id: number; slug: string; name: string; category: string; categorySlug: string; onRequest: boolean; active?: boolean; tier: 'signature' | 'essential'; prices: Record<SizeCode, number>; oldPrices: Record<SizeCode, number>; includes?: string[] };
 type Opt = { code: string; label: string };
 type ColorOpt = { key: string; hex: string; light: boolean; name: string };
 type TowOpt = { code: string; label: string; cost: number };
@@ -183,6 +184,7 @@ export default function NewBookingClient({
       setCustomModelOpen(false);
     }
   };
+  const [tier, setTier] = useState<"signature" | "essential">("signature");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   // (جديد) أي كروت خدمة مفتوح فيها عرض "تشمل" حاليًا
   const [expandedIncl, setExpandedIncl] = useState<Set<string>>(new Set());
@@ -191,9 +193,19 @@ export default function NewBookingClient({
   });
   const grouped = useMemo(() => {
     const g = new Map<string, Service[]>();
-    for (const s of services) { const a = g.get(s.category) ?? []; a.push(s); g.set(s.category, a); }
+    for (const s of services) {
+      if (s.tier !== tier) continue;
+      const a = g.get(s.category) ?? []; a.push(s); g.set(s.category, a);
+    }
     return Array.from(g.entries());
-  }, [services]);
+  }, [services, tier]);
+
+  // لو الموظف بدّل الخط، أي خدمة مختارة من الخط التاني تتشال بصمت
+  useEffect(() => {
+    const validSlugs = new Set(services.filter((s) => s.tier === tier).map((s) => s.slug));
+    setChosen((prev) => new Set(Array.from(prev).filter((sl) => validSlugs.has(sl))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tier]);
   const toggleSvc = (slug: string) => setChosen((prev) => {
     const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n;
   });
@@ -574,6 +586,7 @@ export default function NewBookingClient({
           {/* 3) الخدمات */}
           <div style={{ ...card, padding: cardPad, minWidth: 0 }}>
             {sectionTitle("3", T("الخدمات", "Services"))}
+            <TierToggle active={tier} onChange={setTier} className="mb-5" />
             {!model && <div style={{ fontSize: 12, color: "var(--abh-steel)", marginBottom: 12 }}>{T("اختر سيارة أولًا لعرض الأسعار حسب الحجم.", "Pick a vehicle first to price by size.")}</div>}
             <div className="abh-col" style={{ gap: 18 }}>
               {grouped.map(([cat, svcs]) => (

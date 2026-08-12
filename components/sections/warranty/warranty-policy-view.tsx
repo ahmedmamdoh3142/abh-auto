@@ -9,9 +9,9 @@ import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useLocale } from 'next-intl';
 import {
-  ShieldCheck, CheckCircle2, XCircle, PhoneCall, Search, Wrench, RefreshCcw,
-  Sparkles, Sun, Droplets, FileText, ChevronDown,
-  Calendar, ClipboardCheck, AlertTriangle, ScrollText,
+  ShieldCheck, CheckCircle2, PhoneCall, Search, Wrench, RefreshCcw,
+  Sparkles, Sun, Droplets, ChevronDown, ArrowUpRight,
+  ScrollText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -43,9 +43,10 @@ const TOC = [
   { id: 'covered', ar: 'ماذا يغطي ضمانك', en: "What's covered" },
   { id: 'services', ar: 'تفاصيل كل خدمة', en: 'Per-service details' },
   { id: 'claim', ar: 'خطوات المطالبة', en: 'How to claim' },
-  { id: 'exclusions', ar: 'غير المشمول', en: 'Not covered' },
-  { id: 'terms', ar: 'أحكام عامة', en: 'General terms' },
 ];
+
+/** (جديد) شروط وأحكام الضمان الكاملة بقت صفحة مستقلة. */
+const TERMS_PAGE_HREF = '/warranty-terms';
 
 const COVERAGE_ROWS: { ar: string; en: string; dur: { ar: string; en: string } }[] = [
   { ar: 'حماية الطلاء PPF — كامل', en: 'Full-body Paint Protection Film (PPF)', dur: { ar: '12 سنة', en: '12 years' } },
@@ -133,66 +134,6 @@ const CLAIM_STEPS: { icon: any; title: { ar: string; en: string }; body: { ar: s
   },
 ];
 
-const EXCLUSIONS: { ar: string; en: string }[] = [
-  { ar: 'الحوادث أو الصدمات والاحتكاكات', en: 'Accidents, collisions, and abrasion' },
-  { ar: 'الخدوش العميقة أو القطع أو الثقوب الناتجة عن مؤثر خارجي', en: 'Deep scratches, cuts, or punctures from external causes' },
-  { ar: 'ضربات الحصى والأجسام الخارجية', en: 'Stone chips and foreign-object impacts' },
-  { ar: 'سوء الاستخدام أو الإهمال', en: 'Misuse or neglect' },
-  { ar: 'الغسيل أو العناية بطرق أو أدوات غير مناسبة', en: 'Washing or care with unsuitable methods or tools' },
-  { ar: 'استخدام مواد كيميائية أو منظفات غير ملائمة للمنتج', en: 'Chemicals or cleaners unsuitable for the product' },
-  { ar: 'أعمال السمكرة أو الدهان أو الإصلاحات اللاحقة المؤثرة على المنتج', en: 'Bodywork, repainting, or later repairs affecting the product' },
-  { ar: 'تدخل جهة أخرى متى تسبّب في الضرر أو أثّر على تحديد سببه', en: "A third party's intervention where it caused the damage or obscured its cause" },
-  { ar: 'الظروف والعوامل الخارجية غير الاعتيادية', en: 'Unusual external conditions and factors' },
-  { ar: 'الاستهلاك والتقادم الطبيعي المتناسب مع عمر المنتج واستخدامه', en: "Normal wear consistent with the product's age and use" },
-];
-const EXCLUSIONS_PAINT = {
-  ar: 'ضمان أفلام الحماية لا يُعد ضمانًا لطلاء المركبة الأصلي أو المعاد طلاؤه أو إصلاحه سابقًا، ولا تشمل التغطية أضرارًا ناتجة عن ضعف تماسك الطلاء أو أعمال رش أو سمكرة أو إصلاحات سابقة متى لم يكن سببها المنتج المشمول.',
-  en: "Film warranties do not warrant the vehicle's original, repainted, or previously repaired paintwork, nor damage from weak paint adhesion, spraying, bodywork, or prior repairs when the covered product isn't the cause.",
-};
-
-const TERMS: { icon: any; title: { ar: string; en: string }; body: { ar: string; en: string } }[] = [
-  {
-    icon: ClipboardCheck,
-    title: { ar: 'الفحص ومعالجة الضمان', en: 'Inspection & claim handling' },
-    body: {
-      ar: 'يتم تقييم كل مطالبة وفق حالة المنتج وطبيعة المشكلة وسببها، وقد يتطلب ذلك حضور المركبة لإجراء الفحص الفني. ولا يعني ظهور ملاحظة خلال مدة الضمان أن الحالة مشمولة تلقائيًا؛ إذ يُتحقّق من سببها لضمان تطبيق التغطية الصحيحة. لا يستوجب وجود عيب في جزء محدد استبدال الأجزاء السليمة أو كامل الخدمة.',
-      en: "Every claim is assessed by the product's condition and the nature and cause of the issue, which may require the vehicle to attend a technical inspection. A concern appearing during the warranty period is not automatically covered — its cause is verified first. A defect in one part does not require replacing sound parts or the entire service.",
-    },
-  },
-  {
-    icon: ShieldCheck,
-    title: { ar: 'الحفاظ على الضمان', en: 'Maintaining your warranty' },
-    body: {
-      ar: 'للمحافظة على الضمان، يلتزم العميل بتعليمات العناية والصيانة الخاصة بالمنتج، وبإبلاغ ABH AUTO عند اكتشاف المشكلة، وتمكينها من فحص الحالة قبل تغييرها أو إصلاحها متى كان ذلك ممكنًا. وتُطبَّق متطلبات الصيانة الدورية على المنتجات التي تشترط ذلك، ومنها فئات النانو سيراميك وفق برنامج العناية الخاص بها.',
-      en: "To preserve the warranty, the customer follows the product's care and maintenance instructions, notifies ABH AUTO upon discovering an issue, and allows inspection before altering or repairing it where possible. Periodic maintenance requirements apply to products that require them, including nano ceramic tiers per their care program.",
-    },
-  },
-  {
-    icon: Calendar,
-    title: { ar: 'مدة الضمان', en: 'Warranty duration' },
-    body: {
-      ar: 'مدة الضمان هي مدة تغطية للعيوب المشمولة وفق هذه السياسة، ولا تعني ضمان المنتج ضد جميع أنواع التلف أو الحوادث طوال هذه المدة. عند معالجة أو استبدال جزء مشمول، يستمر الضمان وفق المدة المتبقية من الضمان الأصلي.',
-      en: "The warranty period covers defects included under this policy — it is not a guarantee against every type of damage or accident throughout that period. When a covered part is repaired or replaced, the warranty continues for the remaining term of the original coverage.",
-    },
-  },
-  {
-    icon: FileText,
-    title: { ar: 'شهادة ضمان إلكترونية خاصة بمركبتك', en: 'Your electronic warranty certificate' },
-    body: {
-      ar: 'بعد تنفيذ الخدمة، تصدر ABH AUTO للعميل شهادة ضمان إلكترونية مرتبطة بمركبته تتضمن بيانات المركبة ورقم الوثيقة والخدمات المشمولة ومدة الضمان وتاريخ بدايته ونهايته. وتُعد شهادة الضمان وهذه السياسة مكمِّلتين لبعضهما.',
-      en: "After the service, ABH AUTO issues an electronic warranty certificate tied to the vehicle, listing vehicle details, the document number, covered services, and the warranty's start and end dates. The certificate and this policy complement one another.",
-    },
-  },
-  {
-    icon: ScrollText,
-    title: { ar: 'أحكام عامة', en: 'General provisions' },
-    body: {
-      ar: 'تخضع سياسة الضمان للأنظمة واللوائح المعمول بها في المملكة العربية السعودية، ولا تمس الحقوق الإلزامية المقررة للعميل نظامًا. تحتفظ ABH AUTO بإصدار سياسة الضمان المرتبط بالخدمة، وتُطبَّق على العميل الشروط السارية على خدمته وفق ما تقضي به الأنظمة.',
-      en: "This policy is governed by the applicable laws and regulations of the Kingdom of Saudi Arabia and does not affect the customer's statutory rights. ABH AUTO retains the policy version tied to the service performed, and the terms in force at the time of that service apply to the customer.",
-    },
-  },
-];
-
 /* ══════════════════════════ Component ══════════════════════════ */
 
 export function WarrantyPolicyView() {
@@ -274,7 +215,7 @@ export function WarrantyPolicyView() {
       {/* Sticky TOC */}
       <div className="sticky top-[84px] z-30 border-y border-white/[0.06] bg-obsidian/80 backdrop-blur-xl">
         <div className="container">
-          <nav className="flex gap-1 overflow-x-auto py-3" aria-label={isAr ? 'محتويات السياسة' : 'Policy contents'}>
+          <nav className="flex items-center gap-1 overflow-x-auto py-3" aria-label={isAr ? 'محتويات السياسة' : 'Policy contents'}>
             {TOC.map((s) => {
               const on = active === s.id;
               return (
@@ -290,6 +231,12 @@ export function WarrantyPolicyView() {
                 </a>
               );
             })}
+            <span aria-hidden className="mx-1.5 h-4 w-px flex-none bg-white/10" />
+            <Link href={TERMS_PAGE_HREF} data-cursor="hover"
+              className="flex flex-none items-center gap-1.5 rounded-full border border-white/12 px-4 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/70 transition-colors duration-300 hover:border-white/25 hover:text-ivory">
+              {isAr ? 'الشروط الكاملة' : 'Full terms'}
+              <ArrowUpRight className="h-3 w-3" strokeWidth={2} />
+            </Link>
           </nav>
         </div>
       </div>
@@ -379,39 +326,33 @@ export function WarrantyPolicyView() {
           </div>
         </section>
 
-        {/* غير المشمول */}
-        <section id="exclusions" className="scroll-mt-40">
-          <SectionHead eyebrow="05" title={T(TOC[4])} />
-          <div className="mt-8 overflow-hidden rounded-[26px] border border-[#7c1a1a]/25 bg-[#2a1414]/[0.12]">
-            <div className="flex items-center gap-3 border-b border-[#7c1a1a]/20 px-6 py-4 md:px-8">
-              <AlertTriangle className="h-[18px] w-[18px] text-[#e7b4b4]" strokeWidth={1.7} />
-              <span className="text-[0.62rem] uppercase tracking-[0.2em] text-[#e7b4b4]">
-                {isAr ? 'الضمان مخصص للعيوب المرتبطة بالمنتج، ولا يشمل الأضرار الناتجة عن:' : 'The warranty covers product-related defects only; it excludes damage from:'}
-              </span>
-            </div>
-            <div className="grid gap-x-6 gap-y-4 p-6 sm:grid-cols-2 md:p-8">
-              {EXCLUSIONS.map((it, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <XCircle className="mt-0.5 h-4 w-4 flex-none text-[#c98a8a]" strokeWidth={1.8} />
-                  <span className="text-[0.82rem] leading-relaxed text-platinum/70">{isAr ? it.ar : it.en}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-            <div className="mb-1.5 text-[0.62rem] uppercase tracking-[0.2em] text-platinum/55">{isAr ? 'طلاء المركبة' : "Vehicle's paintwork"}</div>
-            <p className="text-[0.82rem] leading-relaxed text-platinum/65">{T(EXCLUSIONS_PAINT)}</p>
-          </div>
-        </section>
-
-        {/* أحكام عامة */}
+        {/* ── شروط وأحكام الضمان الكاملة — بطاقة رابط احترافية لصفحة مستقلة ── */}
         <section id="terms" className="scroll-mt-40">
-          <SectionHead eyebrow="06" title={T(TOC[5])} />
-          <div className="mt-8 space-y-3">
-            {TERMS.map(({ icon: Icon, title, body }, i) => (
-              <TermAccordion key={i} icon={Icon} title={isAr ? title.ar : title.en} body={isAr ? body.ar : body.en} defaultOpen={i === 0} />
-            ))}
-          </div>
+          <Link href={TERMS_PAGE_HREF} data-cursor="hover"
+            className="group relative flex flex-col items-start gap-6 overflow-hidden rounded-[28px] border p-8 transition-all duration-500 hover:-translate-y-1 sm:flex-row sm:items-center sm:justify-between md:p-10"
+            style={{ borderColor: `${ACCENT}30`, background: 'linear-gradient(135deg, rgba(203,205,205,0.09), rgba(203,205,205,0.015))' }}>
+            <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px" style={{ background: `linear-gradient(to right, transparent, ${ACCENT}66, transparent)` }} />
+            <span aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full blur-3xl transition-opacity duration-700 group-hover:opacity-80" style={{ background: `${ACCENT}12` }} />
+            <div className="relative max-w-xl">
+              <div className="flex items-center gap-3 text-[0.58rem] uppercase tracking-[0.3em]" style={{ color: `${ACCENT}cc` }}>
+                <ScrollText className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {isAr ? 'الوثيقة الكاملة' : 'Full document'}
+              </div>
+              <h2 className="mt-3 font-display text-2xl font-light uppercase leading-tight tracking-tight text-ivory md:text-3xl">
+                {isAr ? 'شروط وأحكام الضمان' : 'Warranty terms & conditions'}
+              </h2>
+              <p className="mt-3 text-[0.85rem] leading-relaxed text-platinum/60">
+                {isAr
+                  ? 'الحالات غير المشمولة، طلاء المركبة، الفحص ومعالجة الضمان، الحفاظ على الضمان، مدة الضمان، الشهادة الإلكترونية، والأحكام العامة — كل التفاصيل القانونية الكاملة في صفحة واحدة.'
+                  : 'Exclusions, vehicle paintwork, inspection & claims, maintaining your warranty, duration, the e-certificate, and general provisions — the complete legal detail in one place.'}
+              </p>
+            </div>
+            <span className="relative inline-flex flex-none items-center gap-2.5 rounded-full border px-6 py-3.5 text-[0.66rem] font-semibold uppercase tracking-[0.18em] transition-all duration-300 group-hover:gap-3.5"
+              style={{ borderColor: `${ACCENT}55`, color: ACCENT, background: `${ACCENT}0f` }}>
+              {isAr ? 'قراءة الشروط كاملة' : 'Read full terms'}
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={2} />
+            </span>
+          </Link>
         </section>
 
         {/* رقم الإصدار فقط – بدون فوتر */}
@@ -435,30 +376,6 @@ function SectionHead({ eyebrow, title }: { eyebrow: string; title: string }) {
       <span dir="ltr" className="font-display text-sm leading-none" style={{ color: `${ACCENT}99` }}>{eyebrow}</span>
       <h2 className="font-display text-2xl font-light uppercase tracking-tight text-ivory md:text-[1.85rem]">{title}</h2>
       <span className="h-px flex-1 bg-gradient-to-r from-white/12 to-transparent" />
-    </div>
-  );
-}
-
-function TermAccordion({ icon: Icon, title, body, defaultOpen }: { icon: any; title: string; body: string; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(!!defaultOpen);
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]">
-      <button type="button" data-cursor="hover" onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-4 px-5 py-4 text-start md:px-6">
-        <span className="grid h-9 w-9 flex-none place-items-center rounded-xl border" style={{ borderColor: `${ACCENT}30`, background: `${ACCENT}0f` }}>
-          <Icon className="h-4 w-4" style={{ color: ACCENT }} strokeWidth={1.7} />
-        </span>
-        <span className="flex-1 text-[0.9rem] font-medium text-ivory/90">{title}</span>
-        <ChevronDown className={`h-4 w-4 flex-none text-platinum/50 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} strokeWidth={1.8} />
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }}
-            className="overflow-hidden">
-            <p className="px-5 pb-5 text-[0.82rem] leading-relaxed text-platinum/65 md:px-6 md:ps-[3.75rem]">{body}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

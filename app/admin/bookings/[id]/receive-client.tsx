@@ -30,6 +30,8 @@ export default function ReceiveClient({ booking, locale, payMethods, catalog }: 
   const [phone, setPhone] = useState(booking.phone || "");
   const [vehicle, setVehicle] = useState(booking.vehicle === "—" ? "" : booking.vehicle);
   const [plate, setPlate] = useState(booking.plate || "");
+  // (جديد) قراءة العداد وقت الاستلام — تُستخدم كمرجع لاحقًا لفحص الضمان بالكيلومترات.
+  const [odometerKm, setOdometerKm] = useState(booking.odometerKm != null ? String(booking.odometerKm) : "");
 
   const [services, setServices] = useState<any[]>(booking.services || []);
   const [serviceSlugs, setServiceSlugs] = useState<string[]>(booking.serviceSlugs || []);
@@ -86,6 +88,7 @@ export default function ReceiveClient({ booking, locale, payMethods, catalog }: 
           paymentMethod: payMethod || null, paymentProofUrl: payProof || null,
           customerName: customer || null, customerPhone: phone || null,
           vehicleLabel: vehicle || null, plate: plate || null,
+          odometerKm: odometerKm.trim() ? Number(odometerKm) : null,
           photos: photos.map((p) => ({ url: p.url, comment: p.comment })),
         }),
       });
@@ -138,7 +141,12 @@ export default function ReceiveClient({ booking, locale, payMethods, catalog }: 
               <EditField icon={Ic.bell} label={T("التليفون", "Phone")} value={phone} onChange={setPhone} isAr={isAr} ltr placeholder="+9665…" />
               <EditField icon={Ic.grid} label={T("السيارة", "Vehicle")} value={vehicle} onChange={setVehicle} isAr={isAr} placeholder={T("الموديل", "Model")} />
               <EditField icon={Ic.sliders} label={T("اللوحة", "Plate")} value={plate} onChange={setPlate} isAr={isAr} ltr placeholder={T("اللوحة", "Plate")} />
+              <EditField icon={Ic.clock} label={T("قراءة العداد (كم)", "Odometer (km)")} value={odometerKm}
+                onChange={(v: string) => setOdometerKm(v.replace(/[^\d]/g, ""))} isAr={isAr} ltr placeholder={T("مثال: 45000", "e.g. 45000")} />
             </div>
+            <p style={{ margin: "10px 2px 0", fontSize: 11, color: "var(--abh-steel)", lineHeight: 1.6 }}>
+              {T("مرجع مهم لفحص الضمان بالكيلومترات لاحقًا — سجّلها بدقّة كل مرة.", "Important reference for future km-based warranty checks — record it accurately each time.")}
+            </p>
           </Section>
 
           <Section n={2} title={T("الخدمات المطلوبة", "Requested services")}

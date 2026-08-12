@@ -24,8 +24,10 @@
  */
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocale, useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { ArrowUpRight, ArrowLeft, Check } from 'lucide-react';
 
 import {
@@ -42,12 +44,15 @@ import {
 } from '@/lib/analytics';
 
 import { StepVehicle } from './step-vehicle';
-import { StepServices } from './step-services';
-import { StepMaintenance } from './step-maintenance';
-import { StepDetails } from './step-details';
-import { StepConfirm } from './step-confirm';
-import { StepMaintenanceConfirm } from './step-maintenance-confirm';
-import { JsCheckoutPanel } from './js-checkout-card';
+
+// (جديد) تحميل باقي الخطوات lazy — بيقلل حجم الجافاسكريبت الأولي بشكل كبير،
+// لأن العميل غالبًا هيقضي وقت في خطوة السيارة قبل ما يحتاج كود بقية الخطوات.
+const StepServices = dynamic(() => import('./step-services').then((m) => m.StepServices), { loading: () => <StepSkeleton /> });
+const StepMaintenance = dynamic(() => import('./step-maintenance').then((m) => m.StepMaintenance), { loading: () => <StepSkeleton /> });
+const StepDetails = dynamic(() => import('./step-details').then((m) => m.StepDetails), { loading: () => <StepSkeleton /> });
+const StepConfirm = dynamic(() => import('./step-confirm').then((m) => m.StepConfirm), { loading: () => <StepSkeleton /> });
+const StepMaintenanceConfirm = dynamic(() => import('./step-maintenance-confirm').then((m) => m.StepMaintenanceConfirm), { loading: () => <StepSkeleton /> });
+const JsCheckoutPanel = dynamic(() => import('./js-checkout-card').then((m) => m.JsCheckoutPanel), { loading: () => <StepSkeleton /> });
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const CINEMATIC = '/images/cta-bg.webp';
@@ -59,6 +64,8 @@ export interface BookingState {
   colorKey: string;
   plate: string;
   size: VehicleSize;
+  /** (جديد) خط الخامة المختار في خطوة الخدمات — Signature أو Essential */
+  tier: import('@/lib/shared/tier').TierCode;
   services: string[];
   activeCat: CategoryId;
   towing: boolean;
@@ -95,6 +102,8 @@ export interface BookingState {
   isMaintenance: boolean;
   maintenanceWarranty: WarrantyCoverage | null;
   problemDescription: string;
+  /** (جديد) قراءة العداد الحالية كما أدخلها العميل — تُستخدم لفحص سقف الضمان بالكيلومترات. */
+  odometerKm: string;
 }
 
 /** (جديد) شكل موحّد لتغطية الضمان — تايب مستقل بسطر واحد عشان يبقى آمن مع النسخ/اللصق. */
@@ -102,6 +111,7 @@ export type WarrantyCoverage = { bookingItemId: number; serviceId: number; servi
 
 const INITIAL: BookingState = {
   brandId: '', model: '', colorKey: '', plate: '', size: 'large',
+  tier: 'signature',
   services: [], activeCat: 'coatings' as CategoryId, towing: false, towingMode: null,
   towingLat: null, towingLng: null, towingAddress: '',
   name: '', phone: '', email: '', city: '', branch: '', date: '', time: '',
@@ -112,7 +122,7 @@ const INITIAL: BookingState = {
   whatsappOptIn: undefined,
   gifts: [],
   bankVerified: false, bankCardDigits: null, bankCode: null, bankDiscountPercent: 0,
-  isMaintenance: false, maintenanceWarranty: null, problemDescription: '',
+  isMaintenance: false, maintenanceWarranty: null, problemDescription: '', odometerKm: '',
 };
 
 const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
@@ -134,6 +144,11 @@ export function BookingFlow({
   const locale = useLocale();
   const isAr = locale === 'ar';
   const { member, hydrated, addBooking } = useAuth();
+
+  // (جديد) دخول مباشر لوضع صيانة الضمان من الناف بار: /booking?flow=maintenance
+  const searchParams = useSearchParams();
+  const maintenanceIntent = searchParams.get('flow') === 'maintenance';
+  const autoMaintenanceTried = useRef(false);
 
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
@@ -235,8 +250,21 @@ export function BookingFlow({
   }, [set]);
 
   const cancelMaintenance = useCallback(() => {
+    autoMaintenanceTried.current = true; // العميل رفض الصيانة — منرجّعوش لها تلقائيًا تاني
     set({ isMaintenance: false, maintenanceWarranty: null, problemDescription: '' });
   }, [set]);
+
+  // (جديد) جاي من رابط «حجز صيانة» في الناف بار: بمجرد ما نلاقي ضمان ساري
+  // على اللوحة اللي كتبها، ندخّله في وضع الصيانة تلقائيًا بدل ما ينتظر يدوس على البانر.
+  useEffect(() => {
+    if (!maintenanceIntent || autoMaintenanceTried.current) return;
+    if (data.isMaintenance) return;
+    if (maintenanceCovered.length > 0) {
+      autoMaintenanceTried.current = true;
+      startMaintenance(maintenanceCovered[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintenanceIntent, maintenanceCovered, data.isMaintenance]);
 
   const [maintenanceReference, setMaintenanceReference] = useState<string | null>(null);
 
@@ -250,6 +278,7 @@ export function BookingFlow({
           size: data.size, colorKey: data.colorKey,
           bookingItemId: data.maintenanceWarranty?.bookingItemId ?? null,
           problemDescription: data.problemDescription,
+          odometerKm: data.odometerKm.trim() ? Number(data.odometerKm) : null,
           branch: data.branch, date: data.date, time: data.time,
           name: data.name, phone: data.phone, email: data.email, city: data.city,
         }),
@@ -342,8 +371,25 @@ export function BookingFlow({
     else if (to === 3) { trackCustomerInfo(); trackSchedule({ branch: data.branch, date: data.date, time: data.time }); }
     setStep(to);
     setMaxReached((m) => Math.max(m, to));
+    // (جديد) نسجّل الخطوة في الـhistory عشان زر رجوع المتصفح يرجع خطوة
+    // خطوة بدل ما يقفل الصفحة أو يقفز لأول خطوة على طول.
+    if (typeof window !== 'undefined') window.history.pushState({ bookingStep: to }, '', window.location.href);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [data.brandId, data.model, data.size, data.branch, data.date, data.time, total.grand, trackedServices]);
+
+  // (جديد) دعم زر رجوع/تقدّم في المتصفح لخطوات الحجز.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.history.replaceState({ bookingStep: 0 }, '', window.location.href);
+    const onPopState = (e: PopStateEvent) => {
+      const target = typeof e.state?.bookingStep === 'number' ? e.state.bookingStep : 0;
+      setStep(target);
+      setMaxReached((m) => Math.max(m, target));
+      requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const confirmBooking = useCallback(async () => {
     const brand = effectiveBrands.find((b) => b.id === data.brandId);
@@ -460,6 +506,7 @@ export function BookingFlow({
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });
     setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null); setCardCheckout(null);
+    if (typeof window !== 'undefined') window.history.replaceState({ bookingStep: 0 }, '', window.location.href);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [categories]);
 
@@ -491,7 +538,8 @@ export function BookingFlow({
                     <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} brands={effectiveBrands}
                       colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
                       onAddCustomModel={onAddCustomModel}
-                      maintenanceCovered={maintenanceCovered} onStartMaintenance={startMaintenance} />
+                      maintenanceCovered={maintenanceCovered} onStartMaintenance={startMaintenance}
+                      maintenanceIntent={maintenanceIntent} />
                   )}
                   {step === 1 && (
                     data.isMaintenance ? (
@@ -625,6 +673,14 @@ function StepRail({ step, maxReached, labels, onJump }: { step: number; maxReach
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function StepSkeleton() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center">
+      <span className="h-8 w-8 animate-spin rounded-full border-2 border-platinum/30 border-t-platinum" />
     </div>
   );
 }

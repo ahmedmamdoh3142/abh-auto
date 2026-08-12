@@ -209,6 +209,18 @@ function giftChipStyle(): React.CSSProperties {
   return { borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.45)", display: "inline-flex", alignItems: "center", gap: 4 };
 }
 
+/* حساب صاحب الحجز — عميل مسجّل / موظف / مدير / شريك / فني — أو زائر بدون حساب */
+const ACCOUNT_ROLE: Record<string, { ar: string; en: string; color: string }> = {
+  member:     { ar: "عميل مسجّل", en: "Registered member", color: "#6ba8f5" },
+  staff:      { ar: "موظف",       en: "Staff",             color: "#cbcdcd" },
+  admin:      { ar: "مدير",       en: "Admin",             color: "#f5993d" },
+  partner:    { ar: "حساب شريك",  en: "Partner account",   color: "#9fd4b0" },
+  technician: { ar: "فني",        en: "Technician",        color: "#e8d6a8" },
+};
+function sourceBadgeStyle(color: string): React.CSSProperties {
+  return { display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, padding: "7px 13px", fontSize: 11.5, color, background: `${color}1a`, border: `1px solid ${color}55` };
+}
+
 /* ───────── نظام المتابعة (Follow-up) ───────── */
 const FOLLOWUP_STATUS: Record<string, { ar: string; en: string; color: string }> = {
   none:   { ar: "بدون متابعة",  en: "No follow-up",  color: "#66696e" },
@@ -236,7 +248,7 @@ function followupColorOf(b: any): string {
 }
 
 /* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
-function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onPrintWarranty, onFollowUp, onGenLink, linkBusy }: any) {
+function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onPrintWarranty, onFollowUp, onGenLink, linkBusy, onDiscount }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
@@ -251,6 +263,9 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
   const stop = (e: any, fn: () => void) => { e.stopPropagation(); fn(); };
   const followupStatus = b.followupStatus || "none";
   const followupColor = followupColorOf(b);
+  const createdLabel = b.createdAt
+    ? new Date(b.createdAt).toLocaleString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : null;
 
   return (
     <div
@@ -286,6 +301,25 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
         )}
         <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
       </div>
+
+      {/* تاريخ إنشاء الحجز — يظهر عند الهوفر فقط، أعلى يسار الكرت */}
+      {createdLabel && (
+        <div style={{
+          position: "absolute", top: 16, left: 16, zIndex: 4,
+          display: "inline-flex", alignItems: "center", gap: 6,
+          borderRadius: 999, padding: "6px 12px", fontSize: 10,
+          letterSpacing: ".04em", color: "var(--abh-platinum)",
+          background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.16)",
+          backdropFilter: "blur(8px)",
+          opacity: reveal ? 1 : 0,
+          transform: reveal ? "translateY(0)" : "translateY(-6px)",
+          transition: "opacity .4s var(--abh-ease), transform .4s var(--abh-ease)",
+          pointerEvents: "none",
+        }}>
+          <Ic.clock s={12} />
+          <span dir="ltr" className="abh-num">{createdLabel}</span>
+        </div>
+      )}
 
       {/* سبيسر */}
       <div style={{ flex: touch ? "none" : 1, height: touch ? 92 : undefined }} />
@@ -361,6 +395,11 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
               {I.link(15)}
             </button>
           )}
+          {!isCancelled && !pay.paid && (
+            <button onClick={(e) => stop(e, () => onDiscount(b.id))} title={isAr ? "خصم" : "Discount"} style={qIcon("#ffb723")}>
+              {I.tag(15)}
+            </button>
+          )}
           {/* لسه ما اتستلمش → زرّ الاستلام */}
           {needsWorkOrder && (
             <button onClick={(e) => stop(e, () => onReceive(b.id))} style={qBtn(true)}>
@@ -434,23 +473,12 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
   );
 }
 
-/* ═════════════════ مودال تأكيد الدفع (مع خصم اختياري) ═════════════════ */
+/* ═════════════════ مودال تأكيد الدفع — بس تأكيد إن الفلوس استُلمت فعلًا ═════════════════
+   الخصم بقى منفصل تمامًا (مودال الخصم تحت) — تقدر تطبّق خصم وتاخد لينك دفع
+   من غير ما تدوس "تأكيد الدفع" خالص. */
 function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
   const T = (ar: string, en: string) => (isAr ? ar : en);
-  const [kind, setKind] = useState<"none" | "percent" | "fixed">("none");
-  const [value, setValue] = useState("");
-  const [reason, setReason] = useState("");
-
-  const base = Math.max(0, (Number(b.subtotal) || 0) + (Number(b.towing) || 0) - (Number(b.promoDiscount) || 0));
-  const rawValue = Math.max(0, Number(value) || 0);
-  const discountAmount = kind === "none" ? 0
-    : kind === "percent" ? Math.round((base * Math.min(100, rawValue)) / 100)
-    : Math.min(rawValue, base);
-  const newTotal = Math.max(0, (Number(b.total) || 0) - discountAmount);
-
-  const submit = () => {
-    onConfirm(b.id, kind === "none" || !rawValue ? undefined : { kind, value: rawValue, reason: reason.trim() || undefined });
-  };
+  const hasDiscount = Number(b.manualDiscountAmount) > 0 || Number(b.bankDiscountAmount) > 0;
 
   return (
     <Modal title={T("تأكيد الدفع", "Confirm payment")} onClose={onClose}>
@@ -459,54 +487,25 @@ function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
         <div dir="ltr" className="abh-num" style={{ fontSize: 15, color: "var(--abh-ivory)", marginTop: 3 }}>{b.reference}</div>
       </div>
 
-      <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>
-        {T("هل تريد إضافة خصم للعميل؟", "Give the customer a discount?")}
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {(["none", "percent", "fixed"] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)}
-            style={{ flex: 1, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, border: `1px solid ${kind === k ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.1)"}`, background: kind === k ? "rgba(203,205,205,.1)" : "transparent", color: kind === k ? "var(--abh-ivory)" : "var(--abh-platinum)", cursor: "pointer" }}>
-            {k === "none" ? T("بدون خصم", "No discount") : k === "percent" ? T("نسبة %", "Percentage") : T("مبلغ ثابت", "Fixed amount")}
-          </button>
-        ))}
-      </div>
-
-      {kind !== "none" && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-            <input value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" dir="ltr"
-              placeholder={kind === "percent" ? "10" : "100"}
-              style={{ flex: 1, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: "center" }} />
-            <span style={{ display: "grid", placeItems: "center", fontSize: 13, color: "var(--abh-steel)", minWidth: 44 }}>{kind === "percent" ? "%" : ccy}</span>
-          </div>
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={T("سبب الخصم (اختياري)", "Discount reason (optional)")}
-            style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
-        </div>
-      )}
-
       <div style={{ borderRadius: 16, border: "1px solid rgba(203,205,205,.2)", background: "rgba(255,255,255,.02)", padding: "14px 16px", marginBottom: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: discountAmount > 0 ? 8 : 0 }}>
-          <span style={{ color: "var(--abh-steel)" }}>{T("الإجمالي الحالي", "Current total")}</span>
-          <span dir="ltr" className="abh-num" style={{ color: "var(--abh-ivory)" }}>{EGP(b.total)} {ccy}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
+          <span style={{ color: "var(--abh-platinum)" }}>{T("المبلغ المستحق", "Amount due")}</span>
+          <span dir="ltr" className="abh-num" style={{ color: "var(--abh-ivory)", fontWeight: 600 }}>{EGP(b.total)} {ccy}</span>
         </div>
-        {discountAmount > 0 && (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8 }}>
-              <span style={{ color: "#e7b4b4" }}>{T("الخصم", "Discount")}</span>
-              <span dir="ltr" className="abh-num" style={{ color: "#e7b4b4" }}>−{EGP(discountAmount)} {ccy}</span>
-            </div>
-            <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "8px 0" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
-              <span style={{ color: "var(--abh-platinum)" }}>{T("الإجمالي الجديد", "New total")}</span>
-              <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e", fontWeight: 600 }}>{EGP(newTotal)} {ccy}</span>
-            </div>
-          </>
+        {hasDiscount && (
+          <p style={{ marginTop: 8, fontSize: 11.5, color: "#3ecd8e" }}>
+            {T("أي خصم مطبَّق محسوب بالفعل في هذا المبلغ.", "Any applied discount is already reflected in this amount.")}
+          </p>
         )}
       </div>
 
+      <p style={{ fontSize: 12.5, color: "var(--abh-steel)", marginBottom: 18 }}>
+        {T("استخدم الزرار ده بس بعد استلام المبلغ فعليًا من العميل (كاش أو تحويل). لو عايز تعمل خصم فقط، استخدم زرّ الخصم بدل كده.", "Only use this after you've actually received payment from the customer (cash or transfer). To just apply a discount, use the discount button instead.")}
+      </p>
+
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
         <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
-        <button disabled={busy} onClick={submit}
+        <button disabled={busy} onClick={() => onConfirm(b.id)}
           style={{ opacity: busy ? .4 : 1, pointerEvents: busy ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "12px 24px", fontSize: 12, fontWeight: 600, letterSpacing: ".14em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
           {I.wallet(15)} {T("تأكيد الدفع", "Confirm payment")}
         </button>
@@ -515,8 +514,160 @@ function ConfirmPaymentModal({ b, busy, isAr, ccy, onClose, onConfirm }: any) {
   );
 }
 
+/* ═════════════════ مودال الخصم — يدوي أو بنك العميل (BIN) — بدون تأكيد دفع ═════════════════
+   بيطبّق فورًا على الحجز ويحدّث الإجمالي، وتقدر بعدها تاخد لينك دفع أو تسيبه
+   للعميل يدفع في الفرع، من غير ما تكون مضطر تدوس "تأكيد الدفع". */
+function DiscountModal({ b, busy, isAr, ccy, onClose, onApply }: any) {
+  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const [mode, setMode] = useState<"manual" | "bank">(b.bankCode ? "bank" : "manual");
+
+  const [kind, setKind] = useState<"percent" | "fixed">((b.manualDiscountKind as any) || "percent");
+  const [value, setValue] = useState(b.manualDiscountValue ? String(b.manualDiscountValue) : "");
+  const [reason, setReason] = useState(b.manualDiscountReason || "");
+
+  const [bankDigits, setBankDigits] = useState("");
+  const [bankChecking, setBankChecking] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [bankPreview, setBankPreview] = useState<{ percent: number; label: string } | null>(null);
+
+  const beforePromo = Math.max(0, (Number(b.subtotal) || 0) + (Number(b.towing) || 0) - (Number(b.promoDiscount) || 0));
+  const rawVal = Math.max(0, Number(value) || 0);
+  const manualAmount = kind === "percent" ? Math.round((beforePromo * Math.min(100, rawVal)) / 100) : Math.min(rawVal, beforePromo);
+
+  const checkBank = async () => {
+    const d = bankDigits.replace(/\D/g, "").slice(0, 8);
+    if (d.length < 6) { setBankError(T("أدخل 6 أرقام على الأقل", "Enter at least 6 digits")); return; }
+    setBankChecking(true); setBankError(null);
+    try {
+      const res = await fetch("/api/bank-discount/check", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardDigits: d }),
+      });
+      const j = await res.json();
+      if (j?.ok) {
+        setBankPreview({ percent: j.percent, label: (isAr ? j.bankLabel?.ar : j.bankLabel?.en) || "" });
+      } else {
+        setBankPreview(null);
+        setBankError(T("الكارت ده مش من البنك الأهلي السعودي", "This card is not from Saudi National Bank"));
+      }
+    } catch {
+      setBankError(T("تعذّر التحقق، حاول تاني", "Could not verify, try again"));
+    } finally { setBankChecking(false); }
+  };
+
+  const submitManual = () => {
+    if (!rawVal) return;
+    onApply(b.id, { discount: { kind, value: rawVal, reason: reason.trim() || undefined } });
+  };
+  const submitBank = () => {
+    const d = bankDigits.replace(/\D/g, "").slice(0, 8);
+    if (d.length < 6 || !bankPreview) return;
+    onApply(b.id, { bankCardDigits: d });
+  };
+  const clearAll = () => onApply(b.id, { clear: true });
+
+  const hasExistingDiscount = Number(b.manualDiscountAmount) > 0 || Number(b.bankDiscountAmount) > 0;
+
+  return (
+    <Modal title={T("خصم الحجز", "Booking discount")} onClose={onClose}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{b.customer} · {b.vehicle}</div>
+        <div dir="ltr" className="abh-num" style={{ fontSize: 15, color: "var(--abh-ivory)", marginTop: 3 }}>{b.reference}</div>
+      </div>
+
+      {hasExistingDiscount && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, borderRadius: 12, border: "1px solid rgba(62,205,142,.35)", background: "rgba(62,205,142,.07)", padding: "10px 14px" }}>
+          <span style={{ fontSize: 12, color: "#3ecd8e" }}>
+            {b.bankCode
+              ? T(`خصم عملاء البنك الأهلي مطبَّق (${b.bankCode})`, `Bank customer discount applied (${b.bankCode})`)
+              : T(`خصم يدوي مطبَّق (${b.manualDiscountKind === "percent" ? `${b.manualDiscountValue}%` : `${EGP(b.manualDiscountValue)} ${ccy}`})`, "Manual discount applied")}
+          </span>
+          <button disabled={busy} onClick={clearAll} style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,.15)", background: "transparent", color: "var(--abh-platinum)", padding: "6px 12px", fontSize: 11, cursor: busy ? "default" : "pointer" }}>
+            {T("إزالة", "Remove")}
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button type="button" onClick={() => setMode("manual")}
+          style={{ flex: 1, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, border: `1px solid ${mode === "manual" ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.1)"}`, background: mode === "manual" ? "rgba(203,205,205,.1)" : "transparent", color: mode === "manual" ? "var(--abh-ivory)" : "var(--abh-platinum)", cursor: "pointer" }}>
+          {T("خصم يدوي", "Manual discount")}
+        </button>
+        <button type="button" onClick={() => setMode("bank")}
+          style={{ flex: 1, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, border: `1px solid ${mode === "bank" ? "rgba(159,212,176,.5)" : "rgba(255,255,255,.1)"}`, background: mode === "bank" ? "rgba(159,212,176,.1)" : "transparent", color: mode === "bank" ? "#9fd4b0" : "var(--abh-platinum)", cursor: "pointer" }}>
+          {T("خصم بنك العميل", "Bank customer")}
+        </button>
+      </div>
+
+      {mode === "manual" ? (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {(["percent", "fixed"] as const).map((k) => (
+              <button key={k} type="button" onClick={() => setKind(k)}
+                style={{ flex: 1, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, border: `1px solid ${kind === k ? "rgba(203,205,205,.5)" : "rgba(255,255,255,.1)"}`, background: kind === k ? "rgba(203,205,205,.1)" : "transparent", color: kind === k ? "var(--abh-ivory)" : "var(--abh-platinum)", cursor: "pointer" }}>
+                {k === "percent" ? T("نسبة %", "Percentage") : T("مبلغ ثابت", "Fixed amount")}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <input value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" dir="ltr"
+              placeholder={kind === "percent" ? "10" : "100"}
+              style={{ flex: 1, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: "center" }} />
+            <span style={{ display: "grid", placeItems: "center", fontSize: 13, color: "var(--abh-steel)", minWidth: 44 }}>{kind === "percent" ? "%" : ccy}</span>
+          </div>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={T("سبب الخصم (اختياري)", "Discount reason (optional)")}
+            style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 13, color: "var(--abh-ivory)", outline: "none" }} />
+          {rawVal > 0 && (
+            <p style={{ marginTop: 10, fontSize: 12.5, color: "var(--abh-platinum)" }}>
+              {T("قيمة الخصم", "Discount amount")}: <span style={{ color: "#3ecd8e" }}>−{EGP(manualAmount)} {ccy}</span>
+            </p>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button disabled={busy || !rawVal} onClick={submitManual}
+              style={{ opacity: busy || !rawVal ? .4 : 1, pointerEvents: busy || !rawVal ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "12px 24px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
+              {T("تطبيق الخصم", "Apply discount")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 18 }}>
+          <p style={{ fontSize: 11.5, color: "var(--abh-steel)", marginBottom: 10 }}>
+            {T("أول 6-8 أرقام من كارت العميل — خصم تلقائي 20% لعملاء البنك الأهلي السعودي.", "First 6-8 digits of the customer's card — automatic discount for Saudi National Bank customers.")}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={bankDigits} onChange={(e) => { setBankDigits(e.target.value.replace(/\D/g, "").slice(0, 8)); setBankError(null); setBankPreview(null); }}
+              dir="ltr" inputMode="numeric" maxLength={8}
+              placeholder={T("مثال: 4567 1234", "e.g. 4567 1234")}
+              style={{ flex: 1, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.03)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: "center", letterSpacing: ".1em" }} />
+            <button type="button" onClick={checkBank} disabled={bankChecking || bankDigits.length < 6}
+              style={{ borderRadius: 12, border: "1px solid rgba(159,212,176,.4)", background: bankChecking || bankDigits.length < 6 ? "rgba(255,255,255,.02)" : "rgba(159,212,176,.1)", color: bankChecking || bankDigits.length < 6 ? "var(--abh-steel)" : "var(--abh-ivory)", padding: "11px 18px", fontSize: 12.5, fontWeight: 600, cursor: bankChecking || bankDigits.length < 6 ? "not-allowed" : "pointer" }}>
+              {bankChecking ? T("جارٍ التحقق…", "Checking…") : T("تحقّق", "Verify")}
+            </button>
+          </div>
+          {bankError && <p style={{ marginTop: 8, fontSize: 11.5, color: "#e7b4b4" }}>{bankError}</p>}
+          {bankPreview && (
+            <div style={{ marginTop: 12, borderRadius: 12, border: "1px solid rgba(159,212,176,.4)", background: "rgba(159,212,176,.08)", padding: "12px 14px", fontSize: 12.5, color: "var(--abh-ivory)" }}>
+              {T(`تم التحقق — ${bankPreview.label || "البنك الأهلي"} — خصم ${bankPreview.percent}%`, `Verified — ${bankPreview.label || "SNB"} — ${bankPreview.percent}% off`)}
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button disabled={busy || !bankPreview} onClick={submitBank}
+              style={{ opacity: busy || !bankPreview ? .4 : 1, pointerEvents: busy || !bankPreview ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "12px 24px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#0c0d0e", background: "linear-gradient(135deg,#c3ecd1,#9fd4b0)", border: "none", cursor: "pointer" }}>
+              {T("تطبيق الخصم", "Apply discount")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Ghost onClick={onClose}>{T("إغلاق", "Close")}</Ghost>
+      </div>
+    </Modal>
+  );
+}
+
 /* ═════════════════ مودال التفاصيل ═════════════════ */
-function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onPrintWarranty, onConfirmPay, onGenLink, linkBusy }: any) {
+function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onPrintWarranty, onConfirmPay, onGenLink, linkBusy, onDiscount, isSuperAdmin, onOpenDanger }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
@@ -536,6 +687,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
   const promoDiscount = Number(b.promoDiscount) || 0;
   const isGiftCode = b.promoKind === "gift_service";
   const manualDiscountAmount = Number(b.manualDiscountAmount) || 0;
+  const bankDiscountAmount = Number(b.bankDiscountAmount) || 0;
 
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
@@ -548,7 +700,6 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10.5, fontWeight: 600, color: st.color, background: "rgba(0,0,0,.5)", border: `1px solid ${st.color}` }}><span style={{ height: 7, width: 7, borderRadius: 999, background: st.color }} />{isAr ? st.ar : st.en}</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
-              {b.isGuest && <span style={{ borderRadius: 999, padding: "5px 11px", fontSize: 10, color: "var(--abh-platinum)", background: "rgba(0,0,0,.5)", border: "1px solid rgba(203,205,205,.3)" }}>{T("زائر (بدون حساب)", "Guest (no account)")}</span>}
             </div>
             <div className="abh-display" style={{ fontSize: mobile ? 20 : 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
           </div>
@@ -557,12 +708,30 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
       </div>
       {mode === "view" && (
         <div className="abh-scale-in">
+          <SectionLabel>{I.user(13)} {T("جهة الحجز", "Booking source")}</SectionLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
+            {b.isGuest ? (
+              <span style={sourceBadgeStyle("#8a9099")}>
+                {I.user(13)}{T("زائر — بدون حساب مسجّل", "Guest — no registered account")}
+              </span>
+            ) : (
+              <span style={sourceBadgeStyle((ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).color)}>
+                {I.user(13)}{T("حساب مسجّل", "Registered account")} · {isAr ? (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).ar : (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).en}
+              </span>
+            )}
+            {b.viaPartner && (
+              <span style={sourceBadgeStyle("#9fd4b0")}>
+                {I.tag(13)}{T("عن طريق شريك", "Booked via partner")} · {b.viaPartner}
+              </span>
+            )}
+          </div>
+
           <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 14 }}>
-            <InfoTile icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
-            <InfoTile icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
-            <InfoTile icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
-            <InfoTile icon={I.city(14)} label={T("المدينة", "City")} value={b.city || "—"} />
+            <InfoTile isAr={isAr} icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
+            <InfoTile isAr={isAr} icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
+            <InfoTile isAr={isAr} icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
+            <InfoTile isAr={isAr} icon={I.city(14)} label={T("المدينة", "City")} value={b.city || "—"} />
           </div>
           {b.phone && (
             <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
@@ -573,10 +742,10 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
 
           <SectionLabel>{I.car(13)} {T("السيارة والموعد", "Vehicle & schedule")}</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
-            <InfoTile icon={I.car(14)} label={T("اللوحة", "Plate")} value={b.plate || "—"} ltr />
-            <InfoTile label={T("المقاس", "Size")} value={b.size || "—"} />
-            <InfoTile icon={<Ic.pin s={14} />} label={T("الفرع", "Branch")} value={b.branch} />
-            <InfoTile icon={<Ic.clock s={14} />} label={T("الموعد", "Date & time")} value={`${fmtDate(b.date)} · ${b.time}`} />
+            <InfoTile isAr={isAr} icon={I.car(14)} label={T("اللوحة", "Plate")} value={b.plate || "—"} ltr />
+            <InfoTile isAr={isAr} label={T("المقاس", "Size")} value={b.size || "—"} />
+            <InfoTile isAr={isAr} icon={<Ic.pin s={14} />} label={T("الفرع", "Branch")} value={b.branch} />
+            <InfoTile isAr={isAr} icon={<Ic.clock s={14} />} label={T("الموعد", "Date & time")} value={`${fmtDate(b.date)} · ${b.time}`} />
           </div>
 
           {b.services.length > 0 && (
@@ -656,8 +825,12 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
                 {linkBusy ? T("جارٍ التوليد…", "Generating…") : T("لينك الدفع", "Payment link")}
               </Ghost>
             )}
+            {!pay.paid && b.status !== "cancelled" && (
+              <Ghost icon={() => I.tag(15)} onClick={onDiscount}>{T("تعديل الخصم", "Edit discount")}</Ghost>
+            )}
             {canModify && <Ghost icon={() => I.calClock(15)} onClick={() => setMode("reschedule")}>{T("إعادة جدولة", "Reschedule")}</Ghost>}
             {canModify && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
+            {isSuperAdmin && <Ghost danger icon={() => I.tag(15)} onClick={onOpenDanger}>{T("إدارة متقدّمة (سوبر أدمن)", "Advanced (super admin)")}</Ghost>}
           </div>
           {/* ملاحظة عند قفل التعديلات (بدأ التنفيذ + الدفع تم) */}
           {locked && (
@@ -841,14 +1014,120 @@ function FollowUpModal({ b, busy, isAr, onClose, onAddNote, onCloseFollowup, onR
   );
 }
 
+/* ═════════════════ مودال الإدارة المتقدّمة (سوبر أدمن فقط) ═════════════════
+   تغيير الحالة يدويًا (كل التوابع تتظبط تلقائيًا في السيرفر) + حذف نهائي كامل. */
+function DangerZoneModal({ b, busy, isAr, onClose, onForceStatus, onDelete }: any) {
+  const T = (ar: string, en: string) => (isAr ? ar : en);
+  const [reason, setReason] = useState("");
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTyped, setDeleteTyped] = useState("");
+
+  const STATUSES: [string, string, string][] = [
+    ["upcoming", T("قادم", "Upcoming"), "#8a9099"],
+    ["active", T("قيد التنفيذ", "In progress"), "#f5993d"],
+    ["completed", T("مكتمل", "Completed"), "#3ecd8e"],
+    ["cancelled", T("ملغي", "Cancelled"), "#ef5a4d"],
+  ];
+
+  async function confirmForce() {
+    if (!pendingStatus) return;
+    if (pendingStatus === "cancelled" && !reason.trim()) return;
+    const ok = await onForceStatus(b.id, pendingStatus, reason.trim() || undefined);
+    if (ok) { setPendingStatus(null); setReason(""); }
+  }
+
+  return (
+    <Modal title={T("إدارة متقدّمة — سوبر أدمن", "Advanced — super admin")} onClose={onClose}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{b.customer} · {b.vehicle}</div>
+        <div dir="ltr" className="abh-num" style={{ fontSize: 15, color: "var(--abh-ivory)", marginTop: 3 }}>{b.reference}</div>
+      </div>
+
+      {/* تغيير الحالة يدويًا */}
+      <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.02)", padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 12 }}>
+          {T("تغيير الحالة يدويًا", "Force status change")}
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--abh-steel)", marginBottom: 12, lineHeight: 1.6 }}>
+          {T("كل ما يترتب على الحالة (المرحلة، مرحلة العمل، تاريخ التسليم، رد المبلغ لو مدفوع) هيتظبط تلقائيًا.", "Everything derived from status (stage, work stage, delivery date, refund if paid) is adjusted automatically.")}
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8, marginBottom: pendingStatus ? 12 : 0 }}>
+          {STATUSES.map(([k, l, c]) => {
+            const on = pendingStatus === k;
+            const current = b.status === k;
+            return (
+              <button key={k} type="button" disabled={current} onClick={() => setPendingStatus(k)}
+                style={{ borderRadius: 12, padding: "10px 12px", fontSize: 12, border: `1px solid ${on ? c : "rgba(255,255,255,.1)"}`, background: on ? `${c}1a` : current ? "rgba(255,255,255,.03)" : "transparent", color: current ? "var(--abh-steel)" : on ? c : "var(--abh-platinum)", cursor: current ? "not-allowed" : "pointer", opacity: current ? .5 : 1 }}>
+                {l}{current ? ` (${T("الحالية", "current")})` : ""}
+              </button>
+            );
+          })}
+        </div>
+        {pendingStatus && (
+          <>
+            {pendingStatus === "cancelled" && (
+              <Textarea rows={2} value={reason} onChange={(e: any) => setReason(e.target.value)} placeholder={T("سبب الإلغاء (إجباري)…", "Cancellation reason (required)…")} style={{ marginBottom: 10 }} />
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Ghost sm onClick={() => { setPendingStatus(null); setReason(""); }}>{T("تراجع", "Back")}</Ghost>
+              <button disabled={busy || (pendingStatus === "cancelled" && !reason.trim())} onClick={confirmForce}
+                style={{ opacity: busy || (pendingStatus === "cancelled" && !reason.trim()) ? .4 : 1, pointerEvents: busy ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "10px 20px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#000", background: "linear-gradient(135deg,#fff,#cbcdcd)", border: "none", cursor: "pointer" }}>
+                {Ic.check({ s: 14 })}{T("تأكيد التغيير", "Confirm change")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* حذف نهائي */}
+      <div style={{ borderRadius: 16, border: "1px solid rgba(239,90,77,.35)", background: "rgba(239,90,77,.06)", padding: 16 }}>
+        <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "#ef5a4d", marginBottom: 12 }}>
+          {T("حذف الحجز نهائيًا", "Permanently delete booking")}
+        </div>
+        <p style={{ fontSize: 11.5, color: "#f0b3ac", marginBottom: 12, lineHeight: 1.6 }}>
+          {T("هيمسح الحجز وكل ما يخصه بدون رجعة: الخدمات، المهام، الفنيين المخصصين، الخامات المصروفة، الصور، التوقيعات، سجل الحالة، المتابعات، استخدام أكواد الخصم. لا يمكن التراجع.", "Deletes the booking and everything tied to it, irreversibly: services, tasks, assigned technicians, issued materials, photos, signatures, status history, follow-ups, promo redemption. Cannot be undone.")}
+        </p>
+        {!confirmDelete ? (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Ghost danger icon={Ic.trash} onClick={() => setConfirmDelete(true)}>{T("حذف نهائي…", "Delete forever…")}</Ghost>
+          </div>
+        ) : (
+          <>
+            <p style={{ fontSize: 11.5, color: "#f0b3ac", marginBottom: 8 }}>
+              {T(`اكتب رقم الحجز للتأكيد: `, `Type the booking reference to confirm: `)}<span dir="ltr" style={{ fontWeight: 700 }}>{b.reference}</span>
+            </p>
+            <input value={deleteTyped} onChange={(e) => setDeleteTyped(e.target.value)} dir="ltr"
+              style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(239,90,77,.4)", background: "rgba(0,0,0,.2)", padding: "11px 14px", fontSize: 14, color: "var(--abh-ivory)", outline: "none", textAlign: "center", marginBottom: 12 }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Ghost sm onClick={() => { setConfirmDelete(false); setDeleteTyped(""); }}>{T("تراجع", "Cancel")}</Ghost>
+              <button disabled={busy || deleteTyped.trim() !== b.reference} onClick={() => onDelete(b.id)}
+                style={{ opacity: busy || deleteTyped.trim() !== b.reference ? .4 : 1, pointerEvents: busy || deleteTyped.trim() !== b.reference ? "none" : "auto", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "10px 20px", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", color: "#f0c9c9", background: "rgba(42,20,20,.7)", border: "1px solid rgba(239,90,77,.5)", cursor: "pointer" }}>
+                {Ic.trash({ s: 14 })}{T("حذف نهائي", "Delete forever")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+        <Ghost onClick={onClose}>{T("إغلاق", "Close")}</Ghost>
+      </div>
+    </Modal>
+  );
+}
+
 function SectionLabel({ children }: any) {
   return <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11, fontSize: 10.5, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--abh-platinum)" }}><span style={{ display: "inline-flex" }}>{children}</span></div>;
 }
-function InfoTile({ icon, label, value, ltr, href }: any) {
+function InfoTile({ icon, label, value, ltr, href, isAr }: any) {
   const inner = (
     <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)", padding: "11px 14px", height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{icon}{label}</div>
-      <div dir={ltr ? "ltr" : undefined} style={{ marginTop: 5, fontSize: 14, color: href ? "#bfe3cf" : "var(--abh-ivory)", wordBreak: "break-word", textAlign: ltr ? "start" : undefined }}>{value}</div>
+      {/* الاتجاه (ltr) بيفضل للأرقام/الإيميل عشان ترتيبها يفضل صح،
+          لكن المحاذاة دايمًا بتتبع لغة الصفحة — يمين في العربي، شمال في الإنجليزي —
+          عشان القيمة تفضل تحت الليبل بالظبط زي باقي الكروت. */}
+      <div dir={ltr ? "ltr" : undefined} style={{ marginTop: 5, fontSize: 14, color: href ? "#bfe3cf" : "var(--abh-ivory)", wordBreak: "break-word", textAlign: isAr ? "right" : "left" }}>{value}</div>
     </div>
   );
   return href ? <a href={href} style={{ textDecoration: "none" }}>{inner}</a> : inner;
@@ -869,7 +1148,7 @@ function PanelHead({ title, sub, onBack, isAr }: any) {
 }
 
 /* ═════════════════ المكوّن الرئيسي ═════════════════ */
-export default function BookingsClient({ initial, locale }: { initial: any[]; locale?: string }) {
+export default function BookingsClient({ initial, locale, isSuperAdmin }: { initial: any[]; locale?: string; isSuperAdmin?: boolean }) {
   const isAr = locale !== "en";
   const ccy = isAr ? "ريال" : "SAR";
   const T = (ar: string, en: string) => (isAr ? ar : en);
@@ -890,6 +1169,8 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmPayId, setConfirmPayId] = useState<string | null>(null);
   const [followupId, setFollowupId] = useState<string | null>(null);
+  const [discountId, setDiscountId] = useState<string | null>(null);
+  const [dangerZoneId, setDangerZoneId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [linkBusyId, setLinkBusyId] = useState<string | null>(null);
   const mobile = useMediaQuery("(max-width: 640px)");
@@ -940,6 +1221,8 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   const detail = detailId ? list.find((b) => b.id === detailId) : null;
   const confirmPayBooking = confirmPayId ? list.find((b) => b.id === confirmPayId) : null;
   const followup = followupId ? list.find((b) => b.id === followupId) : null;
+  const discountBooking = discountId ? list.find((b) => b.id === discountId) : null;
+  const dangerZoneBooking = dangerZoneId ? list.find((b) => b.id === dangerZoneId) : null;
 
   async function mutate(id: string, body: any) {
     setBusy(true);
@@ -952,6 +1235,7 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
         body.action === "cancel" ? T("تم إلغاء الحجز", "Booking cancelled") :
         body.action === "reschedule" ? T("تم تغيير الموعد", "Rescheduled") :
         body.action === "confirm_pay" ? T("تم تأكيد الدفع", "Payment confirmed") :
+        body.action === "set_discount" ? (body.clear ? T("تمت إزالة الخصم", "Discount removed") : T("تم تطبيق الخصم", "Discount applied")) :
         body.action === "followup_close" ? T("تم إقفال المتابعة", "Follow-up closed") :
         body.action === "followup_reopen" ? T("تم إعادة فتح المتابعة", "Follow-up reopened") :
         body.action === "followup_add" ? T("تمت إضافة المتابعة", "Follow-up added") :
@@ -962,10 +1246,42 @@ export default function BookingsClient({ initial, locale }: { initial: any[]; lo
   }
 
   const openConfirmPay = (b: any) => setConfirmPayId(b.id);
-const confirmPaymentWithDiscount = async (id: string, discount?: { kind: string; value: number; reason?: string }) => {
-  await mutate(id, { action: "confirm_pay", discount });
+const confirmPayment = async (id: string) => {
+  await mutate(id, { action: "confirm_pay" });
   setConfirmPayId(null);
 };
+const applyDiscount = async (id: string, payload: { discount?: { kind: string; value: number; reason?: string }; bankCardDigits?: string; clear?: boolean }) => {
+  await mutate(id, { action: "set_discount", ...payload });
+  setDiscountId(null);
+};
+
+// (سوبر أدمن) تغيير الحالة يدويًا مع ضبط كل التوابع تلقائيًا في السيرفر
+async function forceStatus(id: string, status: string, reason?: string) {
+  setBusy(true);
+  try {
+    const res = await fetch("/api/admin/bookings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "force_status", status, reason }) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "fail");
+    setList((ls) => ls.map((b) => (b.id === id ? { ...b, ...data.booking } : b)));
+    toast(T("تم تغيير الحالة", "Status changed"));
+    return true;
+  } catch { toast(T("فشل تغيير الحالة", "Failed to change status"), "bad"); return false; }
+  finally { setBusy(false); }
+}
+
+// (سوبر أدمن) حذف الحجز نهائيًا مع كل ما يخصه
+async function deleteBookingForever(id: string) {
+  setBusy(true);
+  try {
+    const res = await fetch(`/api/admin/bookings/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "fail");
+    setList((ls) => ls.filter((b) => b.id !== id));
+    setDetailId(null);
+    toast(T("تم حذف الحجز نهائيًا", "Booking permanently deleted"));
+  } catch { toast(T("فشل الحذف", "Delete failed"), "bad"); }
+  finally { setBusy(false); }
+}
 
 // (جديد) توليد لينك دفع ونسخه — عشان تبعته للعميل يدفع بيه أونلاين
 async function genPaymentLink(id: string) {
@@ -1111,7 +1427,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} onDiscount={setDiscountId} />
           ))}
         </div>
       ) : (
@@ -1119,12 +1435,22 @@ async function addFollowupNote(id: string, channel: string, note: string) {
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} onDiscount={() => setDiscountId(detail.id)} isSuperAdmin={isSuperAdmin} onOpenDanger={() => setDangerZoneId(detail.id)} />}
       {confirmPayBooking && (
         <ConfirmPaymentModal b={confirmPayBooking} busy={busy} isAr={isAr} ccy={ccy}
-          onClose={() => setConfirmPayId(null)} onConfirm={confirmPaymentWithDiscount} />
+          onClose={() => setConfirmPayId(null)} onConfirm={confirmPayment} />
+      )}
+      {discountBooking && (
+        <DiscountModal b={discountBooking} busy={busy} isAr={isAr} ccy={ccy}
+          onClose={() => setDiscountId(null)} onApply={applyDiscount} />
       )}
       {followup && <FollowUpModal b={followup} busy={busy} isAr={isAr} onClose={() => setFollowupId(null)} onAddNote={addFollowupNote} onCloseFollowup={closeFollowup} onReopenFollowup={reopenFollowup} />}
+      {dangerZoneBooking && (
+        <DangerZoneModal b={dangerZoneBooking} busy={busy} isAr={isAr}
+          onClose={() => setDangerZoneId(null)}
+          onForceStatus={forceStatus}
+          onDelete={deleteBookingForever} />
+      )}
       <style>{`
         @media(min-width:680px){.abh-resched-grid{grid-template-columns:1fr 1fr!important}}
         @media(max-width:620px){.abh-row{grid-template-columns:auto 1fr auto!important}.abh-row>div:nth-child(3),.abh-row>div:nth-child(4){display:none!important}}

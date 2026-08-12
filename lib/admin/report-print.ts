@@ -39,6 +39,8 @@ export type ReportData = {
     actualMinutes: number | null;
     qcStatus: string | null;
     reworkCount: number;
+    usesRoll?: boolean;
+    rollNo?: string;
     technicians: { name: string; startedAt: string | null; doneAt: string | null }[];
     materials: { name: string; unit: string; quantity: number }[];
   }[];
@@ -133,6 +135,10 @@ function reportHtml(r: ReportData, isAr: boolean, ccy: string) {
             ${approved ? `<span style="color:#1f9d6b;font-weight:700;">✓ ${T("معتمدة", "Approved")}</span>` : ""}
           </span>
         </div>
+        ${t.usesRoll && t.rollNo ? `<div style="display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:4px 10px;margin-bottom:9px;background:#faf5e8;border:1px solid #e8d6a8;">
+          <span style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:${GOLD};font-weight:700;">${T("رول", "Roll")}</span>
+          <span dir="ltr" style="font-size:11.5px;color:#4a4d52;font-weight:700;">#${esc(t.rollNo)}</span>
+        </div>` : ""}
         ${techs ? `<div style="margin-bottom:${mats ? "7px" : "0"};"><span style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#9a9ea4;margin-inline-end:6px;">${T("الفنيون", "Technicians")}</span>${techs}</div>` : ""}
         ${mats ? `<div><span style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#9a9ea4;margin-inline-end:6px;">${T("الخامات", "Materials")}</span>${mats}</div>` : ""}
         ${t.reworkCount > 0 ? `<div style="margin-top:7px;font-size:10.5px;color:#b9810f;font-weight:600;">${T(`أُعيد العمل ${t.reworkCount} مرة`, `Reworked ${t.reworkCount}×`)}</div>` : ""}
@@ -244,6 +250,21 @@ function reportHtml(r: ReportData, isAr: boolean, ccy: string) {
       ${cardOpen(T("تفاصيل التنفيذ", "Execution details"))}
         ${taskCards || `<div style="text-align:center;color:#6c7077;font-size:12px;padding:10px;">${T("لا مهام", "No tasks")}</div>`}
       ${cardClose}
+
+      ${(() => {
+        const rolls = r.tasks.filter((t) => t.usesRoll && t.rollNo);
+        if (rolls.length === 0) return "";
+        return `
+        <div style="display:flex;align-items:center;gap:14px;border:1px solid #e7e3d8;border-radius:14px;padding:13px 18px;background:linear-gradient(180deg,#fff,#faf8f2);margin-bottom:16px;break-inside:avoid;">
+          <span style="display:grid;place-items:center;height:36px;width:36px;flex-shrink:0;border-radius:10px;background:#0c0d0e;color:${GOLD};font:700 13px Georgia,serif;">R</span>
+          <div>
+            <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#9a9ea4;margin-bottom:3px;">${T("أرقام الرول المستخدَمة", "Roll numbers used")}</div>
+            <div style="font-size:13px;color:#15161a;font-weight:700;">
+              ${rolls.map((t) => `${esc(t.name)} — <span dir="ltr" style="color:${GOLD};">#${esc(t.rollNo)}</span>`).join(`&nbsp;&nbsp;|&nbsp;&nbsp;`)}
+            </div>
+          </div>
+        </div>`;
+      })()}
 
       <!-- الصور -->
       ${photosCard}

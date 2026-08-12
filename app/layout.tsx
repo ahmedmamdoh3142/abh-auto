@@ -147,8 +147,8 @@ export default async function RootLayout({
       dir={dir}
       className={`${fontDisplay.variable} ${fontEditorial.variable} ${fontSans.variable} ${fontArabic.variable}`}
       suppressHydrationWarning
-    >
-      <body className="cursor-luxury overflow-x-hidden bg-obsidian font-sans antialiased">
+    ><body className="overflow-x-hidden bg-obsidian font-sans antialiased">
+      
         {/* Google Tag Manager — fallback بدون جافاسكربت */}
         <GoogleAnalyticsNoScript />
         {/* تحميل GTM/GA4 + تتبّع تغيير الصفحات (Suspense لأجل useSearchParams) */}

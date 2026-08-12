@@ -64,23 +64,19 @@ export function Navbar() {
       <header className="nav-enter fixed top-0 left-0 right-0 z-50 px-3 md:px-6 pt-3 md:pt-5">
         <div
           className={cn(
-            'mx-auto flex items-center justify-between transition-all duration-700',
-            'rounded-full px-5 md:px-7 py-3',
-            scrolled
-              ? 'max-w-6xl glass-strong shadow-glow-platinum'
-              : 'max-w-7xl bg-transparent border border-transparent',
+            'mx-auto flex items-center justify-between transition-shadow duration-700',
+            'max-w-7xl rounded-full px-5 md:px-7 py-3',
+            'border border-white/10 bg-obsidian/35 backdrop-blur-xl',
+            scrolled && 'shadow-glow-platinum border-white/15 bg-obsidian/55',
           )}
         >
           <Link href="/" data-cursor="hover" className="flex-shrink-0">
-            <span
-              className="block overflow-hidden transition-[width] duration-700 ease-out"
-              style={{ width: scrolled ? 110 : 150 }}
-            >
+            <span className="block w-[130px] overflow-hidden">
               <Logo size={150} className="w-full h-auto" />
             </span>
           </Link>
 
-          <nav className="hidden lg:flex items-center gap-1">
+          <nav className="hidden lg:flex flex-nowrap items-center gap-1">
             {navLinks.map((link) => {
               const hasChildren = 'children' in link && !!link.children?.length;
               if (hasChildren) {
@@ -96,7 +92,7 @@ export function Navbar() {
                 >
                   <span
                     className={cn(
-                      'text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
+                      'whitespace-nowrap text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
                       active ? 'text-ivory' : 'text-platinum/70 group-hover:text-ivory',
                     )}
                   >
@@ -255,7 +251,7 @@ function NavDropdown({ link, pathname, t }: { link: NavItem; pathname: string; t
       >
         <span
           className={cn(
-            'text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
+            'whitespace-nowrap text-[0.8rem] uppercase tracking-[0.22em] transition-colors duration-300',
             active || open ? 'text-ivory' : 'text-platinum/70 group-hover:text-ivory',
           )}
         >

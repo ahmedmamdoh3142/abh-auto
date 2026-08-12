@@ -256,7 +256,7 @@ function DatePopover({ isAr, value, display, placeholder, calMonth, setCalMonth,
         {open && (
           <motion.div initial={{ opacity: 0, y: place === 'up' ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: place === 'up' ? 8 : -8 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className={`absolute z-40 max-md:end-0 ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/95 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}>
+            className={`absolute z-40 max-md:left-0 max-md:right-auto ${place === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} w-[300px] max-w-[90vw] rounded-2xl border border-white/12 bg-[#0c0d0e]/95 p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl`}>
             <div className="mb-3 flex items-center justify-between">
               <button type="button" data-cursor="hover" disabled={prevDisabled} onClick={() => nav(-1)}
                 className="grid h-8 w-8 place-items-center rounded-full border border-white/12 text-platinum transition-all duration-300 hover:border-white/30 hover:text-ivory disabled:cursor-not-allowed disabled:opacity-30">

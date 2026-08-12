@@ -4,12 +4,17 @@
  * JsCheckoutPanel — الدفع بالبطاقة مدمج جوّه صفحة التأكيد (JS Checkout SDK)
  * بدل التحويل لصفحة AlinmaPay المنفصلة. حقول الكارت من تصميم AlinmaPay،
  * لكن الحاوية والعنوان والألوان من هويتنا احنا.
+ *
+ * (إصلاح) الكونتينر #pg-card-box لازم يفضل موجود ومرئي في الـDOM من أول
+ * لحظة — لأن AlinmaPay SDK بيرندر فورم الكارت جواه بشكل متزامن وقت
+ * window.PG.startPayment()، وده بيحصل قبل ما تحديث state الخاص بينا
+ * (loading/ready) يوصل فعليًا للـDOM. لو الكونتينر كان مخفي (display:none)
+ * وقتها، الـSDK بيفشل يرندر أو بيرمي إيرور. الحل: الكونتينر يفضل ظاهر
+ * دايمًا، واللودينج/الإيرور بيتحطوا فوقه كطبقة (overlay) بس.
  */
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ShieldCheck, Loader2, ArrowLeft } from 'lucide-react';
-
-const EASE = [0.16, 1, 0.3, 1] as const;
+import { Loader2 } from 'lucide-react';
+import { ShieldCheck, ArrowLeft } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -35,6 +40,12 @@ export function JsCheckoutPanel({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
+
+  // (إصلاح) نحتفظ بأحدث نسخة من onSuccess في ref بدل ما نحطها في dependency
+  // array بتاع الـuseEffect — لأنها function جديدة كل رندر من الأب، وكانت
+  // بتعمل إعادة تحميل/تهيئة لبوابة الدفع من غير داعي كل ما الصفحة تتحدّث.
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
 
   useEffect(() => {
     let alive = true;
@@ -62,15 +73,17 @@ export function JsCheckoutPanel({
         const boot = () => {
           if (!alive || !window.PG) return;
           window.PG.init({
-            onSuccess: () => { if (alive) onSuccess(); },
+            onSuccess: () => { if (alive) onSuccessRef.current(); },
             onFailure: (e: any) => {
               if (!alive) return;
               setStatus('error');
               setErrorMsg(e?.msg || (isAr ? 'فشلت عملية الدفع' : 'Payment failed'));
             },
           });
-          setStatus('ready');
+          // الكونتينر جاهز وظاهر بالفعل في الـDOM (مش مربوط بالـstate) —
+          // فآمن نستدعي startPayment فورًا من غير ما نستنى إعادة رندر.
           if (!startedRef.current) { startedRef.current = true; window.PG.startPayment(); }
+          setStatus('ready');
         };
 
         if (existing && window.PG) { boot(); return; }
@@ -95,10 +108,11 @@ export function JsCheckoutPanel({
     })();
 
     return () => { alive = false; };
-  }, [bookingId, amount, isAr, onSuccess]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, amount, isAr]);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
+    <div>
       <div className="mb-6 flex items-center gap-3.5">
         <button onClick={onBack} data-cursor="hover"
           className="grid h-9 w-9 place-items-center rounded-full border border-white/12 text-platinum/70 transition-colors hover:border-white/30 hover:text-ivory">
@@ -121,30 +135,34 @@ export function JsCheckoutPanel({
           <span dir="ltr" className="font-display text-lg text-ivory tabular-nums">{amount.toFixed(2)} <span className="text-xs text-platinum/60">SAR</span></span>
         </div>
 
-        {status === 'loading' && (
-          <div className="flex flex-col items-center gap-3 py-14 text-platinum/60">
-            <Loader2 className="h-6 w-6 animate-spin" strokeWidth={1.8} />
-            <span className="text-sm">{isAr ? 'جارٍ تجهيز صفحة الدفع…' : 'Preparing checkout…'}</span>
-          </div>
-        )}
+        {/* حاوية فورم الكارت — تفضل موجودة وظاهرة في الـDOM دايمًا؛ اللودينج/الإيرور
+            بيتحطوا فوقها كطبقة (overlay) عشان الـSDK يقدر يرندر جواها بنجاح
+            من أول لحظة، أيًا كانت حالة الـstate. */}
+        <div className="relative min-h-[220px]">
+          <div id="pg-card-box" ref={containerRef} />
 
-        {status === 'error' && (
-          <div className="flex flex-col items-center gap-4 py-10 text-center">
-            <span className="text-sm text-[#e7b4b4]">{errorMsg}</span>
-            <button onClick={onBack} data-cursor="hover"
-              className="rounded-full border border-white/15 px-6 py-2.5 text-[0.68rem] uppercase tracking-[0.14em] text-ivory hover:border-white/30">
-              {isAr ? 'رجوع' : 'Back'}
-            </button>
-          </div>
-        )}
+          {status === 'loading' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-obsidian/95 text-platinum/60">
+              <Loader2 className="h-6 w-6 animate-spin" strokeWidth={1.8} />
+              <span className="text-sm">{isAr ? 'جارٍ تجهيز صفحة الدفع…' : 'Preparing checkout…'}</span>
+            </div>
+          )}
 
-        {/* حاوية فورم الكارت — AlinmaPay بترندر جواها. لازم تفضل في الـDOM حتى وإحنا في loading */}
-        <div id="pg-card-box" ref={containerRef} className={status === 'ready' ? '' : 'hidden'} />
+          {status === 'error' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-obsidian/95 text-center">
+              <span className="text-sm text-[#e7b4b4]">{errorMsg}</span>
+              <button onClick={onBack} data-cursor="hover"
+                className="rounded-full border border-white/15 px-6 py-2.5 text-[0.68rem] uppercase tracking-[0.14em] text-ivory hover:border-white/30">
+                {isAr ? 'رجوع' : 'Back'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="mt-4 text-center text-[0.66rem] leading-relaxed text-steel/60">
         {isAr ? 'بياناتك تُدخل مباشرة على بوابة AlinmaPay المشفّرة — لا نطّلع على أرقام بطاقتك.' : "Your details go straight to AlinmaPay's encrypted gateway — we never see your card number."}
       </p>
-    </motion.div>
+    </div>
   );
 }

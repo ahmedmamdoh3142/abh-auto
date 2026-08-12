@@ -15,7 +15,9 @@
     "contact": "تواصل معنا",
     "login": "تسجيل الدخول",
     "cta": "احجز حمايتك",
-    "warranty": "الضمان"   
+    "warranty": "الضمان",
+    "warrantyPolicy": "سياسة الضمان",
+    "warrantyBooking": "حجز صيانة"
   },
   "hero": {
     "eyebrow": "تأسست 2022 · جدة",

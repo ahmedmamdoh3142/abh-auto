@@ -48,7 +48,7 @@ const FALLBACK_COLORS: DbColor[] = COLORS.map((c) => ({ key: c.key, hex: c.hex, 
 
 export function StepVehicle({
   t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors, onAddCustomModel,
-  maintenanceCovered = [], onStartMaintenance,
+  maintenanceCovered = [], onStartMaintenance, maintenanceIntent = false,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -63,6 +63,8 @@ export function StepVehicle({
   /** (جديد) الضمانات السارية على اللوحة الحالية — لعرض بانر «صيانة مجانية». */
   maintenanceCovered?: WarrantyCoverage[];
   onStartMaintenance?: (w: WarrantyCoverage) => void;
+  /** (جديد) جاي من رابط «حجز صيانة» في الناف بار. */
+  maintenanceIntent?: boolean;
 }) {
   const palette = colors && colors.length > 0 ? colors : FALLBACK_COLORS;
   const brand = brands.find((b) => b.id === data.brandId);
@@ -110,6 +112,15 @@ export function StepVehicle({
         {mode === 'pick' && garage.length > 0 ? (
           <div>
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.garageTitle')} sub={t('step1.garageHint')} />
+
+            {maintenanceIntent && !data.isMaintenance && (
+              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
+                <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
+                <span className="text-[0.78rem] leading-relaxed text-ivory/85">
+                  {isAr ? 'اختر سيارتك من الجراج وهنتحقق من ضمان الصيانة تلقائيًا.' : "Pick your car from the garage and we'll check its warranty automatically."}
+                </span>
+              </div>
+            )}
 
             <div className="mt-9 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               {garage.map((v, i) => {
@@ -170,6 +181,17 @@ export function StepVehicle({
         ) : (
           <div>
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.heading')} sub={t('step1.subheading')} />
+
+            {maintenanceIntent && !data.isMaintenance && (
+              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
+                <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
+                <span className="text-[0.78rem] leading-relaxed text-ivory/85">
+                  {digits.length > 0 && maintenanceCovered.length === 0
+                    ? (isAr ? 'لم نجد ضمانًا ساريًا على هذه اللوحة — تأكد من الأرقام أو تابع كحجز جديد.' : "We couldn't find an active warranty for this plate — double-check the numbers, or continue as a new booking.")
+                    : (isAr ? 'أدخل بيانات سيارتك ولوحتها للتحقق من ضمان الصيانة تلقائيًا.' : "Enter your vehicle and plate to check your warranty automatically.")}
+                </span>
+              </div>
+            )}
 
             {garage.length > 0 && (
               <button data-cursor="hover" onClick={() => setMode('pick')}

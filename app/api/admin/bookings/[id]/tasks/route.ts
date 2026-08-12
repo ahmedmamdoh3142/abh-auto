@@ -56,7 +56,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // نجلب المهام كاملة مع الفنيين + الخامات
     const rows = await query<any>(
       `SELECT t.id, t.name_snapshot, t.status, t.estimated_minutes, t.started_at, t.finished_at, t.sort,
-              t.qc_status, t.qc_note, t.qc_at, t.rework_count,
+              t.qc_status, t.qc_note, t.qc_at, t.rework_count, t.uses_roll, t.roll_no,
               COALESCE((
                 SELECT json_agg(json_build_object('id', tt.technician_id, 'name', u.name, 'startedAt', tt.started_at, 'confirmedAt', tt.confirmed_done_at) ORDER BY tt.id)
                 FROM task_technicians tt JOIN users u ON u.id = tt.technician_id
@@ -91,6 +91,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       qcStatus: t.qc_status || null,
       qcNote: t.qc_note || null,
       reworkCount: Number(t.rework_count) || 0,
+      usesRoll: !!t.uses_roll,
+      rollNo: t.roll_no || "",
     }));
 
     // الخامات المتاحة في المخزن الوسيط (للصرف على المهام)

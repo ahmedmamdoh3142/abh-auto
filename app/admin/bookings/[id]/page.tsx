@@ -24,7 +24,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             b.scheduled_date, b.scheduled_time,
             b.subtotal, b.towing_cost, b.total,
             b.payment_method_code, b.payment_status,
-            b.supervisor_notes, b.payment_proof_url, b.received_at,
+            b.supervisor_notes, b.payment_proof_url, b.received_at, b.odometer_km,
             COALESCE(b.customer_name, u.name)      AS customer_name,
             COALESCE(b.customer_phone, u.phone)    AS customer_phone,
             COALESCE(b.customer_email, u.email::text) AS customer_email,
@@ -97,6 +97,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
     supervisorNotes: b.supervisor_notes || "",
     paymentProofUrl: b.payment_proof_url || "",
     receivedAt: b.received_at ? new Date(b.received_at).toISOString() : null,
+    odometerKm: b.odometer_km != null ? Number(b.odometer_km) : null,
     services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,

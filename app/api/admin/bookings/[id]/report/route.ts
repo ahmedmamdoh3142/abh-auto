@@ -38,6 +38,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // المهام + الفنيين + الخامات
     const taskRows = await query<any>(
       `SELECT t.id, t.name_snapshot, t.estimated_minutes, t.status, t.qc_status, t.qc_note, t.rework_count,
+              t.uses_roll, t.roll_no,
               COALESCE((
                 SELECT json_agg(json_build_object('name', u.name, 'startedAt', tt.started_at, 'doneAt', tt.confirmed_done_at) ORDER BY tt.id)
                 FROM task_technicians tt JOIN users u ON u.id = tt.technician_id WHERE tt.task_id = t.id
@@ -61,6 +62,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         actualMinutes: actualMin,
         qcStatus: t.qc_status,
         reworkCount: Number(t.rework_count) || 0,
+        usesRoll: !!t.uses_roll,
+        rollNo: t.roll_no || "",
         technicians: techs.map((x: any) => ({ name: x.name, startedAt: x.startedAt, doneAt: x.doneAt })),
         materials: (Array.isArray(t.materials) ? t.materials : []).map((m: any) => ({
           name: pick(m.name, locale) || "—", unit: m.unit, quantity: Number(m.quantity) || 0,

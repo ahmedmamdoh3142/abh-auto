@@ -9,10 +9,6 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
-const LuxuryCursor = dynamic(
-  () => import('@/components/shared/luxury-cursor').then((m) => m.LuxuryCursor),
-  { ssr: false }
-);
 const AmbientOrbs = dynamic(
   () => import('@/components/shared/ambient-orbs').then((m) => m.AmbientOrbs),
   { ssr: false }
@@ -45,7 +41,6 @@ export function DeferredChrome() {
   if (!ready) return null;
   return (
     <>
-      <LuxuryCursor />
       <AmbientOrbs />
       <ScrollProgress />
     </>

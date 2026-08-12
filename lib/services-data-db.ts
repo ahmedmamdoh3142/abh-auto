@@ -37,6 +37,7 @@ export async function getServicesData(_locale?: Locale, userId?: string | null) 
             s.description AS description_raw,
             s.card_image,
             s.badge,
+            s.tier_code,
             s.duration AS duration_raw,
             s.warranty_duration AS warranty_raw,
             COALESCE((SELECT jsonb_object_agg(sp.size_code, sp.price)
@@ -83,6 +84,7 @@ export async function getServicesData(_locale?: Locale, userId?: string | null) 
       description: r.description_raw ?? { en: "", ar: "" },
       image: r.card_image ?? "",   // ← صورة الكرت الموحّدة (فارغ = placeholder)
       badge: r.badge ?? undefined,
+      tier: r.tier_code === "essential" ? "essential" : "signature",
       duration: r.duration_raw ?? { en: "", ar: "" },
       prices,
       oldPrices: Object.keys(oldPrices).length ? oldPrices : undefined,

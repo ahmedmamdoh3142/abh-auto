@@ -16,6 +16,16 @@ type Req = {
   plate: string;
   warrantyServiceName: string;
   warrantyExpiresAt: string | null;
+  /** (جديد) قراءة العداد كما أدخلها العميل وقت الطلب */
+  odometerKm: number | null;
+  /** (جديد) عداد الحجز الأصلي وقت استلامه */
+  serviceOdometerKm: number | null;
+  /** (جديد) سقف الكيلومترات المسموح به لهذه الخدمة، لو محدَّد */
+  warrantyKmLimit: number | null;
+  /** (جديد) المسافة المقطوعة منذ الخدمة الأصلية */
+  kmDriven: number | null;
+  /** (جديد) true = ضمن السقف، false = تجاوزه، null = لا يوجد سقف كيلومترات أو بيانات ناقصة */
+  withinKmLimit: boolean | null;
   problemDescription: string;
   branchCode: string;
   preferredDate: string;
@@ -216,10 +226,41 @@ export default function MaintenanceClient({ initial, locale }: { initial: Req[];
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginTop: 12 }}>
                   <MiniField label={T("الخدمة المغطّاة", "Covered service")} value={r.warrantyServiceName || "—"} />
-                  <MiniField label={T("الضمان حتى", "Warranty until")} value={fmtDate(r.warrantyExpiresAt || "")} />
+                  <MiniField label={T("الضمان حتى (تاريخ)", "Warranty until (date)")} value={fmtDate(r.warrantyExpiresAt || "")} />
                   <MiniField label={T("الموعد المفضّل", "Preferred slot")} value={`${r.preferredDate || "—"} ${r.preferredTime || ""}`} ltr />
                   <MiniField label={T("الفرع", "Branch")} value={r.branchCode || "—"} />
                 </div>
+
+                {/* (جديد) فحص الضمان بالكيلومترات — عداد الخدمة الأصلية مقابل العداد الحالي */}
+                {(r.odometerKm != null || r.warrantyKmLimit != null) && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 14,
+                      border: `1px solid ${r.withinKmLimit === false ? "rgba(239,90,77,.35)" : r.withinKmLimit === true ? "rgba(62,205,142,.3)" : "rgba(255,255,255,.08)"}`,
+                      background: r.withinKmLimit === false ? "rgba(239,90,77,.06)" : r.withinKmLimit === true ? "rgba(62,205,142,.05)" : "rgba(255,255,255,.02)",
+                      padding: "12px 15px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                        {T("فحص الضمان بالكيلومترات", "Mileage warranty check")}
+                      </span>
+                      {r.withinKmLimit != null && (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "3px 10px", fontSize: 10, fontWeight: 600, color: r.withinKmLimit ? "#3ecd8e" : "#ef5a4d", background: r.withinKmLimit ? "rgba(62,205,142,.12)" : "rgba(239,90,77,.12)" }}>
+                          <span style={{ height: 6, width: 6, borderRadius: 999, background: r.withinKmLimit ? "#3ecd8e" : "#ef5a4d" }} />
+                          {r.withinKmLimit ? T("ضمن سقف الضمان", "Within warranty limit") : T("تجاوز سقف الضمان", "Exceeded warranty limit")}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10 }}>
+                      <KmStat label={T("عداد الخدمة الأصلية", "Odometer at service")} value={r.serviceOdometerKm} />
+                      <KmStat label={T("العداد الحالي", "Current odometer")} value={r.odometerKm} />
+                      <KmStat label={T("مقطوعة منذ الخدمة", "Driven since service")} value={r.kmDriven} highlight={r.withinKmLimit === false} />
+                      <KmStat label={T("سقف الضمان", "Warranty limit")} value={r.warrantyKmLimit} />
+                    </div>
+                  </div>
+                )}
 
                 {r.status === "rejected" && r.rejectionReason && (
                   <div style={{ marginTop: 12, fontSize: 12.5, color: "#f0b3ac" }}>
@@ -327,6 +368,18 @@ function MiniField({ label, value, ltr }: { label: string; value: string; ltr?: 
       <div style={{ fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{label}</div>
       <div dir={ltr ? "ltr" : undefined} style={{ marginTop: 4, fontSize: 12.5, color: "var(--abh-ivory)" }}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+/* (جديد) عرض رقم كيلومترات داخل بلوك فحص الضمان — يتعامل مع القيم الناقصة برشاقة */
+function KmStat({ label, value, highlight }: { label: string; value: number | null; highlight?: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{label}</div>
+      <div dir="ltr" className="abh-num" style={{ marginTop: 3, fontSize: 14, color: highlight ? "#ef5a4d" : "var(--abh-ivory)" }}>
+        {value != null ? `${value.toLocaleString()} km` : "—"}
       </div>
     </div>
   );

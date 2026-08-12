@@ -20,12 +20,14 @@ export async function POST(request: Request) {
     const plate = String(body.plate || "").trim();
     const problemDescription = String(body.problemDescription || "").trim();
     const bookingItemId = body.bookingItemId != null ? Number(body.bookingItemId) : null;
+    // (جديد) قراءة العداد الحالية كما أدخلها العميل — تُقارن لاحقًا بعداد الحجز الأصلي + سقف الكيلومترات.
+    const odometerKm = body.odometerKm != null && Number(body.odometerKm) > 0 ? Math.round(Number(body.odometerKm)) : null;
 
     if (!plate || problemDescription.length < 8) {
       return NextResponse.json({ ok: false, error: "invalid_input" }, { status: 400 });
     }
 
-    // ── تحقّق من الخادم: البند ده فعلًا للعميل ده، وضمانه لسه ساري ──
+    // ── تحقّق من الخادم: البند ده فعلًا للعميل ده، وضمانه لسه ساري بالتاريخ ──
     let warrantyServiceId: number | null = null;
     let warrantyServiceName: any = null;
     let warrantyExpiresAt: string | null = null;
@@ -58,9 +60,9 @@ export async function POST(request: Request) {
     const rows = await query<{ id: string }>(
       `INSERT INTO maintenance_requests
          (user_id, source_booking_id, source_booking_item_id, vehicle_label, plate, brand_id, model, size_code, color_code,
-          warranty_service_id, warranty_service_name, warranty_expires_at,
+          warranty_service_id, warranty_service_name, warranty_expires_at, odometer_km,
           problem_description, branch_code, preferred_date, preferred_time, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pending')
        RETURNING id`,
       [
         user.id,
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
         warrantyServiceId,
         warrantyServiceName ? JSON.stringify(warrantyServiceName) : null,
         warrantyExpiresAt,
+        odometerKm,
         problemDescription,
         body.branch || null,
         body.date || null,

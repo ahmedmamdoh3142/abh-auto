@@ -3,6 +3,7 @@
  *
  * لو المستخدم الحالي شركة (partner): تُجلب الخدمات بأسعاره الخاصة تلقائيًا.
  */
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, getLocale } from 'next-intl/server';
 
@@ -23,12 +24,14 @@ export default async function BookingPage() {
     user?.id ?? null,
   );
   return (
-    <BookingFlow
-      categories={categories as any}
-      services={services as any}
-      brands={brands as any}
-      modelSizes={modelSizes as any}
-      colors={colors}
-    />
+    <Suspense fallback={null}>
+      <BookingFlow
+        categories={categories as any}
+        services={services as any}
+        brands={brands as any}
+        modelSizes={modelSizes as any}
+        colors={colors}
+      />
+    </Suspense>
   );
 }

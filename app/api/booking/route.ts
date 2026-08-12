@@ -117,7 +117,7 @@ export async function POST(request: Request) {
 
     // الأسعار الأساسية لكل خدمة حسب الحجم — مع s.id للدمج مع أسعار الشريك.
     const priceRows = await query<any>(
-      `SELECT s.id, s.slug, s.name, s.is_on_request, s.warranty_months,
+      `SELECT s.id, s.slug, s.name, s.is_on_request, s.warranty_months, s.warranty_km_limit,
               sp.price      AS price,
               sp.old_price  AS old_price
        FROM services s
@@ -155,13 +155,15 @@ export async function POST(request: Request) {
       const nameSnapshot = r.name ? JSON.stringify(r.name) : null;
       // (جديد) ضمان البند — يُحسب من تاريخ الخدمة المجدول (أو اليوم لو مفيش تاريخ) + مدة ضمان الخدمة بالشهور.
       const warrantyMonths = r.warranty_months != null ? Number(r.warranty_months) : null;
+      // (جديد) سقف الكيلومترات — snapshot ثابت وقت الحجز، أيهما أقرب مع warrantyMonths.
+      const warrantyKmLimit = r.warranty_km_limit != null ? Number(r.warranty_km_limit) : null;
       let warrantyExpiresAt: string | null = null;
       if (warrantyMonths && warrantyMonths > 0) {
         const start = date ? new Date(date) : new Date();
         start.setMonth(start.getMonth() + warrantyMonths);
         warrantyExpiresAt = start.toISOString();
       }
-      return { serviceId: r.id, slug: r.slug, unit, oldPrice: oldForSave, nameSnapshot, commission, warrantyMonths, warrantyExpiresAt };
+      return { serviceId: r.id, slug: r.slug, unit, oldPrice: oldForSave, nameSnapshot, commission, warrantyMonths, warrantyKmLimit, warrantyExpiresAt };
     });
 
     const beforePromo = subtotal + towingCost;
@@ -227,13 +229,13 @@ export async function POST(request: Request) {
     }
 
     // ── هدايا البندلات — تُسعّر وتُتحقّق من جهة الخادم ──
-    type GiftLine = { serviceId: number; slug: string; nameSnapshot: string | null; unit: number; bundleId: string; giftValue: number; warrantyMonths: number | null; warrantyExpiresAt: string | null };
+    type GiftLine = { serviceId: number; slug: string; nameSnapshot: string | null; unit: number; bundleId: string; giftValue: number; warrantyMonths: number | null; warrantyKmLimit: number | null; warrantyExpiresAt: string | null };
     const giftLines: GiftLine[] = [];
     if (!partner && giftInputs.length > 0) {
       const bundleCache = new Map<string, Awaited<ReturnType<typeof getBundleById>>>();
       const giftSlugs = [...new Set(giftInputs.map((g) => g.slug))];
       const giftRows = await query<any>(
-        `SELECT s.id, s.slug, s.name, s.warranty_months, sp.price
+        `SELECT s.id, s.slug, s.name, s.warranty_months, s.warranty_km_limit, sp.price
            FROM services s
            LEFT JOIN service_prices sp ON sp.service_id = s.id AND sp.size_code = $2
           WHERE s.surface = 'catalog' AND s.slug = ANY($1)`,
@@ -251,6 +253,7 @@ export async function POST(request: Request) {
         const unit = giftChargeFor(full, bundle.giftPercent);
         // (جديد) ضمان الهدية — نفس منطق البنود العادية.
         const warrantyMonths = row.warranty_months != null ? Number(row.warranty_months) : null;
+        const warrantyKmLimit = row.warranty_km_limit != null ? Number(row.warranty_km_limit) : null;
         let warrantyExpiresAt: string | null = null;
         if (warrantyMonths && warrantyMonths > 0) {
           const start = date ? new Date(date) : new Date();
@@ -260,7 +263,7 @@ export async function POST(request: Request) {
         giftLines.push({
           serviceId: row.id, slug: row.slug, nameSnapshot: row.name ? JSON.stringify(row.name) : null,
           unit, bundleId: g.bundleId, giftValue: Math.max(0, full - unit),
-          warrantyMonths, warrantyExpiresAt,
+          warrantyMonths, warrantyKmLimit, warrantyExpiresAt,
         });
         seen.add(g.slug);
       }
@@ -328,9 +331,9 @@ export async function POST(request: Request) {
       await query(
         `INSERT INTO booking_items
            (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot,
-            warranty_months, warranty_expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 1, $6, $7, $8, $9)`,
-        [booking.id, it.serviceId, it.slug, it.nameSnapshot, sizeCode, it.unit, it.commission, it.warrantyMonths, it.warrantyExpiresAt]
+            warranty_months, warranty_expires_at, warranty_km_limit)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $6, $7, $8, $9, $10)`,
+        [booking.id, it.serviceId, it.slug, it.nameSnapshot, sizeCode, it.unit, it.commission, it.warrantyMonths, it.warrantyExpiresAt, it.warrantyKmLimit]
       );
     }
 
@@ -338,9 +341,9 @@ export async function POST(request: Request) {
       await query(
         `INSERT INTO booking_items
            (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot,
-            warranty_months, warranty_expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 1, $6, 0, $7, $8)`,
-        [booking.id, g.serviceId, g.slug, g.nameSnapshot, sizeCode, g.unit, g.warrantyMonths, g.warrantyExpiresAt]
+            warranty_months, warranty_expires_at, warranty_km_limit)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $6, 0, $7, $8, $9)`,
+        [booking.id, g.serviceId, g.slug, g.nameSnapshot, sizeCode, g.unit, g.warrantyMonths, g.warrantyExpiresAt, g.warrantyKmLimit]
       );
       await query(
         `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)
@@ -352,12 +355,13 @@ export async function POST(request: Request) {
     // ── هدية كوبون عجلة الحظ — خدمة مجانية فوق الطلب (مش خصم) ──
     if (giftCouponServiceId) {
       const gr = await query<any>(
-        `SELECT id, slug, name, warranty_months FROM services WHERE id = $1 LIMIT 1`,
+        `SELECT id, slug, name, warranty_months, warranty_km_limit FROM services WHERE id = $1 LIMIT 1`,
         [giftCouponServiceId]
       );
       const g = gr[0];
       if (g) {
         const warrantyMonths = g.warranty_months != null ? Number(g.warranty_months) : null;
+        const warrantyKmLimit = g.warranty_km_limit != null ? Number(g.warranty_km_limit) : null;
         let warrantyExpiresAt: string | null = null;
         if (warrantyMonths && warrantyMonths > 0) {
           const start = date ? new Date(date) : new Date();
@@ -367,9 +371,9 @@ export async function POST(request: Request) {
         await query(
           `INSERT INTO booking_items
              (booking_id, service_id, service_slug, name_snapshot, size_code, unit_price, quantity, line_total, commission_snapshot,
-              warranty_months, warranty_expires_at)
-           VALUES ($1, $2, $3, $4, $5, 0, 1, 0, 0, $6, $7)`,
-          [booking.id, g.id, g.slug, g.name ? JSON.stringify(g.name) : null, sizeCode, warrantyMonths, warrantyExpiresAt]
+              warranty_months, warranty_expires_at, warranty_km_limit)
+           VALUES ($1, $2, $3, $4, $5, 0, 1, 0, 0, $6, $7, $8)`,
+          [booking.id, g.id, g.slug, g.name ? JSON.stringify(g.name) : null, sizeCode, warrantyMonths, warrantyExpiresAt, warrantyKmLimit]
         );
         await query(
           `INSERT INTO booking_bundle_gifts (booking_id, bundle_id, gift_service_id, gift_value)

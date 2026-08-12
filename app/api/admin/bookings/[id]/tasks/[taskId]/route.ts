@@ -64,6 +64,18 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ ok: true });
     }
 
+    // ── رول القص (فينيل/رابر) — بيتحفظ على المهمة ويفضل مرتبط بيها ──
+    if (action === "set_roll") {
+      const usesRoll = !!b.usesRoll;
+      const rollNo = usesRoll ? String(b.rollNo ?? "").trim() : "";
+      if (usesRoll && !rollNo) return bad("roll_no_required");
+      await query(
+        `UPDATE booking_tasks SET uses_roll = $2, roll_no = $3, updated_at = now() WHERE id = $1`,
+        [tid, usesRoll, usesRoll ? rollNo : null]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     // ── الوقت المقدّر ──
     if (action === "set_time") {
       const mins = b.estimatedMinutes == null ? null : Math.max(0, Number(b.estimatedMinutes) || 0);

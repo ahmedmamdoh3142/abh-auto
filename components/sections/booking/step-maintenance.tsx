@@ -20,7 +20,7 @@ export function StepMaintenance({
   onCancelMaintenance: () => void;
 }) {
   const w = data.maintenanceWarranty;
-  const canNext = data.problemDescription.trim().length >= 8;
+  const canNext = data.problemDescription.trim().length >= 8 && data.odometerKm.trim().length > 0 && Number(data.odometerKm) > 0;
   const expiryLabel = w?.expiresAt
     ? new Date(w.expiresAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
@@ -66,6 +66,21 @@ export function StepMaintenance({
           <span>{isAr ? 'الصيانة مجانية بالكامل ضمن فترة الضمان.' : 'Fully free within the warranty period.'}</span>
           <span>{data.problemDescription.trim().length}/8</span>
         </div>
+      </div>
+
+      <div className="mt-7">
+        <label className="mb-2.5 block text-[0.62rem] uppercase tracking-[0.26em] text-platinum/80">
+          {isAr ? 'قراءة العداد الحالية (كم)' : 'Current odometer reading (km)'}
+        </label>
+        <input
+          type="text" inputMode="numeric" dir="ltr"
+          value={data.odometerKm}
+          onChange={(e) => set({ odometerKm: e.target.value.replace(/[^\d]/g, '') })}
+          placeholder={isAr ? 'مثال: 48500' : 'e.g. 48500'}
+          className="w-full rounded-2xl border border-white/12 bg-white/[0.03] px-5 py-4 text-sm text-ivory placeholder:text-steel/60 outline-none transition-colors focus:border-platinum/50 focus:bg-white/[0.05]" />
+        <p className="mt-2 text-[0.62rem] text-steel">
+          {isAr ? 'نستخدمها للتأكد من أن السيارة لسه ضمن سقف الكيلومترات المسموح به في الضمان.' : "Used to confirm the vehicle is still within the warranty's mileage limit."}
+        </p>
       </div>
 
       <div className="mt-10 flex items-center justify-between gap-3">

@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { confirmRedemptionForBooking, voidRedemptionForBooking } from "@/lib/promo";
+import { matchBankBin } from "@/lib/bank-discount";
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -101,57 +102,97 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true, booking: { date: d, time: rows[0].scheduled_time } });
     }
 
-    /* ── تأكيد الدفع (العميل دفع في الفرع) — مع إمكانية إضافة خصم يدوي لحظة الدفع ── */
-    if (action === "confirm_pay") {
+    /* ── (سوبر أدمن فقط) تغيير الحالة يدويًا مع ضبط كل التوابع تلقائيًا ── */
+    if (action === "force_status") {
+      if (!admin.isSuperAdmin) return bad("forbidden_super_admin_only", 403);
+
+      const target = String(b.status ?? "");
+      if (!["upcoming", "active", "completed", "cancelled"].includes(target)) {
+        return bad("status_required");
+      }
+      const reason = b.reason ? String(b.reason).trim() : "";
+      if (target === "cancelled" && !reason) return bad("reason_required");
+
       const cur = await query<any>(
-        `SELECT payment_status, subtotal, towing_cost, promo_discount, manual_discount_amount, total
-           FROM bookings WHERE id = $1`,
+        `SELECT status, stage, work_stage, payment_status, work_order_no FROM bookings WHERE id = $1`,
         [id]
       );
       if (!cur[0]) return bad("not_found", 404);
-      const already = cur[0].payment_status === "paid";
+      const wasPaid = cur[0].payment_status === "paid";
 
-      // (جديد) خصم يدوي اختياري يضيفه الموظف وقت تأكيد الدفع — نسبة أو مبلغ ثابت،
-      // يُحسب في السيرفر من (الإجمالي الفرعي + النقل − أي خصم كود سابق).
-      let discountKind: string | null = null;
-      let discountValue: number | null = null;
-      let discountAmount = Number(cur[0].manual_discount_amount) || 0;
-      let discountReason: string | null = null;
-      let applyingNewDiscount = false;
+      let stage = cur[0].stage ?? 0;
+      let workStage: string | null = cur[0].work_stage;
+      let deliveredSet = false;
 
-      const discountInput = b.discount;
-      if (discountInput && (discountInput.kind === "percent" || discountInput.kind === "fixed")) {
-        const rawValue = Math.max(0, Number(discountInput.value) || 0);
-        if (rawValue > 0) {
-          const base = Math.max(0, (Number(cur[0].subtotal) || 0) + (Number(cur[0].towing_cost) || 0) - (Number(cur[0].promo_discount) || 0));
-          discountKind = discountInput.kind;
-          discountValue = rawValue;
-          discountReason = discountInput.reason ? String(discountInput.reason).trim().slice(0, 200) : null;
-          discountAmount = discountInput.kind === "percent"
-            ? Math.round((base * Math.min(100, rawValue)) / 100)
-            : Math.min(rawValue, base);
-          applyingNewDiscount = true;
-        }
+      if (target === "upcoming") {
+        stage = 0; workStage = null;
+      } else if (target === "active") {
+        stage = Math.max(stage, 1);
+        if (!workStage || workStage === "received") workStage = "in_service";
+      } else if (target === "completed") {
+        stage = 3; workStage = "ready"; deliveredSet = true;
+      } else if (target === "cancelled") {
+        // نسيب stage/work_stage زي ما هما (تاريخيًا) — بس نلغي البرومو ونرد الفلوس لو كان مدفوع
+        await voidRedemptionForBooking(id).catch((e) => console.error("voidRedemption failed:", e));
       }
 
-      const newTotal = applyingNewDiscount
-        ? Math.max(0, (Number(cur[0].total) || 0) - discountAmount)
-        : Number(cur[0].total) || 0;
+      const rows = await query<any>(
+        `UPDATE bookings
+            SET status = $2::booking_status,
+                stage = $3,
+                work_stage = $4,
+                cancel_reason = CASE WHEN $2 = 'cancelled' THEN $5 ELSE cancel_reason END,
+                payment_status = CASE WHEN $2 = 'cancelled' AND payment_status = 'paid'::public.payment_status
+                                      THEN 'refunded'::public.payment_status
+                                      ELSE payment_status END,
+                delivered_at = CASE WHEN $6 THEN COALESCE(delivered_at, now()) ELSE delivered_at END,
+                updated_at = now()
+          WHERE id = $1
+        RETURNING status, stage, work_stage, payment_status, cancel_reason`,
+        [id, target, stage, workStage, reason || null, deliveredSet]
+      );
+      if (!rows[0]) return bad("not_found", 404);
+
+      await query(
+        `INSERT INTO booking_status_history (booking_id, status, stage, note)
+         VALUES ($1,$2,$3,$4)`,
+        [id, rows[0].status, rows[0].stage,
+         `تغيير حالة يدوي (سوبر أدمن) بواسطة ${admin.name} → ${target}${reason ? ` — ${reason}` : ""}${target === "cancelled" && wasPaid ? " — تم رد المبلغ" : ""}`]
+      ).catch(() => {});
+
+      await query(
+        `INSERT INTO work_order_events (booking_id, event, actor_id, meta)
+         VALUES ($1, 'force_status', $2, $3::jsonb)`,
+        [id, admin.id, JSON.stringify({ target, reason: reason || null })]
+      ).catch(() => {});
+
+      return NextResponse.json({
+        ok: true,
+        booking: {
+          status: rows[0].status,
+          stage: rows[0].stage,
+          workStage: rows[0].work_stage,
+          payment: rows[0].payment_status,
+          cancelReason: rows[0].cancel_reason || "",
+        },
+      });
+    }
+
+    /* ── تأكيد الدفع (العميل دفع فعليًا) — منفصل تمامًا عن تطبيق الخصم،
+       الخصم (يدوي/بنكي) بيتطبّق مسبقًا عن طريق أكشن set_discount تحت،
+       وهنا بس بنأكّد إن الفلوس استلمت فعلًا. ── */
+    if (action === "confirm_pay") {
+      const cur = await query<any>(`SELECT payment_status FROM bookings WHERE id = $1`, [id]);
+      if (!cur[0]) return bad("not_found", 404);
+      const already = cur[0].payment_status === "paid";
 
       const rows = await query<any>(
         `UPDATE bookings
             SET payment_status='paid'::public.payment_status,
-                total = $2,
-                manual_discount_kind = COALESCE($3, manual_discount_kind),
-                manual_discount_value = COALESCE($4, manual_discount_value),
-                manual_discount_amount = $5,
-                manual_discount_reason = COALESCE($6, manual_discount_reason),
-                manual_discount_by = CASE WHEN $7 THEN $8 ELSE manual_discount_by END,
-                manual_discount_at = CASE WHEN $7 THEN now() ELSE manual_discount_at END,
                 updated_at=now()
           WHERE id=$1
         RETURNING payment_status, status, stage, total, manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason`,
-        [id, newTotal, discountKind, discountValue, discountAmount, discountReason, applyingNewDiscount, admin.id]
+        [id]
       );
       if (!rows[0]) return bad("not_found", 404);
 
@@ -163,9 +204,7 @@ export async function PATCH(request: Request) {
       await query(
         `INSERT INTO booking_status_history (booking_id, status, stage, note)
          VALUES ($1,$2,$3,$4)`,
-        [id, rows[0].status, rows[0].stage ?? 0,
-         `تأكيد الدفع بواسطة ${admin.name}` +
-           (applyingNewDiscount ? ` — خصم ${discountKind === "percent" ? `${discountValue}%` : `${discountValue} ريال`} (${discountReason || "بدون سبب مذكور"})` : "")]
+        [id, rows[0].status, rows[0].stage ?? 0, `تأكيد الدفع بواسطة ${admin.name}`]
       ).catch(() => {});
 
       return NextResponse.json({
@@ -177,6 +216,105 @@ export async function PATCH(request: Request) {
           manualDiscountValue: rows[0].manual_discount_value != null ? Number(rows[0].manual_discount_value) : 0,
           manualDiscountAmount: Number(rows[0].manual_discount_amount) || 0,
           manualDiscountReason: rows[0].manual_discount_reason || "",
+        },
+      });
+    }
+
+    /* ── (جديد) تطبيق/تعديل/إزالة خصم على حجز موجود — بدون تأكيد دفع.
+       يسمح بخصم يدوي (نسبة/مبلغ) أو خصم بنك العميل (BIN) — يستبدل أي خصم
+       سابق تمامًا (زي منطق الحجز الجديد). الإجمالي بيتحدّث فورًا عشان لو
+       الموظف طلع لينك دفع بعدها يبقى بالمبلغ الصح. ── */
+    if (action === "set_discount") {
+      const cur = await query<any>(
+        `SELECT subtotal, towing_cost, total, promo_discount, manual_discount_amount, bank_discount_amount, payment_status
+           FROM bookings WHERE id = $1`,
+        [id]
+      );
+      if (!cur[0]) return bad("not_found", 404);
+      if (cur[0].payment_status === "paid") return bad("already_paid");
+
+      const beforePromo = (Number(cur[0].subtotal) || 0) + (Number(cur[0].towing_cost) || 0);
+      const promoDiscount = Number(cur[0].promo_discount) || 0;
+      const oldManual = Number(cur[0].manual_discount_amount) || 0;
+      const oldBank = Number(cur[0].bank_discount_amount) || 0;
+      // القيمة الثابتة (هدايا/خدمات مؤقتة) اللي فوق الإجمالي — بترجع بالمعادلة العكسية
+      // من الإجمالي الحالي عشان تفضل ثابتة مهما اتغيّر الخصم.
+      const extra = Math.max(0, (Number(cur[0].total) || 0) - beforePromo + promoDiscount + oldManual + oldBank);
+
+      const bankDigitsRaw = b.bankCardDigits ? String(b.bankCardDigits).replace(/\D/g, "").slice(0, 8) : null;
+
+      let manualKind: string | null = null;
+      let manualValue: number | null = null;
+      let manualAmount = 0;
+      let manualReason: string | null = null;
+      let bankAmount = 0;
+      let bankCode: string | null = null;
+      let bankBin: string | null = null;
+
+      if (bankDigitsRaw) {
+        const match = await matchBankBin(bankDigitsRaw);
+        if (!match) return bad("bank_not_matched");
+        bankCode = match.bankCode;
+        bankBin = bankDigitsRaw;
+        bankAmount = Math.round((beforePromo * match.percent) / 100);
+      } else if (b.discount && (b.discount.kind === "percent" || b.discount.kind === "fixed")) {
+        const rawValue = Math.max(0, Number(b.discount.value) || 0);
+        if (rawValue <= 0) return bad("discount_required");
+        const base = Math.max(0, beforePromo - promoDiscount);
+        manualKind = b.discount.kind;
+        manualValue = rawValue;
+        manualReason = b.discount.reason ? String(b.discount.reason).trim().slice(0, 200) : null;
+        manualAmount = manualKind === "percent"
+          ? Math.round((base * Math.min(100, rawValue)) / 100)
+          : Math.min(rawValue, base);
+      } else if (b.clear !== true) {
+        return bad("discount_required");
+      }
+      // b.clear === true → كل القيم فوق تفضل صفر/null → إزالة أي خصم.
+
+      const newTotal = Math.max(0, beforePromo - promoDiscount - manualAmount - bankAmount) + extra;
+
+      const rows = await query<any>(
+        `UPDATE bookings
+            SET total = $2,
+                manual_discount_kind = $3,
+                manual_discount_value = $4,
+                manual_discount_amount = $5,
+                manual_discount_reason = $6,
+                manual_discount_by = CASE WHEN $5 > 0 THEN $7::uuid ELSE NULL END,
+                manual_discount_at = CASE WHEN $5 > 0 THEN now() ELSE NULL END,
+                bank_discount_amount = $8,
+                bank_code = $9,
+                bank_bin_matched = $10,
+                updated_at = now()
+          WHERE id = $1
+        RETURNING total, manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason,
+                  bank_discount_amount, bank_code`,
+        [id, newTotal, manualKind, manualValue, manualAmount, manualReason, admin.id, bankAmount, bankCode, bankBin]
+      );
+      if (!rows[0]) return bad("not_found", 404);
+
+      await query(
+        `INSERT INTO booking_status_history (booking_id, status, stage, note)
+         VALUES ($1, (SELECT status FROM bookings WHERE id=$1), (SELECT stage FROM bookings WHERE id=$1), $2)`,
+        [id, bankCode
+          ? `تطبيق خصم عملاء البنك الأهلي (${bankCode}) بواسطة ${admin.name}`
+          : manualAmount > 0
+            ? `تطبيق خصم يدوي بواسطة ${admin.name} — ${manualKind === "percent" ? `${manualValue}%` : `${manualValue} ريال`} (${manualReason || "بدون سبب مذكور"})`
+            : `إزالة الخصم بواسطة ${admin.name}`]
+      ).catch(() => {});
+
+      return NextResponse.json({
+        ok: true,
+        booking: {
+          total: Number(rows[0].total) || 0,
+          manualDiscountKind: rows[0].manual_discount_kind || "",
+          manualDiscountValue: rows[0].manual_discount_value != null ? Number(rows[0].manual_discount_value) : 0,
+          manualDiscountAmount: Number(rows[0].manual_discount_amount) || 0,
+          manualDiscountReason: rows[0].manual_discount_reason || "",
+          manualDiscountBy: manualAmount > 0 ? admin.name : "",
+          bankDiscountAmount: Number(rows[0].bank_discount_amount) || 0,
+          bankCode: rows[0].bank_code || "",
         },
       });
     }

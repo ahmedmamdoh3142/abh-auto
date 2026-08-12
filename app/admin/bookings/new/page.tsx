@@ -52,7 +52,7 @@ export default async function AdminNewBookingPage() {
   // الموقع). نرجّع is_active عشان الواجهة تعلّم المخفية بشارة. النشطة تظهر أولًا.
   const svcRows = await query<any>(
     `SELECT s.id, s.slug, c.slug AS category, c.name AS cat_name, s.name AS name_raw,
-            s.is_on_request, s.is_active,
+            s.is_on_request, s.is_active, s.tier_code,
             COALESCE((SELECT jsonb_object_agg(sp.size_code,
                         jsonb_build_object('price', sp.price, 'old', sp.old_price))
                       FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices_raw,
@@ -82,9 +82,10 @@ export default async function AdminNewBookingPage() {
       categorySlug: r.category,
       onRequest: !!r.is_on_request,
       active: !!r.is_active, // false = مخفية من الموقع (تظهر بالداشبورد بشارة)
+      tier: (r.tier_code === "essential" ? "essential" : "signature") as "essential" | "signature",
       prices,
       oldPrices,
-      includes, // (جديد) قائمة "تشمل" — نفس اللي بيظهر بالموقع
+      includes,
     };
   });
 
@@ -107,17 +108,17 @@ export default async function AdminNewBookingPage() {
   const slotRows = await query<any>(`SELECT slot_time FROM time_slots WHERE is_active = true ORDER BY sort, slot_time`).catch(() => []);
   const slots = slotRows.map((s) => s.slot_time);
 
-  return (
-    <NewBookingClient
-      locale={locale}
-      brands={brands}
-      services={services}
-      branches={branches}
-      colors={colors}
-      cities={cities}
-      payments={payments}
-      towing={towing}
-      slots={slots}
-    />
-  );
+  return {
+  id: Number(r.id),
+  slug: r.slug,
+  name: pick(r.name_raw, locale),
+  category: pick(r.cat_name, locale),
+  categorySlug: r.category,
+  onRequest: !!r.is_on_request,
+  active: !!r.is_active,
+  tier: (r.tier_code === "essential" ? "essential" : "signature") as "essential" | "signature",
+  prices,
+  oldPrices,
+  includes,
+};
 }

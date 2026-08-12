@@ -15,7 +15,9 @@
     "contact": "Contact",
     "login": "Login",
     "cta": "Book Protection",
-    "warranty": "Warranty"
+    "warranty": "Warranty",
+    "warrantyPolicy": "Warranty Policy",
+    "warrantyBooking": "Book Maintenance"
   },
   "hero": {
     "eyebrow": "Est. 2022 · Jeddah",

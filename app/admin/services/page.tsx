@@ -26,8 +26,8 @@ export default async function ServicesPage() {
 
   const services = await query<any>(
     `SELECT s.id, s.category_id, s.slug, s.name, s.description, s.image, s.card_image, s.badge,
-            s.is_on_request, s.is_featured, s.is_active, s.sort,
-            s.duration, s.warranty_duration,
+            s.is_on_request, s.is_featured, s.is_active, s.sort, s.tier_code,
+            s.duration, s.warranty_duration, s.warranty_km_limit,
             COALESCE((SELECT jsonb_object_agg(sp.size_code, jsonb_build_object('price', sp.price, 'old', sp.old_price))
                       FROM service_prices sp WHERE sp.service_id = s.id), '{}'::jsonb) AS prices,
             COALESCE((SELECT json_agg(si.label ORDER BY si.sort)
@@ -67,10 +67,12 @@ export default async function ServicesPage() {
         prices: { small: sizeP(s.prices, "small"), medium: sizeP(s.prices, "medium"), large: sizeP(s.prices, "large") },
         includes: (s.includes ?? []).map((x: any) => toLoc(x)),
         warrantyYears: firstNum(s.warranty_duration),
+        warrantyKm: s.warranty_km_limit != null ? Number(s.warranty_km_limit) : 0,
         durationDays: firstNum(s.duration),
         image: s.image || "",
         cardImage: s.card_image || "",
         badge: s.badge || "",
+        tier: s.tier_code === "essential" ? "essential" : "signature",
         onRequest: s.is_on_request,
         featured: s.is_featured,
         active: s.is_active,

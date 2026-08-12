@@ -27,8 +27,8 @@ const LOGO_DARK_SRC = "/images/logo-black.webp";
 
 /* ══════════════ نص المبدأ (من وثيقة الضمان الرسمية) ══════════════ */
 const PRINCIPLE = {
-  ar: "يُفعَّل الضمان من لحظة استلام العميل لمركبته وُيرسَل للعميل على هاتفه من النظام. يُطبَّق حصرًا عند وجود خلل مصنعي في المادة أو خطأ فني نتج عن التركيب، وُيثبَت بالفحص المادي من فريقنا الفني. كل حالة لا تندرج ضمن هذه التعريفات تقع خارج نطاق الضمان.",
-  en: "The warranty is activated the moment the customer receives their vehicle, and an electronic notice is sent to the customer's phone. It applies exclusively to a manufacturing defect in the material or an installation error, verified by physical inspection by our technical team. Any case outside these definitions falls outside the warranty scope.",
+  ar: "يُفعَّل الضمان من لحظة استلام العميل لمركبته وُيرسَل للعميل على هاتفه من النظام. يُطبَّق حصرًا عند وجود خلل مصنعي في المادة، وُيثبَت بالفحص من فريقنا الفني. كل حالة لا تندرج ضمن هذه التعريفات تقع خارج نطاق الضمان.",
+  en: "The warranty is activated the moment the customer receives their vehicle, and an electronic notice is sent to the customer's phone. It applies exclusively to a manufacturing defect in the material, verified by inspection by our technical team. Any case outside these definitions falls outside the warranty scope.",
 };
 
 /* ══════════════ الأنواع ══════════════ */
@@ -36,6 +36,8 @@ type WarrantyService = {
   name: string;
   isGift?: boolean;
   warrantyMonths?: number | null;
+  /** الحد الأقصى للكيلومترات المغطاة (أيهما أقرب مع warrantyMonths) — null يعني ضمان بالسنين فقط */
+  warrantyKmLimit?: number | null;
   warrantyExpiresAt?: string | null;
 };
 export type WarrantyBooking = {
@@ -53,6 +55,7 @@ export type WarrantyBooking = {
   time?: string;
   deliveredAt?: string;
   services?: WarrantyService[];
+  rolls?: { name?: string; rollNo: string }[];
 };
 
 /* ══════════════ أدوات مساعدة ══════════════ */
@@ -80,6 +83,20 @@ function durationLabel(months: number | null | undefined, isAr: boolean) {
   if (isAr) return m === 1 ? "شهر واحد" : m === 2 ? "شهرين" : `${m} أشهر`;
   return `${m} ${m === 1 ? "month" : "months"}`;
 }
+/** تنسيق عدد الكيلومترات بفواصل الآلاف — "100,000 كم" / "100,000 km" */
+function kmLabel(km: number | null | undefined, isAr: boolean) {
+  const k = Number(km) || 0;
+  if (k <= 0) return "";
+  const formatted = k.toLocaleString(isAr ? "ar-EG" : "en-US");
+  return isAr ? `${formatted} كم` : `${formatted} km`;
+}
+/** يدمج مدة الضمان بالسنين/الشهور مع سقف الكيلومترات (لو موجود) — "12 سنة أو 100,000 كم أيهما أقرب" */
+function coverageLabel(months: number | null | undefined, km: number | null | undefined, isAr: boolean) {
+  const durLbl = durationLabel(months, isAr);
+  const kmLbl = kmLabel(km, isAr);
+  if (!kmLbl) return durLbl;
+  return isAr ? `${durLbl} أو ${kmLbl} — أيهما أقرب` : `${durLbl} or ${kmLbl} — whichever comes first`;
+}
 function resolveWarrantyNo(b: WarrantyBooking): string {
   if (b.invoiceNumber != null && Number(b.invoiceNumber) > 0) {
     return `WR-${String(Math.trunc(Number(b.invoiceNumber))).padStart(6, "0")}`;
@@ -89,11 +106,26 @@ function resolveWarrantyNo(b: WarrantyBooking): string {
 function coverageHeadline(services: WarrantyService[], isAr: boolean) {
   const withWarranty = services.filter((s) => Number(s.warrantyMonths) > 0);
   if (withWarranty.length === 0) {
-    return { hasCoverage: false, label: "", sub: isAr ? "مدة الضمان تختلف حسب كل خدمة — التفاصيل بالجدول بالأسفل" : "Warranty length varies per service — see the table below" };
+    return { hasCoverage: false, label: "", sub: isAr ? "مدة الضمان تختلف حسب كل خدمة — التفاصيل بالجدول بالأسفل" : "Warranty length varies per service — see the table below", kmLabel: "" };
   }
-  const max = Math.max(...withWarranty.map((s) => Number(s.warrantyMonths)));
-  if (max % 12 === 0) return { hasCoverage: true, label: String(max / 12), sub: isAr ? "سنة ضمان (أعلى تغطية)" : "years warranty (max coverage)" };
-  return { hasCoverage: true, label: String(max), sub: isAr ? "شهر ضمان (أعلى تغطية)" : "months warranty (max coverage)" };
+  const top = withWarranty.reduce((a, b) => (Number(b.warrantyMonths) > Number(a.warrantyMonths) ? b : a));
+  const max = Number(top.warrantyMonths);
+  const km = Number(top.warrantyKmLimit) || 0;
+  const kmLbl = km > 0 ? kmLabel(km, isAr) : "";
+  if (max % 12 === 0) {
+    return {
+      hasCoverage: true,
+      label: String(max / 12),
+      sub: isAr ? "سنة ضمان (أعلى تغطية)" : "years warranty (max coverage)",
+      kmLabel: kmLbl ? (isAr ? `أو حتى ${kmLbl}` : `or up to ${kmLbl}`) : "",
+    };
+  }
+  return {
+    hasCoverage: true,
+    label: String(max),
+    sub: isAr ? "شهر ضمان (أعلى تغطية)" : "months warranty (max coverage)",
+    kmLabel: kmLbl ? (isAr ? `أو حتى ${kmLbl}` : `or up to ${kmLbl}`) : "",
+  };
 }
 function logoLight(height = 66) {
   const fallback = `<div style="line-height:1;"><div style="font:700 24px Georgia,serif;letter-spacing:1.5px;color:#fff;">ABH<span style="color:#c2a04e;">.</span></div><div style="font-size:8px;letter-spacing:6px;color:#cbcdcd;margin-top:4px;">A&nbsp;U&nbsp;T&nbsp;O</div></div>`;
@@ -128,13 +160,15 @@ function warrantyHtml(b: WarrantyBooking, isAr: boolean) {
 
   /* صفوف جدول الخدمات المضمونة الفعلية في هذا الحجز */
   const serviceRows = services.length === 0
-    ? `<tr><td colspan="3" style="padding:16px;text-align:center;color:#6c7077;font-size:13px;">${T("لا توجد خدمات", "No services")}</td></tr>`
+    ? `<tr><td colspan="4" style="padding:16px;text-align:center;color:#6c7077;font-size:13px;">${T("لا توجد خدمات", "No services")}</td></tr>`
     : services.map((s, i) => {
         const months = Number(s.warrantyMonths) || 0;
+        const km = Number(s.warrantyKmLimit) || 0;
         const expires = s.warrantyExpiresAt || (months > 0 && startDate ? addMonths(startDate, months) : null);
         return `<tr style="background:${i % 2 ? "#faf9f6" : "#fff"};">
           <td style="padding:11px 14px;font-size:12.5px;color:#15161a;text-align:${sA};border-bottom:1px solid #ece9e1;font-weight:600;">${esc(s.name)}${s.isGift ? ` <span style="font-size:9px;color:${gold};">(${T("هدية", "Gift")})</span>` : ""}</td>
           <td dir="ltr" style="padding:11px 14px;font-size:12.5px;color:${months > 0 ? "#1f9d6b" : "#9a9ea4"};text-align:center;border-bottom:1px solid #ece9e1;font-weight:700;white-space:nowrap;">${esc(durationLabel(months, isAr))}</td>
+          <td dir="ltr" style="padding:11px 14px;font-size:12px;color:${km > 0 ? "#1f9d6b" : "#9a9ea4"};text-align:center;border-bottom:1px solid #ece9e1;font-weight:600;white-space:nowrap;">${km > 0 ? esc(kmLabel(km, isAr)) : "—"}</td>
           <td dir="ltr" style="padding:11px 14px;font-size:11.5px;color:#6c7077;text-align:${eA};border-bottom:1px solid #ece9e1;white-space:nowrap;">${expires ? esc(fmtDate(expires, isAr)) : "—"}</td>
         </tr>`;
       }).join("");
@@ -166,6 +200,7 @@ function warrantyHtml(b: WarrantyBooking, isAr: boolean) {
         ${headline.hasCoverage ? `<div style="width:150px;flex:0 0 auto;border:1.5px solid ${gold};border-radius:16px;padding:16px 10px;text-align:center;background:linear-gradient(180deg,#fff,#faf8f2);">
           <div dir="ltr" class="abh-num" style="font-size:40px;font-weight:800;color:#0c0d0e;line-height:1;">${esc(headline.label)}</div>
           <div style="font-size:9.5px;color:#6c7077;margin-top:8px;line-height:1.5;">${esc(headline.sub)}</div>
+          ${headline.kmLabel ? `<div dir="ltr" style="font-size:9.5px;color:${gold};margin-top:6px;font-weight:700;border-top:1px dashed #e7e3d8;padding-top:6px;">${esc(headline.kmLabel)}</div>` : ""}
         </div>` : ""}
         <div style="flex:1;border:1px solid #e7e3d8;border-radius:16px;padding:16px 18px;background:#fff;display:flex;flex-direction:column;justify-content:center;">
           <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#9a9ea4;margin-bottom:6px;">${T("بداية سريان الضمان", "Warranty starts")}</div>
@@ -199,11 +234,27 @@ function warrantyHtml(b: WarrantyBooking, isAr: boolean) {
           <thead><tr style="background:#0c0d0e;">
             <th style="padding:9px 14px;font-size:9.5px;letter-spacing:1.5px;color:#fff;text-align:${sA};">${T("الخدمة", "Service")}</th>
             <th style="padding:9px 14px;font-size:9.5px;letter-spacing:1.5px;color:#fff;text-align:center;">${T("مدة الضمان", "Warranty")}</th>
+            <th style="padding:9px 14px;font-size:9.5px;letter-spacing:1.5px;color:#fff;text-align:center;">${T("سقف الكيلومترات", "KM limit")}</th>
             <th style="padding:9px 14px;font-size:9.5px;letter-spacing:1.5px;color:#fff;text-align:${eA};">${T("ينتهي في", "Expires")}</th>
           </tr></thead>
           <tbody>${serviceRows}</tbody>
         </table>
+        <p style="margin:10px 2px 0;font-size:10px;color:#9a9ea4;text-align:${sA};line-height:1.6;">
+          ${T("الضمان يسري حتى أول حد يتحقق من مدة السنوات أو سقف الكيلومترات الموضّح لكل خدمة، أيهما أقرب.", "Warranty is valid until the first of the year-limit or the km-limit shown per service is reached, whichever comes first.")}
+        </p>
       ${cardClose}
+
+      ${(b.rolls && b.rolls.length > 0) ? `
+      <!-- رقم/أرقام الرول المستخدَم -->
+      <div style="display:flex;align-items:center;gap:14px;border:1px solid #e7e3d8;border-radius:14px;padding:13px 18px;background:linear-gradient(180deg,#fff,#faf8f2);margin-bottom:16px;">
+        <span style="display:grid;place-items:center;height:36px;width:36px;flex-shrink:0;border-radius:10px;background:#0c0d0e;color:${gold};font:700 13px Georgia,serif;">R</span>
+        <div>
+          <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#9a9ea4;margin-bottom:3px;">${T("رقم الرول المستخدَم", "Roll number used")}</div>
+          <div style="font-size:13px;color:#15161a;font-weight:700;">
+            ${b.rolls.map((r) => `${r.name ? `${esc(r.name)} — ` : ""}<span dir="ltr" style="color:${gold};">#${esc(r.rollNo)}</span>`).join(`&nbsp;&nbsp;|&nbsp;&nbsp;`)}
+          </div>
+        </div>
+      </div>` : ""}
 
       <!-- مرجع سياسة الضمان الكاملة -->
       <div style="border:1px dashed #e7e3d8;border-radius:12px;padding:12px 16px;font-size:10.5px;color:#8b8f95;line-height:1.7;text-align:${sA};">

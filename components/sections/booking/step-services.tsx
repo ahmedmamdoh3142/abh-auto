@@ -19,11 +19,13 @@
  *    العالمية) عبر effect يقارن الهدايا بالبندلات المفتوحة الحالية.
  */
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import {
   Check, X, Star, Shield, Layers, Sun, Lock, Sparkles, Truck, Clock, ArrowUpRight, Gift, Tag, Loader2,
 } from 'lucide-react';
+import { TierToggle } from '@/components/shared/tier-toggle';
 
 import {
   BRANDS, COLORS, TOWING_COST, currencyFmt,
@@ -106,7 +108,15 @@ export function StepServices({
 
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const color = COLORS.find((c) => c.key === data.colorKey);
-  const list = SERVICES.filter((s) => s.cat === data.activeCat);
+  const list = SERVICES.filter((s) => s.cat === data.activeCat && s.tier === data.tier);
+
+  // لو العميل بدّل الخط، أي خدمة مختارة من الخط التاني تتشال تلقائيًا بصمت
+  useEffect(() => {
+    const validSlugs = new Set(SERVICES.filter((s) => s.tier === data.tier).map((s) => s.slug));
+    const kept = data.services.filter((sl) => validSlugs.has(sl));
+    if (kept.length !== data.services.length) set({ services: kept });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.tier]);
 
   const sz = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
   const sizeChip = `${isAr ? sz.ar : sz.en} · ${sz.tier}`;
@@ -148,9 +158,14 @@ export function StepServices({
       >
         {/* ── الصورة — فوق، واضحة تمامًا (نسبة 4:3) ── */}
         <div className="relative aspect-[4/3] w-full overflow-hidden">
-          <div
-            className="svc-img absolute inset-0 bg-cover bg-center transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
-            style={{ backgroundImage: `url('${sv.img}')` }}
+          <Image
+            src={sv.img}
+            alt={sv.name}
+            fill
+            loading={i < 2 ? 'eager' : 'lazy'}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
+            quality={62}
+            className="svc-img object-cover transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
           />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian to-transparent" />
 
@@ -216,6 +231,8 @@ export function StepServices({
   return (
     <div className={lite ? 'fx-lite' : undefined}>
       <Heading index="02" label={t('steps.services')} title={t('step2.heading')} sub={t('step2.subheading')} />
+
+      <TierToggle active={data.tier} onChange={(tier) => set({ tier })} className="mt-6" />
 
       {/* ── Dossier · atelier pass ── */}
       <motion.div

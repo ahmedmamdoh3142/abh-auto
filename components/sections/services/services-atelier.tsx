@@ -10,13 +10,15 @@
  *
  * (ملاحظة: AnimatePresence أُزيل سابقًا لمنع قفل framer عند التبديل السريع.)
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
 import { ServicesHero } from './services-hero';
 import { CategorySelector } from './category-selector';
 import { ServiceShowcase } from './service-showcase';
 import { ConciergeClose } from './concierge-close';
+import { TierToggle } from '@/components/shared/tier-toggle';
+import type { TierCode } from '@/lib/shared/tier';
 import type { Category, Service, CategorySlug } from '@/lib/services-data';
 
 export function ServicesAtelier({
@@ -26,18 +28,30 @@ export function ServicesAtelier({
   categories: Category[];
   services: Service[];
 }) {
+  const [tier, setTier] = useState<TierCode>('signature');
   const [category, setCategory] = useState<CategorySlug>(categories[0]?.slug ?? 'coatings');
 
+  const tierServices = useMemo(() => services.filter((s) => s.tier === tier), [services, tier]);
+
   const visibleServices = useMemo(
-    () => services.filter((s) => s.category === category),
-    [services, category],
+    () => tierServices.filter((s) => s.category === category),
+    [tierServices, category],
   );
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const s of services) m[s.category] = (m[s.category] ?? 0) + 1;
+    for (const s of tierServices) m[s.category] = (m[s.category] ?? 0) + 1;
     return m;
-  }, [services]);
+  }, [tierServices]);
+
+  // لو الخط اتغيّر ومفيش خدمات في الفئة الحالية، انقل لأول فئة فيها خدمات
+  useEffect(() => {
+    if (!tierServices.some((s) => s.category === category)) {
+      const first = categories.find((c) => tierServices.some((s) => s.category === c.slug));
+      if (first) setCategory(first.slug);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tier]);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
@@ -72,6 +86,10 @@ export function ServicesAtelier({
 
       <ServicesHero />
 
+      <div className="relative z-10 mx-auto max-w-6xl px-4 pt-2">
+        <TierToggle active={tier} onChange={setTier} />
+      </div>
+
       <CategorySelector
         categories={categories}
         active={category}
@@ -82,13 +100,13 @@ export function ServicesAtelier({
       <div className="relative z-10 pb-20">
         {/* بدون AnimatePresence — تركيب فوري + أنيميشن دخول فقط */}
         <motion.div
-          key={category}
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <ServiceShowcase services={visibleServices} categorySlug={category} />
-        </motion.div>
+  key={`${category}-${tier}`}
+  initial={{ opacity: 0, y: 24 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+>
+  <ServiceShowcase services={visibleServices} categorySlug={category} />
+</motion.div>
       </div>
 
       <ConciergeClose />

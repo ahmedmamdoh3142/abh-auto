@@ -33,6 +33,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     const paymentMethod = b.paymentMethod ? String(b.paymentMethod).trim() : null;
     const paymentProofUrl = b.paymentProofUrl ? String(b.paymentProofUrl).trim() : null;
     const photos: { url: string; comment?: string }[] = Array.isArray(b.photos) ? b.photos : [];
+    // (جديد) قراءة العداد وقت الاستلام — نقطة مرجعية لفحص الضمان بالكيلومترات لاحقًا.
+    const odometerKm = b.odometerKm != null && Number(b.odometerKm) > 0 ? Math.round(Number(b.odometerKm)) : null;
 
     // بيانات قابلة للتعديل وقت الاستلام (تصحيح أي خطأ) — كلها اختيارية.
     const editCustomerName = b.customerName != null ? String(b.customerName).trim() : null;
@@ -74,13 +76,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
               customer_phone = COALESCE($8, customer_phone),
               vehicle_label = COALESCE($9, vehicle_label),
               plate = COALESCE($10, plate),
+              odometer_km = COALESCE($11, odometer_km),
               -- نبقي stage القديم متوافقًا: 0 = تم الاستلام
               stage = GREATEST(stage, 0),
               status = CASE WHEN status = 'upcoming' THEN 'active'::booking_status ELSE status END,
               updated_at = now()
         WHERE id = $1`,
       [id, workOrderNo, admin.id, supervisorNotes, paymentProofUrl, paymentMethod,
-       editCustomerName, editCustomerPhone, editVehicleLabel, editPlate]
+       editCustomerName, editCustomerPhone, editVehicleLabel, editPlate, odometerKm]
     );
 
     // ── حفظ الصور (path فقط) ──
@@ -105,7 +108,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     await query(
       `INSERT INTO work_order_events (booking_id, event, actor_id, meta)
        VALUES ($1, 'received', $2, $3::jsonb)`,
-      [id, admin.id, JSON.stringify({ workOrderNo, photos: photos.length })]
+      [id, admin.id, JSON.stringify({ workOrderNo, photos: photos.length, odometerKm })]
     ).catch(() => {});
 
     await query(
@@ -116,7 +119,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 
     return NextResponse.json({
       ok: true,
-      booking: { workOrderNo, workStage: "received", stage: 0, status: "active" },
+      booking: { workOrderNo, workStage: "received", stage: 0, status: "active", odometerKm },
     });
   } catch (err) {
     console.error("POST /api/admin/bookings/[id]/receive failed:", err);
