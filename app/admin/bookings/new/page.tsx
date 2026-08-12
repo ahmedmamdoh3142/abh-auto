@@ -108,17 +108,17 @@ export default async function AdminNewBookingPage() {
   const slotRows = await query<any>(`SELECT slot_time FROM time_slots WHERE is_active = true ORDER BY sort, slot_time`).catch(() => []);
   const slots = slotRows.map((s) => s.slot_time);
 
-  return {
-  id: Number(r.id),
-  slug: r.slug,
-  name: pick(r.name_raw, locale),
-  category: pick(r.cat_name, locale),
-  categorySlug: r.category,
-  onRequest: !!r.is_on_request,
-  active: !!r.is_active,
-  tier: (r.tier_code === "essential" ? "essential" : "signature") as "essential" | "signature",
-  prices,
-  oldPrices,
-  includes,
-};
+  return (
+    <NewBookingClient
+      locale={locale}
+      brands={brands}
+      services={services}
+      branches={branches}
+      colors={colors}
+      cities={cities}
+      payments={payments}
+      towing={towing}
+      slots={slots}
+    />
+  );
 }
