@@ -27,7 +27,7 @@ const nextConfig = {
     // سنة كاملة. لو غيّرت صورة → غيّر اسم الملف (discount-35-lab-v2.webp).
     minimumCacheTTL: 31536000,
 
-    deviceSizes: [640, 828, 1200, 1920],
+    deviceSizes: [640, 750, 828, 1200, 1920],
     imageSizes: [16, 64, 256, 512],
   },
 

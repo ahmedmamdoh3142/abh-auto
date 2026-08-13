@@ -8,7 +8,7 @@
  * "راكد" (Stale): أي تاسك مفتوح ماتلمسش من 48 ساعة بيتعلّم بحد أصفر.
  */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader } from "@/components/admin/ui";
+import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader, ImageCard, carImg } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
 import { printSalesTasksReport } from "@/lib/admin/sales-tasks-print";
 
@@ -114,19 +114,21 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
 
   const [stats, setStats] = useState<{ total: number; won: number; lost: number } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [pillCounts, setPillCounts] = useState<Record<string, number>>({});
 
   // (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
   const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
 
-  const buildParams = (withFilters: boolean) => {
+  // withStage=true لتحميل الليست المعروضة (بتتفلتر بالمرحلة).
+  // withStage=false لحساب الأرقام والإحصائيات — البحث/المصدر/التاريخ بيفضلوا شغالين، المرحلة نفسها لأ،
+  // عشان أرقام التابات متتغيرش لما تفتح تاب "تم الحجز" مثلاً.
+  const buildParams = (withStage: boolean) => {
     const params = new URLSearchParams();
     params.set("scope", scope);
     if (scope === "all" && assignedFilter) params.set("assignedTo", assignedFilter);
-    if (withFilters) {
-      if (fStage !== "all") params.set("stage", fStage);
-      if (sourceFilter) params.set("leadSource", sourceFilter);
-      if (q.trim()) params.set("q", q.trim());
-    }
+    if (withStage && fStage !== "all") params.set("stage", fStage);
+    if (sourceFilter) params.set("leadSource", sourceFilter);
+    if (q.trim()) params.set("q", q.trim());
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
     return params;
@@ -159,6 +161,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
       if (j?.ok) {
         const all: Task[] = j.tasks;
         setStats({ total: all.length, won: all.filter((t) => t.stage === "won").length, lost: all.filter((t) => t.stage === "lost").length });
+        const c: Record<string, number> = { all: all.length };
+        for (const t of all) c[t.stage] = (c[t.stage] ?? 0) + 1;
+        setPillCounts(c);
       }
     } catch (e: any) {
       if (e?.name !== "AbortError") console.error(e);
@@ -192,19 +197,19 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
-  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q]);
-  useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [dateFrom, dateTo, scope, assignedFilter]);
+  useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
+  useEffect(() => {
+    const t = setTimeout(() => { load(); loadStats(); }, 300);
+    return () => clearTimeout(t);
+    /* eslint-disable-next-line */
+  }, [q]);
 
   const boardStages = useMemo<Stage[]>(() => {
     if (fStage === "won" || fStage === "lost") return [fStage];
     return OPEN_STAGES;
   }, [fStage]);
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: tasks.length };
-    for (const t of tasks) c[t.stage] = (c[t.stage] ?? 0) + 1;
-    return c;
-  }, [tasks]);
+  // شيل الـ counts القديمة خالص — استبدلت بـ pillCounts اللي جايه من loadStats
 
   const columns = useMemo(() => {
     const map = new Map<Stage, Task[]>();
@@ -289,12 +294,20 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {([["all", T("الكل", "All")], ...Object.entries(STAGE_META).map(([k, v]) => [k, isAr ? v.ar : v.en])] as [string, string][]).map(([id, label]) => {
             const on = fStage === id;
-            const n = id === "all" ? counts.all ?? 0 : counts[id] ?? 0;
+            const n = id === "all" ? pillCounts.all ?? 0 : pillCounts[id] ?? 0;
             return (
               <button key={id} onClick={() => setFStage(id as Stage | "all")}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "8px 10px 8px 16px", fontSize: 11.5, border: `1px solid ${on ? "rgba(203,205,205,.4)" : "rgba(255,255,255,.1)"}`, color: on ? "var(--abh-ivory)" : "rgba(203,205,205,.65)", background: on ? "rgba(203,205,205,.08)" : "transparent", cursor: "pointer" }}>
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999,
+                  padding: "8px 10px 8px 16px", fontSize: 11.5,
+                  border: `1px solid ${on ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.1)"}`,
+                  color: on ? "var(--abh-ivory)" : "rgba(203,205,205,.65)",
+                  background: on ? "rgba(255,255,255,.07)" : "transparent",
+                  boxShadow: on ? "0 2px 10px rgba(0,0,0,.25)" : "none",
+                  cursor: "pointer", transition: "all .15s ease",
+                }}>
                 {label}
-                <span className="abh-num" style={{ display: "inline-grid", placeItems: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, fontSize: 10.5, fontWeight: 600, color: on ? "#000" : "var(--abh-platinum)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)" }}>{n}</span>
+                <span className="abh-num" style={{ display: "inline-grid", placeItems: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, fontSize: 10.5, fontWeight: 600, color: on ? "#000" : "var(--abh-platinum)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.06)", transition: "all .15s ease" }}>{n}</span>
               </button>
             );
           })}
@@ -329,13 +342,14 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
             const meta = STAGE_META[stage];
             const items = columns.get(stage) ?? [];
             return (
-              <div key={stage} style={{ borderRadius: 20, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.012)", padding: 14, minWidth: 270 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 12, borderBottom: `2px solid ${meta.color}33` }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, color: "var(--abh-ivory)" }}>
-                    <span style={{ height: 9, width: 9, borderRadius: 999, background: meta.color, boxShadow: `0 0 10px ${meta.color}80` }} />
+              <div key={stage} style={{ borderRadius: 22, border: "1px solid rgba(255,255,255,.07)", background: "linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.008))", padding: 14, minWidth: 270, position: "relative", overflow: "hidden" }}>
+                <span style={{ position: "absolute", insetInline: 0, top: 0, height: 2, background: `linear-gradient(90deg, transparent, ${meta.color}, transparent)` }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11.5, fontWeight: 600, letterSpacing: ".04em", color: "var(--abh-ivory)", textTransform: "uppercase" }}>
+                    <span style={{ height: 8, width: 8, borderRadius: 999, background: meta.color, boxShadow: `0 0 10px ${meta.color}90` }} />
                     {isAr ? meta.ar : meta.en}
                   </span>
-                  <span className="abh-num" style={{ fontSize: 11.5, color: meta.color, fontWeight: 600 }}>{items.length}</span>
+                  <span className="abh-num" style={{ display: "inline-grid", placeItems: "center", minWidth: 22, height: 22, borderRadius: 999, fontSize: 11, fontWeight: 700, color: "#000", background: `linear-gradient(135deg, ${meta.color}, ${meta.color}bb)` }}>{items.length}</span>
                 </div>
                 <div className="abh-col" style={{ gap: 10 }}>
                   {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} />)}
@@ -380,10 +394,16 @@ function setLast7Days(setFrom: (v: string) => void, setTo: (v: string) => void) 
 }
 function StatBox({ label, value, color, loading, hint }: { label: string; value: number | string; color: string; loading: boolean; hint?: string }) {
   return (
-    <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.015)", padding: "12px 14px" }}>
-      <div style={{ fontSize: 10, color: "var(--abh-steel)", marginBottom: 6 }}>{label}</div>
-      <div className="abh-num" style={{ fontSize: 22, color, opacity: loading ? 0.5 : 1 }}>{value}</div>
-      {hint && <div style={{ fontSize: 9, color: "var(--abh-steel)", marginTop: 4, opacity: .8 }}>{hint}</div>}
+    <div className="abh-lift" style={{
+      position: "relative", overflow: "hidden", borderRadius: 16,
+      border: "1px solid rgba(255,255,255,.07)",
+      background: "linear-gradient(160deg, rgba(255,255,255,.035), rgba(255,255,255,.01))",
+      padding: "16px 18px",
+    }}>
+      <span style={{ position: "absolute", insetInlineStart: 0, top: 0, height: 3, width: "100%", background: `linear-gradient(90deg, transparent, ${color}, transparent)`, opacity: .8 }} />
+      <div style={{ fontSize: 10.5, letterSpacing: ".04em", color: "var(--abh-steel)", marginBottom: 10 }}>{label}</div>
+      <div className="abh-num" style={{ fontSize: 28, fontWeight: 600, color, opacity: loading ? 0.4 : 1, transition: "opacity .2s", lineHeight: 1 }}>{value}</div>
+      {hint && <div style={{ fontSize: 9.5, color: "var(--abh-steel)", marginTop: 8, opacity: .75, lineHeight: 1.5 }}>{hint}</div>}
     </div>
   );
 }
@@ -409,20 +429,35 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
   const q = t.quality ? QUALITY_META[t.quality] : null;
   const stale = isStale(t);
   const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
+  const accent = stale ? "#e8cf9a" : q?.color ?? "rgba(255,255,255,.18)";
   return (
     <button onClick={() => onOpen(id)} className="abh-lift"
-      style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 10, borderRadius: 16, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.09)"}`, background: stale ? "linear-gradient(160deg,rgba(232,207,154,.05),rgba(255,255,255,.02))" : "rgba(255,255,255,.025)", padding: 14, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
-      {stale && <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 3, background: "linear-gradient(180deg,#e8cf9a,#d9b25f)" }} />}
+      style={{
+        textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 11,
+        borderRadius: 18, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.08)"}`,
+        background: stale ? "linear-gradient(160deg,rgba(232,207,154,.06),rgba(255,255,255,.02))" : "rgba(255,255,255,.022)",
+        boxShadow: "0 1px 3px rgba(0,0,0,.25)",
+        padding: "15px 16px", cursor: "pointer", width: "100%", position: "relative", overflow: "hidden",
+      }}>
+      <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 3, background: `linear-gradient(180deg, ${accent}, ${accent}55)` }} />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Avatar name={t.customerName} />
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <Avatar name={t.customerName} />
+          {t.quality === "hot" && (
+            <span style={{ position: "absolute", bottom: -2, insetInlineEnd: -2, display: "grid", placeItems: "center", height: 15, width: 15, borderRadius: 999, background: "#0c0d0e", border: "1px solid rgba(231,180,180,.5)", color: "#e7b4b4" }}>
+              {flameIco(9)}
+            </span>
+          )}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, color: "var(--abh-ivory)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName}</div>
-          <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--abh-steel)" }}>{phoneIco(10)}{t.customerPhone}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--abh-ivory)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName}</div>
+          <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--abh-steel)", marginTop: 2 }}>{phoneIco(10)}{t.customerPhone}</div>
         </div>
         {q && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: q.color, border: `1px solid ${q.color}55`, background: `${q.color}15` }}>
-            {t.quality === "hot" && flameIco(10)}{isAr ? q.ar : q.en}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0, fontSize: 9.5, color: q.color }}>
+            <span style={{ height: 6, width: 6, borderRadius: 999, background: q.color, boxShadow: `0 0 6px ${q.color}` }} />
+            {isAr ? q.ar : q.en}
           </span>
         )}
       </div>
@@ -433,16 +468,19 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
         </span>
       )}
 
-      {t.vehicleBrandName && (
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
-          {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
-          {t.vehicleSize && <span style={{ opacity: .6 }}>· {isAr ? SIZE_META[t.vehicleSize].ar : SIZE_META[t.vehicleSize].en}</span>}
-        </div>
-      )}
-
-      {t.leadSource && LEAD_SOURCE_META[t.leadSource] && (
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10, borderRadius: 999, border: `1px solid ${LEAD_SOURCE_META[t.leadSource].color}55`, padding: "3px 10px", color: LEAD_SOURCE_META[t.leadSource].color, background: `${LEAD_SOURCE_META[t.leadSource].color}12` }}>
-          {isAr ? LEAD_SOURCE_META[t.leadSource].ar : LEAD_SOURCE_META[t.leadSource].en}
+      {(t.vehicleBrandName || (t.leadSource && LEAD_SOURCE_META[t.leadSource])) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start" }}>
+          {t.vehicleBrandName && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.03)", backdropFilter: "blur(8px)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
+              {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
+              {t.vehicleSize && <span style={{ opacity: .6 }}>· {isAr ? SIZE_META[t.vehicleSize].ar : SIZE_META[t.vehicleSize].en}</span>}
+            </span>
+          )}
+          {t.leadSource && LEAD_SOURCE_META[t.leadSource] && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, borderRadius: 999, border: `1px solid ${LEAD_SOURCE_META[t.leadSource].color}55`, background: `${LEAD_SOURCE_META[t.leadSource].color}12`, backdropFilter: "blur(8px)", padding: "3px 10px", color: LEAD_SOURCE_META[t.leadSource].color }}>
+              {isAr ? LEAD_SOURCE_META[t.leadSource].ar : LEAD_SOURCE_META[t.leadSource].en}
+            </span>
+          )}
         </div>
       )}
 
@@ -455,7 +493,7 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
 
       {t.priceObjection && <span style={{ fontSize: 10, color: "#e7b4b4" }}>{T("⚠ معترض على السعر", "⚠ Price objection")}</span>}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, paddingTop: 11, borderTop: "1px solid rgba(255,255,255,.06)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, color: t.assignedName ? "var(--abh-steel)" : "#e8cf9a" }}>
           {userIco(10)}
           <strong style={{ color: t.assignedName ? "var(--abh-platinum)" : "#e8cf9a", fontWeight: 600 }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</strong>
@@ -474,50 +512,40 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
 const ClosedTaskCard = React.memo(function ClosedTaskCard({ t, isAr, T, id, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; id: string; onOpen: (id: string) => void }) {
   const won = t.closeResult === "won";
   const reason = t.closeReason ? LOST_REASONS.find((r) => r.code === t.closeReason) : null;
-  const tone = won ? "#9fd4b0" : "#e7b4b4";
   return (
-    <button onClick={() => onOpen(id)} className="abh-lift"
-      style={{ textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 12, borderRadius: 18,
-        border: `1px solid ${tone}45`, background: `linear-gradient(160deg,${tone}0f,rgba(255,255,255,.015))`,
-        padding: 18, cursor: "pointer", width: "100%", position: "relative", overflow: "hidden" }}>
-      <span style={{ position: "absolute", insetInlineStart: 0, top: 0, bottom: 0, width: 4, background: `linear-gradient(180deg,${tone},${tone}88)` }} />
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "4px 11px", fontSize: 10.5, fontWeight: 700, color: tone, border: `1px solid ${tone}55`, background: `${tone}18` }}>
-          {won ? checkIco(11) : closeIco(11)}
-          {won ? T("تم الحجز", "Won") : T("مرفوض", "Lost")}
-        </span>
+    <div onClick={() => onOpen(id)} style={{ cursor: "pointer" }}>
+      <ImageCard
+        seed={t.vehicleBrandName || t.customerName}
+        height={236}
+        dim={won ? 0.42 : 0.3}
+        badge={won ? T("تم الحجز", "Won") : T("مرفوض", "Lost")}
+        topRight={
+          t.quality ? (
+            <Chip tone={t.quality === "hot" ? "bad" : t.quality === "warm" ? "warn" : "neutral"} dot>
+              {isAr ? QUALITY_META[t.quality].ar : QUALITY_META[t.quality].en}
+            </Chip>
+          ) : undefined
+        }>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <Avatar name={t.customerName} size={38} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="abh-display" style={{ fontSize: 18, color: "var(--abh-ivory)", textTransform: "uppercase", lineHeight: 1.1 }}>{t.customerName}</div>
+            <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "rgba(203,205,205,.75)", marginTop: 3 }}>{phoneIco(10)}{t.customerPhone}</div>
+          </div>
+        </div>
+        {t.vehicleBrandName && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "rgba(203,205,205,.8)", marginBottom: 4 }}>
+            {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
+          </div>
+        )}
+        {!won && reason && <div style={{ fontSize: 11.5, color: "#e7b4b4", fontWeight: 600 }}>{isAr ? reason.ar : reason.en}</div>}
+        {won && t.closeNote && <div style={{ fontSize: 11, color: "rgba(203,205,205,.8)", lineHeight: 1.5 }}>{t.closeNote}</div>}
+      </ImageCard>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 4px 0" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--abh-steel)" }}>{userIco(10)}{t.assignedName ?? T("—", "—")}</span>
         <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{fmtFull(t.closedAt ?? t.updatedAt, isAr)}</span>
       </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Avatar name={t.customerName} size={36} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, color: "var(--abh-ivory)" }}>{t.customerName}</div>
-          <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--abh-steel)" }}>{phoneIco(10)}{t.customerPhone}</div>
-        </div>
-      </div>
-
-      {t.vehicleBrandName && (
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 10.5, borderRadius: 999, border: "1px solid rgba(255,255,255,.1)", padding: "3px 10px", color: "var(--abh-platinum)" }}>
-          {carIco(11)}{t.vehicleBrandName} {t.vehicleModel}
-        </div>
-      )}
-
-      {!won && reason && (
-        <div style={{ borderRadius: 12, border: "1px solid rgba(231,180,180,.3)", background: "rgba(231,180,180,.06)", padding: 10 }}>
-          <div style={{ fontSize: 9.5, color: "var(--abh-steel)", marginBottom: 3 }}>{T("سبب الرفض", "Lost reason")}</div>
-          <div style={{ fontSize: 12, color: "#e7b4b4", fontWeight: 600 }}>{isAr ? reason.ar : reason.en}</div>
-        </div>
-      )}
-
-      {t.closeNote && <div style={{ fontSize: 11.5, color: "var(--abh-platinum)", lineHeight: 1.6 }}>{t.closeNote}</div>}
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--abh-steel)" }}>{userIco(10)}{t.assignedName ?? T("—", "—")}</span>
-        <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{T("بواسطة", "by")} {t.createdName ?? "—"}</span>
-      </div>
-    </button>
+    </div>
   );
 });
 function ClosedGrid({ tasks, isAr, T, onOpen }: { tasks: Task[]; isAr: boolean; T: (a: string, e: string) => string; onOpen: (id: string) => void }) {
@@ -806,9 +834,9 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
       <Modal title={task.customerName} onClose={onClose} wide>
         <div className="abh-col" style={{ gap: 20 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <Chip tone="neutral">{isAr ? STAGE_META[task.stage].ar : STAGE_META[task.stage].en}</Chip>
-            {task.quality && <Chip tone="warn">{isAr ? QUALITY_META[task.quality].ar : QUALITY_META[task.quality].en}</Chip>}
-            {task.priceObjection && <Chip tone="bad">{T("معترض على السعر", "Price objection")}</Chip>}
+            <Chip tone="platinum" dot>{isAr ? STAGE_META[task.stage].ar : STAGE_META[task.stage].en}</Chip>
+            {task.quality && <Chip tone={task.quality === "hot" ? "bad" : task.quality === "warm" ? "warn" : "neutral"} dot>{isAr ? QUALITY_META[task.quality].ar : QUALITY_META[task.quality].en}</Chip>}
+            {task.priceObjection && <Chip tone="bad" dot>{T("معترض على السعر", "Price objection")}</Chip>}
             <span style={{ marginInlineStart: "auto", fontSize: 10.5, color: "var(--abh-steel)" }}>
               {T("أنشأه", "Created by")} {task.createdName ?? "—"} · {fmtFull(task.createdAt, isAr)}
             </span>
@@ -889,12 +917,12 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
           {/* زراري الإغلاق */}
           {!isClosed && (
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setClosingKind("won")}
-                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, border: "1px solid rgba(159,212,176,.4)", background: "rgba(159,212,176,.08)", color: "#9fd4b0", padding: "13px 0", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              <button onClick={() => setClosingKind("won")} className="abh-lift"
+                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, border: "1px solid rgba(159,212,176,.4)", background: "linear-gradient(160deg, rgba(159,212,176,.14), rgba(159,212,176,.05))", color: "var(--abh-ok)", padding: "13px 0", fontSize: 13, fontWeight: 600, letterSpacing: ".04em", cursor: "pointer" }}>
                 {checkIco(15)}{T("تم الحجز", "Mark as Won")}
               </button>
-              <button onClick={() => setClosingKind("lost")}
-                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, border: "1px solid rgba(231,180,180,.4)", background: "rgba(231,180,180,.08)", color: "#e7b4b4", padding: "13px 0", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              <button onClick={() => setClosingKind("lost")} className="abh-lift"
+                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, border: "1px solid rgba(231,180,180,.4)", background: "linear-gradient(160deg, rgba(231,180,180,.14), rgba(231,180,180,.05))", color: "#e7b4b4", padding: "13px 0", fontSize: 13, fontWeight: 600, letterSpacing: ".04em", cursor: "pointer" }}>
                 {closeIco(15)}{T("رفض", "Mark as Lost")}
               </button>
             </div>
