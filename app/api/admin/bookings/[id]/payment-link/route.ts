@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
-import { createPayRequest, ALINMA_STATUS } from "@/lib/alinmapay";
+import { createPayRequest, generateGatewayOrderId, ALINMA_STATUS } from "@/lib/alinmapay";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getAdminOrNull();
@@ -25,11 +25,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const receiptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/alinma/callback`;
+  const orderId = generateGatewayOrderId(booking.reference);
 
   try {
     const { transactionId, linkUrl } = await createPayRequest({
       paymentType: "1",
-      orderId: booking.reference,
+      orderId,
       amount: Number(booking.total).toFixed(2),
       currency: "SAR",
       description: `ABH Auto booking ${booking.reference}`,
@@ -39,9 +40,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     await query(
       `UPDATE bookings
-         SET gateway_transaction_id = $2, payment_status = $3, payment_method_code = 'card'
+         SET gateway_order_id = $2, gateway_transaction_id = $3, payment_status = $4, payment_method_code = 'card'
        WHERE id = $1`,
-      [booking.id, transactionId, ALINMA_STATUS.awaitingGateway]
+      [booking.id, orderId, transactionId, ALINMA_STATUS.awaitingGateway]
     );
 
     return NextResponse.json({ ok: true, linkUrl });

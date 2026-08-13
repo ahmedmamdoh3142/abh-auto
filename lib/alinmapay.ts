@@ -5,6 +5,16 @@ const TERMINAL_ID = process.env.ALINMA_TERMINAL_ID!;
 const PASSWORD = process.env.ALINMA_PASSWORD!;
 const MERCHANT_KEY = process.env.ALINMA_MERCHANT_KEY!; // hex string من البنك
 
+/**
+ * يولّد orderId فريد لكل محاولة دفع (مش ثابت على الحجز).
+ * لازم يكون فريد عشان AlinmaPay ما يرفضش المعاملة بحجة "معاملة مفتوحة"
+ * لو حصلت أكتر من محاولة دفع لنفس الحجز.
+ */
+export function generateGatewayOrderId(reference: string): string {
+  const suffix = `${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`;
+  return `${reference}-${suffix}`;
+}
+
 // المسار الأساسي (context path) بتاع البيئة — نبني منه رابط pay-request
 // (Hosted Page) ورابط apiUrl بتاع JS Checkout (نفس الأساس، تفرعين مختلفين).
 const CONTEXT_BASE =

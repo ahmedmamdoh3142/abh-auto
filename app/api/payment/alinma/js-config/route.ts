@@ -1,9 +1,7 @@
 // app/api/payment/alinma/js-config/route.ts
-// يولّد إعدادات JS Checkout (الكارت المدمج) لحجز معيّن. التوقيع بيتولّد
-// لحظيًا لكل طلب، ومش بيثق بأي مبلغ جاي من الفرونت — بيتأكد منه في القاعدة.
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { buildJsCheckoutConfig, ALINMA_STATUS } from "@/lib/alinmapay";
+import { buildJsCheckoutConfig, generateGatewayOrderId, ALINMA_STATUS } from "@/lib/alinmapay";
 
 export async function POST(request: Request) {
   try {
@@ -34,9 +32,10 @@ export async function POST(request: Request) {
     }
 
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/alinma/callback`;
+    const orderId = generateGatewayOrderId(booking.reference);
 
     const config = buildJsCheckoutConfig({
-      orderId: booking.reference,
+      orderId,
       amount: Number(booking.total).toFixed(2),
       currency: "SAR",
       customerEmail: booking.customer_email || undefined,
@@ -44,8 +43,8 @@ export async function POST(request: Request) {
     });
 
     await query(
-      `UPDATE bookings SET payment_status = $2 WHERE id = $1`,
-      [booking.id, ALINMA_STATUS.awaitingGateway]
+      `UPDATE bookings SET gateway_order_id = $2, payment_status = $3 WHERE id = $1`,
+      [booking.id, orderId, ALINMA_STATUS.awaitingGateway]
     );
 
     return NextResponse.json({ ok: true, config });

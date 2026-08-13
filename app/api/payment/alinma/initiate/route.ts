@@ -1,6 +1,6 @@
 // app/api/payment/alinma/initiate/route.ts
 import { NextResponse } from "next/server";
-import { createPayRequest, ALINMA_STATUS } from "@/lib/alinmapay";
+import { createPayRequest, generateGatewayOrderId, ALINMA_STATUS } from "@/lib/alinmapay";
 import { query } from "@/lib/db";
 
 export async function POST(request: Request) {
@@ -11,8 +11,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "missing_booking_id" }, { status: 400 });
     }
 
-    // 1) تأكد إن الحجز موجود، وطريقة دفعه "card"، وعندنا نفس المبلغ
-    //    (عشان الأمان - متسبش الفرونت يحدد المبلغ لوحده)
     const rows = await query<any>(
       `SELECT id, reference, total, payment_status, payment_method_code
          FROM bookings WHERE id = $1 LIMIT 1`,
@@ -29,7 +27,6 @@ export async function POST(request: Request) {
     if (booking.payment_method_code !== "card") {
       return NextResponse.json({ ok: false, error: "wrong_payment_method" }, { status: 400 });
     }
-    // تأكد إن المبلغ اللي جاي من الفرونت مطابق للمبلغ المحسوب فعلياً في السيرفر وقت إنشاء الحجز
     const amountMatches = Math.abs(Number(booking.total) - Number(amount)) < 0.01;
     if (!amountMatches) {
       console.error("alinma initiate: amount mismatch", { bookingId, sent: amount, expected: booking.total });
@@ -37,10 +34,11 @@ export async function POST(request: Request) {
     }
 
     const receiptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/alinma/callback`;
+    const orderId = generateGatewayOrderId(booking.reference);
 
     const { transactionId, linkUrl } = await createPayRequest({
       paymentType: "1",
-      orderId: booking.reference,
+      orderId,
       amount: Number(booking.total).toFixed(2),
       currency: "SAR",
       description: `ABH Auto booking ${booking.reference}`,
@@ -48,13 +46,13 @@ export async function POST(request: Request) {
       receiptUrl,
     });
 
-    // 2) خزّن الـ transactionId عشان نعرف نتحقق منه بعدين (inquiry / refund / void)
     await query(
       `UPDATE bookings
-         SET gateway_transaction_id = $2,
-             payment_status = $3
+         SET gateway_order_id = $2,
+             gateway_transaction_id = $3,
+             payment_status = $4
        WHERE id = $1`,
-      [bookingId, transactionId, ALINMA_STATUS.awaitingGateway]
+      [bookingId, orderId, transactionId, ALINMA_STATUS.awaitingGateway]
     );
 
     return NextResponse.json({ ok: true, redirectUrl: linkUrl });

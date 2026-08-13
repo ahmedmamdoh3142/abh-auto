@@ -247,24 +247,27 @@ function followupColorOf(b: any): string {
   return FOLLOWUP_STATUS[status].color;
 }
 
-/* ═════════════════ كرت الحجز (Grid) — هوفر يكشف دوسيه، وعلى اللمس يظهر أصلاً ═════════════════ */
+/* ═════════════════ كرت الحجز (Grid) — «تذكرة الفاليه» ═════════════════
+ * فلسفة جديدة: كل المعلومات والأزرار المهمة ظاهرة طول الوقت (مش خلف hover)،
+ * الـ hover بقى بس لرفعة الكارت + تكبير الصورة، ده أسرع للاستخدام اليومي.
+ * الريبون في زاوية الصورة = التوقيع البصري الموحّد بين الكارت والمودال.
+ */
 function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWorkOrder, onReport, onConfirmPay, onCall, onWhats, onPrint, onPrintWarranty, onFollowUp, onGenLink, linkBusy, onDiscount }: any) {
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
   const isActive = b.status === "active";
   const isCancelled = b.status === "cancelled";
   const isCompleted = b.status === "completed";
-  const needsWorkOrder = !b.workOrderNo && !isCancelled && !isCompleted; // لسه ما اتستلمش
-  // مرحلة أمر العمل (أدقّ من status) — تُعرض بدلها لو موجودة.
+  const needsWorkOrder = !b.workOrderNo && !isCancelled && !isCompleted;
   const ws = b.workStage && !isCancelled && !isCompleted ? WORK_STAGE[b.workStage] : null;
+  const accent = ws ? ws.color : st.color;
   const [hover, setHover] = useState(false);
   const touch = useMediaQuery("(hover: none)");
-  const reveal = hover || touch;
   const stop = (e: any, fn: () => void) => { e.stopPropagation(); fn(); };
   const followupStatus = b.followupStatus || "none";
   const followupColor = followupColorOf(b);
   const createdLabel = b.createdAt
-    ? new Date(b.createdAt).toLocaleString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
+    ? new Date(b.createdAt).toLocaleString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
     : null;
 
   return (
@@ -272,174 +275,133 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={() => onOpen(b.id)}
       style={{
-        position: "relative", display: "flex", flexDirection: "column", minHeight: touch ? 0 : 392, borderRadius: 24, overflow: "hidden", cursor: "pointer",
-        border: needsWorkOrder ? `1.5px dashed ${reveal ? "#e8cf9a" : "rgba(232,207,154,.55)"}` : `1.5px solid ${reveal ? (ws ? ws.color : st.color) : (ws ? `${ws.color}80` : st.soft)}`,
+        position: "relative", display: "flex", flexDirection: "column", borderRadius: 22, overflow: "hidden", cursor: "pointer",
+        border: needsWorkOrder ? "1.5px dashed rgba(232,207,154,.55)" : "1px solid rgba(255,255,255,.08)",
         background: "#0b0c0e",
-        boxShadow: hover ? `0 30px 70px -28px ${ws ? `${ws.color}52` : st.glow}, 0 0 0 1px ${ws ? `${ws.color}52` : st.glow}` : "0 14px 36px -22px rgba(0,0,0,.7)",
-        transform: hover && !touch ? "translateY(-5px)" : "none",
-        transition: "transform .5s var(--abh-ease), box-shadow .5s var(--abh-ease), border-color .4s var(--abh-ease)",
+        boxShadow: hover ? `0 26px 60px -26px ${accent}55, 0 0 0 1px ${accent}40` : "0 10px 28px -18px rgba(0,0,0,.65)",
+        transform: hover && !touch ? "translateY(-4px)" : "none",
+        transition: "transform .45s var(--abh-ease), box-shadow .45s var(--abh-ease)",
         animation: `abh-fadeUp .5s var(--abh-ease) ${i * 0.04}s both`,
       }}
     >
-      {/* صورة السيارة خلفية الكرت بالكامل */}
-      <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .42 : .64}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover ? "scale(1.07)" : "scale(1)", transition: "transform 1.1s var(--abh-ease), filter .5s var(--abh-ease)" }} />
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.96) 8%, rgba(8,9,11,.5) 44%, rgba(8,9,11,.1) 72%, rgba(8,9,11,.35) 100%)" }} />
-      <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg, transparent, ${ws ? ws.color : st.color}, transparent)`, zIndex: 4 }} />
-      {/* أعلى: شارات */}
-      <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, padding: 16, zIndex: 2 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, borderRadius: 999, padding: "6px 12px", fontSize: 10.5, letterSpacing: ".08em", fontWeight: 600, color: ws ? ws.color : st.color, background: "rgba(0,0,0,.55)", border: `1px solid ${ws ? ws.color : st.color}`, backdropFilter: "blur(8px)" }}>
-          {(ws?.color === "#f5993d" || (!ws && isActive))
-            ? <span style={{ position: "relative", display: "flex", height: 7, width: 7 }}><span style={{ position: "absolute", inset: 0, borderRadius: 999, background: ws ? ws.color : st.color, opacity: .7, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} /><span style={{ position: "relative", height: 7, width: 7, borderRadius: 999, background: ws ? ws.color : st.color }} /></span>
-            : <span style={{ height: 7, width: 7, borderRadius: 999, background: ws ? ws.color : st.color }} />}
+      {/* شريط الصورة */}
+      <div style={{ position: "relative", height: 134, overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: `brightness(${isCancelled ? .48 : .74}) contrast(1.05) ${isCancelled ? "grayscale(.5)" : ""}`, transform: hover && !touch ? "scale(1.07)" : "scale(1)", transition: "transform 1s var(--abh-ease)" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, #0b0c0e 4%, rgba(11,12,14,.1) 55%, rgba(11,12,14,.42) 100%)" }} />
+
+        {/* ريبون الحالة — التوقيع البصري */}
+        <span style={{
+          position: "absolute", top: 15, [isAr ? "right" : "left"]: -38, width: 150, padding: "4px 0", textAlign: "center",
+          transform: `rotate(${isAr ? 45 : -45}deg)`, background: accent, color: "#0b0c0e",
+          fontSize: 9, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase",
+          boxShadow: "0 3px 10px rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+        }}>
+          {(ws?.color === "#f5993d" || (!ws && isActive)) && (
+            <span style={{ position: "relative", display: "flex", height: 6, width: 6 }}>
+              <span style={{ position: "absolute", inset: 0, borderRadius: 999, background: "#0b0c0e", opacity: .5, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} />
+              <span style={{ position: "relative", height: 6, width: 6, borderRadius: 999, background: "#0b0c0e" }} />
+            </span>
+          )}
           {ws ? (isAr ? ws.ar : ws.en) : (isAr ? st.ar : st.en)}
         </span>
+
+        {/* رقم الحجز */}
+        <span dir="ltr" style={{ position: "absolute", top: 14, [isAr ? "left" : "right"]: 14, fontSize: 10.5, letterSpacing: ".08em", color: "rgba(255,255,255,.88)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 11px", backdropFilter: "blur(6px)" }}>{b.reference}</span>
+
+        {/* متابعة نشطة */}
         {followupStatus === "open" && (
-          <span title={isAr ? "قيد المتابعة" : "Follow-up in progress"} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 10px", fontSize: 10, color: followupColor, background: "rgba(0,0,0,.55)", border: `1px solid ${followupColor}`, backdropFilter: "blur(8px)" }}>
+          <span title={isAr ? "قيد المتابعة" : "Follow-up in progress"} style={{ position: "absolute", bottom: 12, [isAr ? "right" : "left"]: 14, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 10px", fontSize: 9.5, color: followupColor, background: "rgba(0,0,0,.55)", border: `1px solid ${followupColor}`, backdropFilter: "blur(6px)" }}>
             <span style={{ position: "relative", display: "flex", height: 6, width: 6 }}><span style={{ position: "absolute", inset: 0, borderRadius: 999, background: followupColor, opacity: .7, animation: "abh-ping 1.4s var(--abh-ease) infinite" }} /><span style={{ position: "relative", height: 6, width: 6, borderRadius: 999, background: followupColor }} /></span>
-            {I.bubble(11)}
+            {I.bubble(10)}
           </span>
         )}
-        <span dir="ltr" style={{ fontSize: 10.5, letterSpacing: ".08em", color: "rgba(203,205,205,.9)", background: "rgba(0,0,0,.5)", borderRadius: 999, padding: "5px 10px", backdropFilter: "blur(8px)" }}>{b.reference}</span>
+        {/* تاريخ الإنشاء */}
+        {createdLabel && (
+          <span dir="ltr" style={{ position: "absolute", bottom: 12, [isAr ? "left" : "right"]: 14, fontSize: 9.5, color: "rgba(255,255,255,.65)", background: "rgba(0,0,0,.4)", borderRadius: 999, padding: "4px 9px", backdropFilter: "blur(6px)" }}>{createdLabel}</span>
+        )}
       </div>
 
-      {/* تاريخ إنشاء الحجز — يظهر عند الهوفر فقط، أعلى يسار الكرت */}
-      {createdLabel && (
-        <div style={{
-          position: "absolute", top: 16, left: 16, zIndex: 4,
-          display: "inline-flex", alignItems: "center", gap: 6,
-          borderRadius: 999, padding: "6px 12px", fontSize: 10,
-          letterSpacing: ".04em", color: "var(--abh-platinum)",
-          background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.16)",
-          backdropFilter: "blur(8px)",
-          opacity: reveal ? 1 : 0,
-          transform: reveal ? "translateY(0)" : "translateY(-6px)",
-          transition: "opacity .4s var(--abh-ease), transform .4s var(--abh-ease)",
-          pointerEvents: "none",
-        }}>
-          <Ic.clock s={12} />
-          <span dir="ltr" className="abh-num">{createdLabel}</span>
-        </div>
-      )}
+      {/* خط تآكل التذكرة */}
+      <div style={{ position: "relative", height: 13, background: "#0b0c0e" }}>
+        <span style={{ position: "absolute", insetInline: 16, top: 6, height: 1, backgroundImage: "radial-gradient(circle, rgba(255,255,255,.24) 1.3px, transparent 1.3px)", backgroundSize: "8px 1px", backgroundRepeat: "repeat-x" }} />
+      </div>
 
-      {/* سبيسر */}
-      <div style={{ flex: touch ? "none" : 1, height: touch ? 92 : undefined }} />
+      {/* جسم البطاقة */}
+      <div style={{ padding: "2px 18px 14px", flex: 1 }}>
+        <h3 className="abh-display" style={{ margin: 0, fontSize: 21, lineHeight: 1.15, color: "#fff", textTransform: "uppercase" }}>{b.vehicle}</h3>
+        {(b.plate || b.size) && <div dir="ltr" style={{ fontSize: 10.5, color: "var(--abh-steel)", marginTop: 3 }}>{[b.plate, b.size].filter(Boolean).join(" · ")}</div>}
 
-      {/* أسفل: المحتوى الأساسي (يبهت عند الهوفر) — مخفي على اللمس لمنع التكرار */}
-      <div style={{ display: touch ? "none" : "block", position: "relative", padding: "0 16px 16px", zIndex: 2, opacity: hover ? 0 : 1, transform: hover ? "translateY(8px)" : "none", transition: "opacity .35s var(--abh-ease), transform .35s var(--abh-ease)" }}>
-        <h3 className="abh-display" style={{ margin: 0, fontSize: 26, lineHeight: 1.05, color: "#fff", textTransform: "uppercase", textShadow: "0 2px 14px rgba(0,0,0,.6)" }}>{b.vehicle}</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 12, color: "rgba(230,230,230,.92)" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{I.user(13)}{b.customer}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Ic.clock s={12} />{fmtDate(b.date)} · {b.time}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 14px", marginTop: 12, fontSize: 12, color: "rgba(230,230,230,.9)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>{I.user(12)}<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.customer}</span></span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Ic.clock s={12} />{fmtDate(b.date)}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, gridColumn: "1 / -1" }}><Ic.pin s={12} />{b.branch} · {b.time}</span>
         </div>
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.12)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+
+        {b.services?.some((s: any) => s.isGift) && (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {b.services.filter((s: any) => s.isGift).slice(0, 2).map((s: any, j: number) => (
+              <span key={j} style={giftChipStyle()}>{I.gift(10)}{s.name}</span>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.08)", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 9, letterSpacing: ".2em", textTransform: "uppercase", color: "rgba(203,205,205,.7)" }}>{isAr ? "الإجمالي" : "Total"}</div>
-            <div className="abh-num" dir="ltr" style={{ fontSize: 22, color: "#fff", lineHeight: 1.1 }}>{EGP(b.total)} <span style={{ fontSize: 11, color: "rgba(203,205,205,.7)" }}>{ccy}</span></div>
+            <div style={{ fontSize: 8.5, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--abh-steel)" }}>{isAr ? "الإجمالي" : "Total"}</div>
+            <div className="abh-num" dir="ltr" style={{ fontSize: 21, color: "#fff", marginTop: 2 }}>{EGP(b.total)} <span style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>{ccy}</span></div>
           </div>
           {!isCancelled && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}`, backdropFilter: "blur(8px)" }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 11px", fontSize: 10, color: pay.color, background: `${pay.color}14`, border: `1px solid ${pay.soft}` }}>{I.wallet(11)}{isAr ? pay.ar : pay.en}</span>
           )}
         </div>
-      </div>
-      {/* ═══ دوسيه الهوفر ═══ */}
-      <div style={{ position: touch ? "relative" : "absolute", inset: touch ? "auto" : 0, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, background: touch ? "linear-gradient(to top, rgba(6,7,9,.97) 62%, rgba(6,7,9,.78))" : "linear-gradient(to top, rgba(6,7,9,.97) 30%, rgba(6,7,9,.86) 60%, rgba(6,7,9,.55))", backdropFilter: "blur(3px)", opacity: reveal ? 1 : 0, transform: reveal ? "translateY(0)" : "translateY(14px)", pointerEvents: reveal ? "auto" : "none", transition: "opacity .4s var(--abh-ease), transform .45s var(--abh-ease)" }}>
-        <h3 className="abh-display" style={{ margin: "0 0 3px", fontSize: 23, lineHeight: 1.05, color: "#fff", textTransform: "uppercase" }}>{b.vehicle}</h3>
-        {b.plate && <div dir="ltr" style={{ fontSize: 11, color: "var(--abh-platinum)", marginBottom: 10 }}>{b.plate} · {b.size || "—"}</div>}
-
-        {/* بيانات العميل */}
-        <div style={{ display: "grid", gap: 5, marginBottom: 11, fontSize: 12, color: "rgba(230,230,230,.95)" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>{I.user(13)}{b.customer}{b.isGuest && <em style={{ fontStyle: "normal", fontSize: 9, color: "var(--abh-steel)" }}>· {isAr ? "زائر" : "guest"}</em>}</span>
-          {b.phone && <span dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>{I.phone(12)}{b.phone}</span>}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Ic.pin s={12} />{b.branch} · {fmtDate(b.date)} · {b.time}</span>
-        </div>
-
-        {/* خدمات — العناصر الهدية بشارة ذهبية */}
-        {b.services.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 11 }}>
-            {b.services.slice(0, 4).map((s: any, j: number) => (
-              s.isGift ? (
-                <span key={j} style={giftChipStyle()}>{I.gift(11)}{s.name}{s.price === 0 ? ` · ${isAr ? "مجانية" : "Free"}` : ""}</span>
-              ) : (
-                <span key={j} style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "rgba(230,230,230,.95)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>{s.name}</span>
-              )
-            ))}
-            {b.services.length > 4 && <span style={{ borderRadius: 999, padding: "3px 9px", fontSize: 9.5, color: "var(--abh-platinum)", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)" }}>+{b.services.length - 4}</span>}
-          </div>
-        )}
-        {/* تقدّم */}
-        {isActive && !ws && (
-          <div style={{ marginBottom: 11 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(230,230,230,.9)", marginBottom: 5 }}>
-              <span>{isAr ? STAGES[Math.min(b.stage, 3)].ar : STAGES[Math.min(b.stage, 3)].en}</span><span>{Math.min(b.stage + 1, 4)}/{STAGES.length}</span>
-            </div>
-            <div style={{ position: "relative", height: 5, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,.18)" }}>
-              <span style={{ position: "absolute", insetInlineStart: 0, top: 0, height: "100%", width: `${((Math.min(b.stage, 3) + 1) / STAGES.length) * 100}%`, borderRadius: 999, background: "linear-gradient(90deg,#f5993d,#3ecd8e)" }} />
-            </div>
-          </div>
-        )}
         {isCancelled && b.cancelReason && (
-          <div style={{ marginBottom: 11, fontSize: 11.5, color: "#f0b3ac", display: "flex", gap: 6 }}>{I.tag(12)}<span>{isAr ? "السبب" : "Reason"}: {b.cancelReason}</span></div>
+          <div style={{ marginTop: 10, fontSize: 11, color: "#f0b3ac", display: "flex", gap: 6 }}>{I.tag(11)}<span>{b.cancelReason}</span></div>
+        )}
+      </div>
+
+      {/* كعب التذكرة — إجراءات ظاهرة دايمًا */}
+      <div style={{ position: "relative", borderTop: "1.5px dashed rgba(255,255,255,.16)", padding: "12px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qIcon()} title={isAr ? "تفاصيل" : "Details"}>{Ic.eye({ s: 14 })}</button>
+
+        {needsWorkOrder && (
+          <button onClick={(e) => stop(e, () => onReceive(b.id))} style={qBtn(true)}>{I.play(13)}{isAr ? "استلام" : "Receive"}</button>
+        )}
+        {b.workOrderNo && b.workStage === "received" && !isCancelled && !isCompleted && (
+          <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(true)}>{Ic.sliders({ s: 13 })}{isAr ? "أمر العمل" : "Work order"}</button>
+        )}
+        {["in_service", "quality_check", "ready"].includes(b.workStage) && !isCancelled && (
+          <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(b.workStage === "quality_check")}>
+            {Ic.sliders({ s: 13 })}
+            {b.workStage === "quality_check" ? (isAr ? "فحص الجودة" : "Quality check") : b.workStage === "ready" ? (isAr ? "التسليم" : "Deliver") : (isAr ? "متابعة" : "Track")}
+          </button>
+        )}
+        {isCompleted && b.workOrderNo && (
+          <button onClick={(e) => stop(e, () => onReport(b.id))} style={qBtn(true)}>{I.pdf(13)}{isAr ? "التقرير" : "Report"}</button>
         )}
 
-        {/* إجمالي + شارة دفع */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div className="abh-num" dir="ltr" style={{ fontSize: 24, color: "#fff" }}>{EGP(b.total)} <span style={{ fontSize: 11, color: "rgba(203,205,205,.7)" }}>{ccy}</span></div>
-          {!isCancelled && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.45)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>}
-        </div>
-        {/* أكشنز سريعة */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={(e) => stop(e, () => onOpen(b.id))} style={qBtn(true)}>{Ic.eye({ s: 14 })}{isAr ? "تفاصيل" : "Details"}</button>
-          {!isCancelled && !pay.paid && <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qBtn()}>{I.wallet(14)}{isAr ? "دفع" : "Pay"}</button>}
-          {!isCancelled && !pay.paid && (
-            <button onClick={(e) => !linkBusy && stop(e, () => onGenLink(b.id))} title={isAr ? "نسخ لينك الدفع" : "Copy payment link"} style={qIcon("#6ba8f5")}>
-              {I.link(15)}
-            </button>
+        <span style={{ flex: 1 }} />
+
+        {!isCancelled && !pay.paid && (
+          <button onClick={(e) => !busy && stop(e, () => onConfirmPay(b))} style={qIcon("#ffb723")} title={isAr ? "تأكيد الدفع" : "Confirm payment"}>{I.wallet(14)}</button>
+        )}
+        {!isCancelled && !pay.paid && (
+          <button onClick={(e) => !linkBusy && stop(e, () => onGenLink(b.id))} style={qIcon("#6ba8f5")} title={isAr ? "لينك الدفع" : "Payment link"}>{I.link(14)}</button>
+        )}
+        {!isCancelled && !pay.paid && (
+          <button onClick={(e) => stop(e, () => onDiscount(b.id))} style={qIcon("#ffb723")} title={isAr ? "خصم" : "Discount"}>{I.tag(14)}</button>
+        )}
+        <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} style={qIcon("#caa24f")} title={isAr ? "طباعة" : "Print"}>{I.print(14)}</button>
+        {pay.paid && (
+          <button onClick={(e) => stop(e, () => onPrintWarranty(b))} style={qIcon("#3ecd8e")} title={isAr ? "الضمان" : "Warranty"}>{I.shield(14)}</button>
+        )}
+        <span style={{ position: "relative", display: "inline-flex" }}>
+          <button onClick={(e) => stop(e, () => onFollowUp(b.id))} style={qIcon(followupColor)} title={isAr ? "المتابعة" : "Follow-up"}>{I.bubble(14)}</button>
+          {b.followups && b.followups.length > 0 && (
+            <span style={{ position: "absolute", top: -3, insetInlineEnd: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: followupColor, color: "#0b0c0e", fontSize: 8.5, fontWeight: 700, display: "grid", placeItems: "center", border: "1.5px solid #0b0c0e" }}>{b.followups.length}</span>
           )}
-          {!isCancelled && !pay.paid && (
-            <button onClick={(e) => stop(e, () => onDiscount(b.id))} title={isAr ? "خصم" : "Discount"} style={qIcon("#ffb723")}>
-              {I.tag(15)}
-            </button>
-          )}
-          {/* لسه ما اتستلمش → زرّ الاستلام */}
-          {needsWorkOrder && (
-            <button onClick={(e) => stop(e, () => onReceive(b.id))} style={qBtn(true)}>
-              {I.play(14)}{isAr ? "استلام السيارة" : "Receive"}
-            </button>
-          )}
-          {/* اتستلم بس لسه ما اتخصّصش → زرّ أمر العمل (التخصيص) */}
-          {b.workOrderNo && b.workStage === "received" && !isCancelled && !isCompleted && (
-            <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(true)}>
-              {Ic.sliders({ s: 14 })}{isAr ? "أمر العمل" : "Work order"}
-            </button>
-          )}
-          {/* قيد التشغيل / فحص الجودة / جاهزة → زرّ متابعة (بنص حسب المرحلة) */}
-          {["in_service", "quality_check", "ready"].includes(b.workStage) && !isCancelled && (
-            <button onClick={(e) => stop(e, () => onWorkOrder(b.id))} style={qBtn(b.workStage === "quality_check")}>
-              {Ic.sliders({ s: 14 })}
-              {b.workStage === "quality_check" ? (isAr ? "فحص الجودة" : "Quality check")
-                : b.workStage === "ready" ? (isAr ? "التسليم" : "Deliver")
-                : (isAr ? "متابعة العمل" : "Track")}
-            </button>
-          )}
-          {/* حجز مكتمل بأمر عمل → التقرير النهائي */}
-          {isCompleted && b.workOrderNo && (
-            <button onClick={(e) => stop(e, () => onReport(b.id))} style={qBtn(true)}>
-              {I.pdf(14)}{isAr ? "التقرير النهائي" : "Final report"}
-            </button>
-          )}
-          <button onClick={(e) => stop(e, () => onPrint(b, "a4"))} title={isAr ? "طباعة الفاتورة" : "Print invoice"} style={qIcon("#caa24f")}>{I.print(15)}</button>
-          {pay.paid && (
-            <button onClick={(e) => stop(e, () => onPrintWarranty(b))} title={isAr ? "طباعة بطاقة الضمان" : "Print warranty card"} style={qIcon("#3ecd8e")}>{I.shield(15)}</button>
-          )}
-          <span style={{ position: "relative", display: "inline-flex" }}>
-            <button onClick={(e) => stop(e, () => onFollowUp(b.id))} title={isAr ? "المتابعة" : "Follow-up"} style={qIcon(followupColor)}>{I.bubble(15)}</button>
-            {b.followups && b.followups.length > 0 && (
-              <span style={{ position: "absolute", top: -3, insetInlineEnd: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: followupColor, color: "#0b0c0e", fontSize: 8.5, fontWeight: 700, display: "grid", placeItems: "center", border: "1.5px solid #0b0c0e" }}>{b.followups.length}</span>
-            )}
-          </span>
-          {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} title="WhatsApp" style={qIcon("#25D366")}>{I.whats(15)}</button>}
-          {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} title={isAr ? "اتصال" : "Call"} style={qIcon()}>{I.phone(14)}</button>}
-        </div>
+        </span>
+        {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} style={qIcon("#25D366")} title="WhatsApp">{I.whats(14)}</button>}
+        {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} style={qIcon()} title={isAr ? "اتصال" : "Call"}>{I.phone(13)}</button>}
       </div>
     </div>
   );
@@ -666,17 +628,22 @@ function DiscountModal({ b, busy, isAr, ccy, onClose, onApply }: any) {
   );
 }
 
-/* ═════════════════ مودال التفاصيل ═════════════════ */
+/* ═════════════════ مودال التفاصيل — «دوسيه مبوّب» ═════════════════
+ * بدل الاسكرول الطويل: هيدر موحّد بنفس ريبون الكارت، ٤ تابات (نظرة عامة/
+ * العميل/السيارة والخدمة/الفوترة)، وشريط إجراءات ثابت تحت التابات دايمًا ظاهر.
+ */
 function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, onWhats, onPrint, onPrintWarranty, onConfirmPay, onGenLink, linkBusy, onDiscount, isSuperAdmin, onOpenDanger }: any) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
+  const [tab, setTab] = useState<"overview" | "customer" | "service" | "billing">("overview");
   const mobile = useMediaQuery("(max-width: 640px)");
   const st = STATUS[b.status] || STATUS.upcoming;
   const pay = PAY[b.payment] || { ar: b.payment, en: b.payment, paid: false, ...PAY_FALLBACK };
+  const ws = b.workStage && b.status !== "cancelled" && b.status !== "completed" ? WORK_STAGE[b.workStage] : null;
+  const accent = ws ? ws.color : st.color;
   const live = b.status === "upcoming" || b.status === "active";
-  // الإلغاء وإعادة الجدولة يتاحوا طول ما الحجز حيّ، إلا لو بدأ العمل والدفع تم معًا.
   const workStarted = b.status === "active";
   const isPaid = b.payment === "paid";
-  const locked = isPaid && workStarted;   // مدفوع + قيد التنفيذ → أُقفلت التعديلات
+  const locked = isPaid && workStarted;
   const canModify = live && !locked;
   const [rDate, setRDate] = useState(b.date);
   const [rTime, setRTime] = useState(b.time);
@@ -687,143 +654,168 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
   const promoDiscount = Number(b.promoDiscount) || 0;
   const isGiftCode = b.promoKind === "gift_service";
   const manualDiscountAmount = Number(b.manualDiscountAmount) || 0;
-  const bankDiscountAmount = Number(b.bankDiscountAmount) || 0;
+
+  const TABS: [string, string, any][] = [
+    ["overview", T("نظرة عامة", "Overview"), I.tag],
+    ["customer", T("العميل", "Customer"), I.user],
+    ["service", T("السيارة والخدمة", "Vehicle & service"), I.car],
+    ["billing", T("الفوترة", "Billing"), I.wallet],
+  ];
 
   return (
     <Modal title={T("تفاصيل الحجز", "Booking details")} onClose={onClose} wide>
-      <div style={{ position: "relative", height: mobile ? 130 : 168, borderRadius: 20, overflow: "hidden", marginBottom: 18, border: `1px solid ${st.soft}` }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.6) contrast(1.05)" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.95), rgba(8,9,11,.25))" }} />
-        <span style={{ position: "absolute", insetInline: 0, top: 0, height: 3, background: `linear-gradient(90deg,transparent,${st.color},transparent)` }} />
-        <div style={{ position: "absolute", insetInlineStart: 18, insetInlineEnd: 18, bottom: 14, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10.5, fontWeight: 600, color: st.color, background: "rgba(0,0,0,.5)", border: `1px solid ${st.color}` }}><span style={{ height: 7, width: 7, borderRadius: 999, background: st.color }} />{isAr ? st.ar : st.en}</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}` }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
-            </div>
-            <div className="abh-display" style={{ fontSize: mobile ? 20 : 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
-          </div>
-          <span dir="ltr" className="abh-num" style={{ fontSize: 13, color: "var(--abh-platinum)", background: "rgba(0,0,0,.45)", borderRadius: 999, padding: "6px 12px" }}>{b.reference}</span>
+      {/* هيدر الدوسيه */}
+      <div style={{ position: "relative", height: mobile ? 128 : 158, borderRadius: 18, overflow: "hidden", marginBottom: 18, border: "1px solid rgba(255,255,255,.08)" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${brandImg(b.brandId, b.plate || b.vehicle)}')`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(.62) contrast(1.05)" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,9,11,.95), rgba(8,9,11,.2))" }} />
+        <span style={{ position: "absolute", top: 15, [isAr ? "right" : "left"]: -38, width: 150, padding: "4px 0", textAlign: "center", transform: `rotate(${isAr ? 45 : -45}deg)`, background: accent, color: "#0b0c0e", fontSize: 9, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", boxShadow: "0 3px 10px rgba(0,0,0,.4)" }}>
+          {ws ? (isAr ? ws.ar : ws.en) : (isAr ? st.ar : st.en)}
+        </span>
+        <span dir="ltr" className="abh-num" style={{ position: "absolute", top: 14, [isAr ? "left" : "right"]: 16, fontSize: 13, color: "var(--abh-platinum)", background: "rgba(0,0,0,.45)", borderRadius: 999, padding: "6px 12px" }}>{b.reference}</span>
+        <div style={{ position: "absolute", insetInlineStart: 18, insetInlineEnd: 18, bottom: 14 }}>
+          <div className="abh-display" style={{ fontSize: mobile ? 20 : 28, color: "#fff", textTransform: "uppercase", lineHeight: 1 }}>{b.vehicle}</div>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "5px 11px", fontSize: 10, color: pay.color, background: "rgba(0,0,0,.5)", border: `1px solid ${pay.soft}`, marginTop: 8 }}>{I.wallet(12)}{isAr ? pay.ar : pay.en}</span>
         </div>
       </div>
+
       {mode === "view" && (
         <div className="abh-scale-in">
-          <SectionLabel>{I.user(13)} {T("جهة الحجز", "Booking source")}</SectionLabel>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
-            {b.isGuest ? (
-              <span style={sourceBadgeStyle("#8a9099")}>
-                {I.user(13)}{T("زائر — بدون حساب مسجّل", "Guest — no registered account")}
-              </span>
-            ) : (
-              <span style={sourceBadgeStyle((ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).color)}>
-                {I.user(13)}{T("حساب مسجّل", "Registered account")} · {isAr ? (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).ar : (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).en}
-              </span>
-            )}
-            {b.viaPartner && (
-              <span style={sourceBadgeStyle("#9fd4b0")}>
-                {I.tag(13)}{T("عن طريق شريك", "Booked via partner")} · {b.viaPartner}
-              </span>
-            )}
+          {/* شريط التابات */}
+          <div style={{ display: "flex", gap: 4, borderRadius: 999, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 4, marginBottom: 20, overflowX: "auto" }}>
+            {TABS.map(([k, l, ic]) => {
+              const on = tab === k;
+              return (
+                <button key={k} onClick={() => setTab(k as any)} style={{ display: "inline-flex", alignItems: "center", gap: 6, flex: mobile ? "none" : 1, justifyContent: "center", whiteSpace: "nowrap", borderRadius: 999, padding: "9px 14px", fontSize: 11.5, color: on ? "#000" : "rgba(203,205,205,.75)", background: on ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", border: "none", cursor: "pointer", transition: "all .25s var(--abh-ease)" }}>
+                  {ic(13)}{l}
+                </button>
+              );
+            })}
           </div>
 
-          <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 14 }}>
-            <InfoTile isAr={isAr} icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
-            <InfoTile isAr={isAr} icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
-            <InfoTile isAr={isAr} icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
-            <InfoTile isAr={isAr} icon={I.city(14)} label={T("المدينة", "City")} value={b.city || "—"} />
-          </div>
-          {b.phone && (
-            <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-              <Ghost sm icon={() => I.whats(14)} onClick={() => onWhats(b.phone)}>WhatsApp</Ghost>
-              <Ghost sm icon={() => I.phone(14)} onClick={() => onCall(b.phone)}>{T("اتصال", "Call")}</Ghost>
+          {tab === "overview" && (
+            <div>
+              <SectionLabel>{I.user(13)} {T("جهة الحجز", "Booking source")}</SectionLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+                {b.isGuest ? (
+                  <span style={sourceBadgeStyle("#8a9099")}>{I.user(13)}{T("زائر — بدون حساب مسجّل", "Guest — no registered account")}</span>
+                ) : (
+                  <span style={sourceBadgeStyle((ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).color)}>{I.user(13)}{T("حساب مسجّل", "Registered account")} · {isAr ? (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).ar : (ACCOUNT_ROLE[b.accountRole] || ACCOUNT_ROLE.member).en}</span>
+                )}
+                {b.viaPartner && <span style={sourceBadgeStyle("#9fd4b0")}>{I.tag(13)}{T("عن طريق شريك", "Booked via partner")} · {b.viaPartner}</span>}
+              </div>
+
+              {b.status !== "cancelled" ? (
+                <div style={{ marginBottom: 20 }}>
+                  <SectionLabel>{Ic.sliders({ s: 13 })} {T("مراحل العمل", "Work stages")}</SectionLabel>
+                  <StagePipeline stage={b.stage || 0} isAr={isAr} />
+                  <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T("يتحدّث تلقائيًا حسب نسبة إنجاز مهام أمر العمل.", "Updates automatically from work-order task completion.")}</p>
+                </div>
+              ) : b.cancelReason && (
+                <div style={{ marginBottom: 20, borderRadius: 14, border: "1px solid rgba(239,90,77,.3)", background: "rgba(239,90,77,.1)", padding: "12px 15px", fontSize: 13.5, color: "#f0b3ac" }}>
+                  <strong style={{ fontWeight: 600 }}>{T("سبب الإلغاء", "Cancellation reason")}:</strong> {b.cancelReason}
+                </div>
+              )}
+
+              <SectionLabel>{Ic.clock({ s: 13 })} {T("بيانات سريعة", "Quick facts")}</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+                <InfoTile isAr={isAr} icon={<Ic.clock s={14} />} label={T("أُنشئ في", "Created")} value={b.createdAt ? new Date(b.createdAt).toLocaleDateString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", year: "numeric" }) : "—"} />
+                {b.deliveredAt && <InfoTile isAr={isAr} icon={I.shield(14)} label={T("تاريخ التسليم", "Delivered")} value={new Date(b.deliveredAt).toLocaleDateString(isAr ? "ar-EG" : "en-US", { day: "numeric", month: "short", year: "numeric" })} />}
+                {b.invoiceNumber != null && <InfoTile isAr={isAr} icon={I.receipt(14)} label={T("رقم الفاتورة", "Invoice #")} value={String(b.invoiceNumber)} ltr />}
+                <InfoTile isAr={isAr} icon={I.wallet(14)} label={T("حالة الدفع", "Payment status")} value={isAr ? pay.ar : pay.en} />
+              </div>
             </div>
           )}
 
-          <SectionLabel>{I.car(13)} {T("السيارة والموعد", "Vehicle & schedule")}</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
-            <InfoTile isAr={isAr} icon={I.car(14)} label={T("اللوحة", "Plate")} value={b.plate || "—"} ltr />
-            <InfoTile isAr={isAr} label={T("المقاس", "Size")} value={b.size || "—"} />
-            <InfoTile isAr={isAr} icon={<Ic.pin s={14} />} label={T("الفرع", "Branch")} value={b.branch} />
-            <InfoTile isAr={isAr} icon={<Ic.clock s={14} />} label={T("الموعد", "Date & time")} value={`${fmtDate(b.date)} · ${b.time}`} />
-          </div>
+          {tab === "customer" && (
+            <div>
+              <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 16 }}>
+                <InfoTile isAr={isAr} icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
+                <InfoTile isAr={isAr} icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
+                <InfoTile isAr={isAr} icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
+                <InfoTile isAr={isAr} icon={I.city(14)} label={T("المدينة", "City")} value={b.city || "—"} />
+              </div>
+              {b.phone && (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Ghost sm icon={() => I.whats(14)} onClick={() => onWhats(b.phone)}>WhatsApp</Ghost>
+                  <Ghost sm icon={() => I.phone(14)} onClick={() => onCall(b.phone)}>{T("اتصال", "Call")}</Ghost>
+                </div>
+              )}
+            </div>
+          )}
 
-          {b.services.length > 0 && (
-            <>
-              <SectionLabel>{Ic.sparkle({ s: 13 })} {T("الخدمات", "Services")}</SectionLabel>
-              <div className="abh-col" style={{ gap: 8, marginBottom: 14 }}>
-                {b.services.map((s: any, i: number) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 14, border: `1px solid ${s.isGift ? "rgba(217,178,95,.35)" : "rgba(255,255,255,.07)"}`, background: s.isGift ? "rgba(217,178,95,.06)" : "rgba(255,255,255,.02)", padding: "12px 15px" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>
-                      {s.isGift ? <span style={{ color: GIFT_GOLD, display: "inline-flex" }}>{I.gift(14)}</span> : Ic.sparkle({ s: 14 })}
-                      {s.name}
-                      {s.isGift && <span style={{ borderRadius: 999, padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.4)", letterSpacing: ".04em" }}>{T("هدية", "Gift")}</span>}
-                    </span>
-                    <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: s.isGift ? GIFT_GOLD : "var(--abh-platinum)" }}>
-                      {s.isGift && s.price === 0 ? T("مجانية", "Free") : (s.price > 0 ? `${EGP(s.price)} ${ccy}` : T("حسب الطلب", "On request"))}
-                    </span>
+          {tab === "service" && (
+            <div>
+              <SectionLabel>{I.car(13)} {T("السيارة والموعد", "Vehicle & schedule")}</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 20 }}>
+                <InfoTile isAr={isAr} icon={I.car(14)} label={T("اللوحة", "Plate")} value={b.plate || "—"} ltr />
+                <InfoTile isAr={isAr} label={T("المقاس", "Size")} value={b.size || "—"} />
+                <InfoTile isAr={isAr} icon={<Ic.pin s={14} />} label={T("الفرع", "Branch")} value={b.branch} />
+                <InfoTile isAr={isAr} icon={<Ic.clock s={14} />} label={T("الموعد", "Date & time")} value={`${fmtDate(b.date)} · ${b.time}`} />
+              </div>
+              {b.services.length > 0 && (
+                <>
+                  <SectionLabel>{Ic.sparkle({ s: 13 })} {T("الخدمات", "Services")}</SectionLabel>
+                  <div className="abh-col" style={{ gap: 8 }}>
+                    {b.services.map((s: any, idx: number) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 14, border: `1px solid ${s.isGift ? "rgba(217,178,95,.35)" : "rgba(255,255,255,.07)"}`, background: s.isGift ? "rgba(217,178,95,.06)" : "rgba(255,255,255,.02)", padding: "12px 15px" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>
+                          {s.isGift ? <span style={{ color: GIFT_GOLD, display: "inline-flex" }}>{I.gift(14)}</span> : Ic.sparkle({ s: 14 })}
+                          {s.name}
+                          {s.isGift && <span style={{ borderRadius: 999, padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.4)", letterSpacing: ".04em" }}>{T("هدية", "Gift")}</span>}
+                        </span>
+                        <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: s.isGift ? GIFT_GOLD : "var(--abh-platinum)" }}>
+                          {s.isGift && s.price === 0 ? T("مجانية", "Free") : (s.price > 0 ? `${EGP(s.price)} ${ccy}` : T("حسب الطلب", "On request"))}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-          <div style={{ borderRadius: 16, border: "1px solid rgba(203,205,205,.2)", background: "linear-gradient(180deg,rgba(203,205,205,.06),rgba(255,255,255,.01))", padding: "14px 16px", marginBottom: 18 }}>
-            <Line k={T("إجمالي الخدمات", "Services subtotal")} v={`${EGP(servicesTotal || b.subtotal)} ${ccy}`} />
-            {b.towing > 0 && <Line k={T("السطحة / النقل", "Towing")} v={`${EGP(b.towing)} ${ccy}`} />}
-            {/* خصم كود الخصم — لو الكود بخصم مبلغ/نسبة */}
-            {promoDiscount > 0 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>
-                  {I.tag(13)}{T("خصم الكود", "Promo")}{b.promoCode ? ` (${b.promoCode})` : ""}
-                </span>
-                <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(promoDiscount)} {ccy}</span>
-              </div>
-            )}
-            {/* خصم يدوي طبّقه الموظف مباشرة (نسبة/مبلغ) — عند الإنشاء أو تأكيد الدفع */}
-            {manualDiscountAmount > 0 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>
-                  {I.tag(13)}{T("خصم يدوي", "Manual discount")}
-                  {b.manualDiscountKind ? ` (${b.manualDiscountKind === "percent" ? `${b.manualDiscountValue}%` : `${EGP(b.manualDiscountValue)} ${ccy}`})` : ""}
-                </span>
-                <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(manualDiscountAmount)} {ccy}</span>
-              </div>
-            )}
-            <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "10px 0" }} />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الإجمالي", "Total")}</span>
-              <span dir="ltr" className="abh-num" style={{ fontSize: mobile ? 22 : 26, color: "var(--abh-ivory)" }}>{EGP(b.total)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></span>
-            </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>
-              {T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}
-              {b.promoCode ? ` · ${T("كود", "Code")}: ${b.promoCode}${isGiftCode ? ` (${T("هدية", "Gift")})` : ""}` : ""}
-              {manualDiscountAmount > 0 && b.manualDiscountReason ? ` · ${T("سبب الخصم", "Discount reason")}: ${b.manualDiscountReason}` : ""}
-              {manualDiscountAmount > 0 && b.manualDiscountBy ? ` · ${T("بواسطة", "By")}: ${b.manualDiscountBy}` : ""}
-            </div>
-          </div>
-
-          {b.status !== "cancelled" && (
-            <div style={{ marginBottom: 18 }}>
-              <StagePipeline stage={b.stage || 0} isAr={isAr} />
-              <p style={{ margin: "8px 2px 0", fontSize: 11, color: "var(--abh-steel)" }}>{T("يتحدّث تلقائيًا حسب نسبة إنجاز مهام أمر العمل — العميل يشوف نفس التقدّم في حسابه فورًا.", "Updates automatically based on work-order task completion — the customer sees the same progress in their account instantly.")}</p>
+                </>
+              )}
             </div>
           )}
 
-          {b.status === "cancelled" && b.cancelReason && (
-            <div style={{ marginBottom: 18, borderRadius: 14, border: "1px solid rgba(239,90,77,.3)", background: "rgba(239,90,77,.1)", padding: "12px 15px", fontSize: 13.5, color: "#f0b3ac" }}>
-              <strong style={{ fontWeight: 600 }}>{T("سبب الإلغاء", "Cancellation reason")}:</strong> {b.cancelReason}
+          {tab === "billing" && (
+            <div>
+              <SectionLabel>{I.wallet(13)} {T("تفاصيل الفوترة", "Billing breakdown")}</SectionLabel>
+              <div style={{ borderRadius: 16, border: "1px solid rgba(203,205,205,.2)", background: "linear-gradient(180deg,rgba(203,205,205,.06),rgba(255,255,255,.01))", padding: "14px 16px" }}>
+                <Line k={T("إجمالي الخدمات", "Services subtotal")} v={`${EGP(servicesTotal || b.subtotal)} ${ccy}`} />
+                {b.towing > 0 && <Line k={T("السطحة / النقل", "Towing")} v={`${EGP(b.towing)} ${ccy}`} />}
+                {promoDiscount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>{I.tag(13)}{T("خصم الكود", "Promo")}{b.promoCode ? ` (${b.promoCode})` : ""}</span>
+                    <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(promoDiscount)} {ccy}</span>
+                  </div>
+                )}
+                {manualDiscountAmount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 13.5 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--abh-platinum)" }}>{I.tag(13)}{T("خصم يدوي", "Manual discount")}{b.manualDiscountKind ? ` (${b.manualDiscountKind === "percent" ? `${b.manualDiscountValue}%` : `${EGP(b.manualDiscountValue)} ${ccy}`})` : ""}</span>
+                    <span dir="ltr" className="abh-num" style={{ color: "#3ecd8e" }}>−{EGP(manualDiscountAmount)} {ccy}</span>
+                  </div>
+                )}
+                <div style={{ height: 1, background: "rgba(255,255,255,.1)", margin: "10px 0" }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>{T("الإجمالي", "Total")}</span>
+                  <span dir="ltr" className="abh-num" style={{ fontSize: mobile ? 22 : 26, color: "var(--abh-ivory)" }}>{EGP(b.total)} <span style={{ fontSize: 13, color: "var(--abh-steel)" }}>{ccy}</span></span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 11, color: "var(--abh-steel)" }}>
+                  {T("طريقة الدفع", "Payment")}: {payMethod} · {T("الحالة", "Status")}: {isAr ? pay.ar : pay.en}
+                  {b.promoCode ? ` · ${T("كود", "Code")}: ${b.promoCode}${isGiftCode ? ` (${T("هدية", "Gift")})` : ""}` : ""}
+                  {manualDiscountAmount > 0 && b.manualDiscountReason ? ` · ${T("سبب الخصم", "Discount reason")}: ${b.manualDiscountReason}` : ""}
+                  {manualDiscountAmount > 0 && b.manualDiscountBy ? ` · ${T("بواسطة", "By")}: ${b.manualDiscountBy}` : ""}
+                </div>
+              </div>
             </div>
           )}
 
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
+          {/* شريط إجراءات ثابت */}
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid rgba(255,255,255,.08)" }}>
             <Ghost icon={() => I.print(15)} onClick={() => onPrint(b, "a4")}>{T("طباعة A4", "Print A4")}</Ghost>
             <Ghost icon={() => I.receipt(15)} onClick={() => onPrint(b, "receipt")}>{T("إيصال 80mm", "Receipt 80mm")}</Ghost>
             {pay.paid && <Ghost icon={() => I.shield(15)} onClick={() => onPrintWarranty(b)}>{T("بطاقة الضمان", "Warranty card")}</Ghost>}
             {!pay.paid && b.status !== "cancelled" && <Pill icon={() => I.wallet(15)} onClick={() => onConfirmPay(b)}>{T("تأكيد الدفع", "Confirm payment")}</Pill>}
             {!pay.paid && b.status !== "cancelled" && (
-              <Ghost icon={() => I.link(15)} onClick={() => onGenLink(b.id)}>
-                {linkBusy ? T("جارٍ التوليد…", "Generating…") : T("لينك الدفع", "Payment link")}
-              </Ghost>
+              <Ghost icon={() => I.link(15)} onClick={() => onGenLink(b.id)}>{linkBusy ? T("جارٍ التوليد…", "Generating…") : T("لينك الدفع", "Payment link")}</Ghost>
             )}
             {!pay.paid && b.status !== "cancelled" && (
               <Ghost icon={() => I.tag(15)} onClick={onDiscount}>{T("تعديل الخصم", "Edit discount")}</Ghost>
@@ -832,7 +824,6 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
             {canModify && <Ghost danger icon={Ic.trash} onClick={() => setMode("cancel")}>{T("إلغاء الحجز", "Cancel booking")}</Ghost>}
             {isSuperAdmin && <Ghost danger icon={() => I.tag(15)} onClick={onOpenDanger}>{T("إدارة متقدّمة (سوبر أدمن)", "Advanced (super admin)")}</Ghost>}
           </div>
-          {/* ملاحظة عند قفل التعديلات (بدأ التنفيذ + الدفع تم) */}
           {locked && (
             <p style={{ margin: "12px 2px 0", fontSize: 11.5, color: "var(--abh-steel)", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
               <span style={{ color: "#3ecd8e", display: "inline-flex" }}>{Ic.check({ s: 13 })}</span>
@@ -841,6 +832,7 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
           )}
         </div>
       )}
+
       {mode === "reschedule" && (
         <div className="abh-scale-in">
           <PanelHead title={T("إعادة جدولة الموعد", "Reschedule")} sub={T("اختر تاريخ ووقت جديد للحجز.", "Pick a new date and time.")} onBack={() => setMode("view")} isAr={isAr} />
@@ -1190,7 +1182,7 @@ export default function BookingsClient({ initial, locale, isSuperAdmin }: { init
     // بانتظار التخصيص = اتستلم (عنده WO) بس لسه ما بدأش التشغيل
     c.needs_assign = list.filter((b) => b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed").length;
     // قيد التشغيل = بدأ الشغل
-    c.in_service = list.filter((b) => ["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled").length;
+    c.in_service = list.filter((b) => ["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled" && b.status !== "completed").length;
     c.followup = list.filter((b) => b.followupStatus === "open").length;
     c.completed = list.filter((b) => b.status === "completed").length;
     c.cancelled = list.filter((b) => b.status === "cancelled").length;
@@ -1207,7 +1199,7 @@ export default function BookingsClient({ initial, locale, isSuperAdmin }: { init
         : tab === "paid" ? (b.payment === "paid" && b.status !== "cancelled")
         : tab === "needs_intake" ? (!b.workOrderNo && b.status !== "cancelled" && b.status !== "completed")
         : tab === "needs_assign" ? (b.workOrderNo && b.workStage === "received" && b.status !== "cancelled" && b.status !== "completed")
-        : tab === "in_service" ? (["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled")
+        : tab === "in_service" ? (["in_service", "quality_check", "ready"].includes(b.workStage) && b.status !== "cancelled" && b.status !== "completed")
         : tab === "followup" ? (b.followupStatus === "open")
         : b.status === tab;
       const matchQ = q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase());
@@ -1352,12 +1344,68 @@ async function addFollowupNote(id: string, channel: string, note: string) {
   };
 
   const exportCsv = () => {
-    const head = ["reference", "vehicle", "plate", "customer", "phone", "email", "city", "branch", "date", "time", "status", "payment", "total"];
-    const rows = filtered.map((b) => [b.reference, b.vehicle, b.plate, b.customer, b.phone, b.email, b.city, b.branch, b.date, b.time, b.status, b.payment, b.total]
-      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","));
+    const head = [
+      "reference", "status", "workOrderNo", "workStage",
+      "vehicle", "plate", "brand", "size", "color", "branch",
+      "customerName", "phone", "email", "city", "customerType", "viaPartner",
+      "date", "time", "createdAt", "deliveredAt",
+      "servicesDetail", "servicesCount", "servicesTotal", "towing",
+      "promoCode", "promoDiscount", "promoKind",
+      "manualDiscountType", "manualDiscountValue", "manualDiscountAmount", "manualDiscountReason", "manualDiscountBy",
+      "bankDiscountAmount", "bankCode",
+      "subtotal", "total",
+      "paymentMethod", "paymentStatus", "invoiceNumber",
+      "followupStatus", "followupOutcome", "followupClosedAt", "followupsCount", "followupsDetail",
+      "cancelReason", "notes",
+    ];
+
+    const rows = filtered.map((b) => {
+      const servicesDetail = (b.services || [])
+        .map((s: any) => `${s.name}${s.isGift ? ` [${T("هدية", "Gift")}]` : ""} = ${EGP(s.price)} ${ccy}`)
+        .join(" | ");
+      const servicesTotal = (b.services || []).reduce((s: number, x: any) => s + (Number(x.price) || 0), 0);
+      const followupsDetail = (b.followups || [])
+        .map((f: any) => {
+          const ch = FOLLOWUP_CHANNEL[f.channel]?.[isAr ? "ar" : "en"] || f.channel;
+          return `${ch}${f.author ? ` (${f.author})` : ""}: ${f.note}`.replace(/\n/g, " ");
+        })
+        .join(" || ");
+
+      return [
+        b.reference,
+        isAr ? (STATUS[b.status]?.ar || b.status) : (STATUS[b.status]?.en || b.status),
+        b.workOrderNo || "",
+        b.workStage ? (isAr ? WORK_STAGE[b.workStage]?.ar : WORK_STAGE[b.workStage]?.en) || b.workStage : "",
+        b.vehicle, b.plate, b.brandId, b.size, b.color, b.branch,
+        b.customer, b.phone, b.email, b.city,
+        b.isGuest ? T("زائر", "Guest") : T("عميل مسجل", "Registered"),
+        b.viaPartner || "",
+        b.date, b.time, b.createdAt, b.deliveredAt,
+        servicesDetail, (b.services || []).length, servicesTotal, b.towing,
+        b.promoCode || "", b.promoDiscount || 0, b.promoKind || "",
+        b.manualDiscountKind || "", b.manualDiscountValue || 0, b.manualDiscountAmount || 0, b.manualDiscountReason || "", b.manualDiscountBy || "",
+        b.bankDiscountAmount || 0, b.bankCode || "",
+        b.subtotal || 0, b.total,
+        b.paymentMethod ? (PAY_METHOD[b.paymentMethod]?.[isAr ? "ar" : "en"] || b.paymentMethod) : "",
+        isAr ? (PAY[b.payment]?.ar || b.payment) : (PAY[b.payment]?.en || b.payment),
+        b.invoiceNumber ?? "",
+        b.followupStatus || "none",
+        b.followupOutcome ? (isAr ? FOLLOWUP_OUTCOME[b.followupOutcome]?.ar : FOLLOWUP_OUTCOME[b.followupOutcome]?.en) || b.followupOutcome : "",
+        b.followupClosedAt || "",
+        (b.followups || []).length,
+        followupsDetail,
+        b.cancelReason || "",
+        b.notes || "",
+      ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
+    });
+
     const csv = "\uFEFF" + [head.join(","), ...rows].join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a"); a.href = url; a.download = "bookings.csv"; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `abh-bookings-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const stats = [

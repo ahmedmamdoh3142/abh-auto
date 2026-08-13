@@ -162,9 +162,9 @@ export function StepServices({
             src={sv.img}
             alt={sv.name}
             fill
+            unoptimized
             loading={i < 2 ? 'eager' : 'lazy'}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
-            quality={62}
             className="svc-img object-cover transition-transform duration-[1100ms] ease-out group-hover:scale-[1.09]"
           />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-obsidian to-transparent" />

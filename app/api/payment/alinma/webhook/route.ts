@@ -6,7 +6,6 @@ import { ALINMA_STATUS } from "@/lib/alinmapay";
 
 const MERCHANT_KEY = process.env.ALINMA_MERCHANT_KEY!;
 
-/** توقيع الويبهوك بيجي جاهز في الـ payload نفسه — نتأكد منه بنفس صيغة التوقيع المعروفة */
 function verifyWebhookSignature(payload: any): boolean {
   const raw = `${payload.transactionId}|${MERCHANT_KEY}|${payload.responseCode}|${Number(payload.amount).toFixed(2)}`;
   const expected = crypto.createHash("sha256").update(raw, "utf8").digest("hex");
@@ -21,11 +20,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
-  // لازم نرجع 200 دايمًا حتى لو رفضنا المنطق الداخلي، وإلا البنك هيعيد المحاولة 3 مرات
-  // ونبعت alert email — لكن هنرفض المعالجة لو التوقيع غلط.
   if (!payload?.signature || !verifyWebhookSignature(payload)) {
     console.error("alinma webhook: invalid signature", payload?.orderId);
-    return NextResponse.json({ ok: true }); // نرد 200 برضو عشان مانفتحش باب retry storm، بس منعملش تحديث
+    return NextResponse.json({ ok: true });
   }
 
   const orderId = payload.orderId;
@@ -34,8 +31,9 @@ export async function POST(request: Request) {
   const transactionId = payload.transactionId;
   const success = responseCode === "000" && payload.result === "SUCCESS";
 
+  // (معدّل) البحث بقى بـ gateway_order_id مش reference
   const rows = await query<any>(
-    `SELECT id, total, payment_status FROM bookings WHERE reference = $1 LIMIT 1`,
+    `SELECT id, total, payment_status FROM bookings WHERE gateway_order_id = $1 LIMIT 1`,
     [orderId]
   );
   const booking = rows[0];
@@ -44,7 +42,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // لو المعاملة اتقفلت بالفعل (paid) من الـ callback العادي، منكررش التحديث
   if (booking.payment_status === ALINMA_STATUS.paid) {
     return NextResponse.json({ ok: true });
   }
