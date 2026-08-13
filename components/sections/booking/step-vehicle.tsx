@@ -6,6 +6,15 @@
  * الألوان تأتي من القاعدة (جدول colors) عبر prop `colors` بدل الاعتماد على الترجمة.
  *
  * الماركة والموديل صاروا combobox بسيرش (SearchSelect): تكتب حرف فيتفلتر القائمة.
+ *
+ * (إصلاح) وضع دخول الصيانة من الناف بار (maintenanceIntent):
+ *  • قبل كده الزرار "متابعة" كان بيتفعّل بمجرد اكتمال بيانات السيارة، من غير
+ *    أي اعتبار لنتيجة فحص الضمان — فكان العميل يقدر يكمل حتى لو مفيش ضمان
+ *    أو حتى لو مش مسجل دخول، وده عكس المطلوب تمامًا.
+ *  • دلوقتي: لو داخل من رابط الصيانة (maintenanceIntent) ولسه مش في وضع
+ *    الصيانة (isMaintenance=false) والسيارة/اللوحة متعبيين، بنمنع زرار
+ *    المتابعة تمامًا في حالتين: (أ) مش مسجل دخول، (ب) فيه لوحة كاملة ومفيش
+ *    أي ضمان راجع من الفحص. وبنغيّر نص البانر ليكون واضح ومباشر في الحالتين.
  */
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
@@ -48,7 +57,7 @@ const FALLBACK_COLORS: DbColor[] = COLORS.map((c) => ({ key: c.key, hex: c.hex, 
 
 export function StepVehicle({
   t, isAr, data, onChange, bookingImage, onNext, garage = [], brands, colors, onAddCustomModel,
-  maintenanceCovered = [], onStartMaintenance, maintenanceIntent = false,
+  maintenanceCovered = [], onStartMaintenance, maintenanceIntent = false, loggedIn = false,
 }: {
   t: ReturnType<typeof useTranslations>;
   isAr: boolean;
@@ -65,16 +74,30 @@ export function StepVehicle({
   onStartMaintenance?: (w: WarrantyCoverage) => void;
   /** (جديد) جاي من رابط «حجز صيانة» في الناف بار. */
   maintenanceIntent?: boolean;
+  /** (إصلاح) هل العميل مسجل دخول؟ — لازم نعرفها هنا عشان نمنع المتابعة
+   *  في وضع الصيانة قبل ما نقدر نتحقق من الضمان أصلاً. */
+  loggedIn?: boolean;
 }) {
   const palette = colors && colors.length > 0 ? colors : FALLBACK_COLORS;
   const brand = brands.find((b) => b.id === data.brandId);
   const color = palette.find((c) => c.key === data.colorKey);
-  // مكتمل = ماركة + موديل + لون + على الأقل رقم واحد في اللوحة
-  const complete = !!(data.brandId && data.model && data.colorKey && DIGITS_RE.test(data.plate || ''));
 
   const { digits, letters } = splitPlate(data.plate);
   const plateComplete = digits.length >= 4;
+  // (إصلاح) مكتمل = ماركة + موديل + لون + لوحة كاملة (4 أرقام) — كان الشرط
+  // القديم بيكتفي برقم واحد بس، فكان العميل يقدر يدوس "متابعة" قبل ما فحص
+  // الضمان (اللي بيحتاج 4 أرقام) ياخد فرصته، فيفوّت المنع أو يكمل بلوحة ناقصة.
+  const complete = !!(data.brandId && data.model && data.colorKey && plateComplete);
   const [mode, setMode] = useState<'pick' | 'new'>(garage.length > 0 ? 'pick' : 'new');
+
+  // (إصلاح) في وضع دخول الصيانة من الناف بار: لازم نتأكد من الضمان فعليًا
+  // قبل ما نسمح بالمتابعة — لو مش مسجل دخول، أو فيه لوحة كاملة ومفيش أي
+  // ضمان راجع من الفحص، نمنع زر المتابعة تمامًا بدل ما نسيب العميل يكمل
+  // كحجز عادي من غير ما يحس.
+  const maintenanceCheckFailed =
+    maintenanceIntent && !data.isMaintenance && (
+      !loggedIn || (plateComplete && maintenanceCovered.length === 0)
+    );
 
   // (جديد) نموذج إضافة موديل يدوي لو مش موجود بالقائمة
   const [customOpen, setCustomOpen] = useState(false);
@@ -107,6 +130,24 @@ export function StepVehicle({
   const pickVehicle = (v: Vehicle) =>
     onChange({ brandId: v.brandId, model: v.model, colorKey: v.colorKey, plate: v.plate });
 
+  // (إصلاح) نص/ستايل بانر التحقق من الضمان — بيتغيّر حسب maintenanceIntent
+  // وحالة تسجيل الدخول ونتيجة الفحص، بدل النص الثابت اللي كان بيسيب الباب
+  // مفتوح للمتابعة دايمًا.
+  const warrantyBannerText = (fallbackHint: string, fallbackNoWarranty: string) => {
+    if (maintenanceIntent && !loggedIn) {
+      return isAr ? 'سجّل الدخول أولاً عشان نقدر نتحقق من ضمان سيارتك.' : 'Please log in first so we can check your car\u2019s warranty.';
+    }
+    if (maintenanceIntent && plateComplete && maintenanceCovered.length === 0) {
+      return isAr
+        ? 'مفيش ضمان ساري على السيارة/اللوحة دي — راجع البيانات أو اختر سيارة تانية.'
+        : "This car/plate doesn't have an active warranty — double-check the details or pick another car.";
+    }
+    if (plateComplete && maintenanceCovered.length === 0) {
+      return fallbackNoWarranty;
+    }
+    return fallbackHint;
+  };
+
   return (
     <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
       <div>
@@ -115,12 +156,16 @@ export function StepVehicle({
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.garageTitle')} sub={t('step1.garageHint')} />
 
             {!data.isMaintenance && (
-              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
-                <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
-                <span className="text-[0.78rem] leading-relaxed text-ivory/85">
-                  {plateComplete && maintenanceCovered.length === 0
-                    ? (isAr ? 'لم نجد ضمانًا ساريًا على هذه السيارة — يمكنك المتابعة كحجز جديد.' : "We couldn't find an active warranty for this car — you can continue as a new booking.")
-                    : (isAr ? 'اختر سيارتك من الجراج وهنتحقق من ضمان الصيانة تلقائيًا.' : "Pick your car from the garage and we'll check its warranty automatically.")}
+              <div className={[
+                'mt-5 flex items-center gap-3 rounded-2xl border px-5 py-3.5',
+                maintenanceCheckFailed ? 'border-[#c98a8a]/40 bg-[#2a1414]/30' : 'border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06]',
+              ].join(' ')}>
+                <ShieldCheck className={`h-4 w-4 flex-none ${maintenanceCheckFailed ? 'text-[#e7b4b4]' : 'text-[#9fd4b0]'}`} strokeWidth={1.8} />
+                <span className={`text-[0.78rem] leading-relaxed ${maintenanceCheckFailed ? 'text-[#e7b4b4]' : 'text-ivory/85'}`}>
+                  {warrantyBannerText(
+                    isAr ? 'اختر سيارتك من الجراج وهنتحقق من ضمان الصيانة تلقائيًا.' : "Pick your car from the garage and we'll check its warranty automatically.",
+                    isAr ? 'لم نجد ضمانًا ساريًا على هذه السيارة — يمكنك المتابعة كحجز جديد.' : "We couldn't find an active warranty for this car — you can continue as a new booking.",
+                  )}
                 </span>
               </div>
             )}
@@ -176,7 +221,8 @@ export function StepVehicle({
             )}
 
             <div className="mt-10">
-              <button onClick={onNext} disabled={!complete} data-cursor="hover" className={complete ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
+              <button onClick={onNext} disabled={!complete || maintenanceCheckFailed} data-cursor="hover"
+                className={complete && !maintenanceCheckFailed ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
                 <PrimaryPill>{data.isMaintenance ? (isAr ? 'متابعة لطلب الصيانة' : 'Continue to service request') : t('step1.continue')}</PrimaryPill>
               </button>
             </div>
@@ -186,12 +232,16 @@ export function StepVehicle({
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.heading')} sub={t('step1.subheading')} />
 
             {!data.isMaintenance && (
-              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
-                <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
-                <span className="text-[0.78rem] leading-relaxed text-ivory/85">
-                  {plateComplete && maintenanceCovered.length === 0
-                    ? (isAr ? 'لم نجد ضمانًا ساريًا على هذه اللوحة — تأكد من الأرقام أو تابع كحجز جديد.' : "We couldn't find an active warranty for this plate — double-check the numbers, or continue as a new booking.")
-                    : (isAr ? 'أدخل بيانات سيارتك ولوحتها للتحقق من ضمان الصيانة تلقائيًا.' : "Enter your vehicle and plate to check your warranty automatically.")}
+              <div className={[
+                'mt-5 flex items-center gap-3 rounded-2xl border px-5 py-3.5',
+                maintenanceCheckFailed ? 'border-[#c98a8a]/40 bg-[#2a1414]/30' : 'border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06]',
+              ].join(' ')}>
+                <ShieldCheck className={`h-4 w-4 flex-none ${maintenanceCheckFailed ? 'text-[#e7b4b4]' : 'text-[#9fd4b0]'}`} strokeWidth={1.8} />
+                <span className={`text-[0.78rem] leading-relaxed ${maintenanceCheckFailed ? 'text-[#e7b4b4]' : 'text-ivory/85'}`}>
+                  {warrantyBannerText(
+                    isAr ? 'أدخل بيانات سيارتك ولوحتها للتحقق من ضمان الصيانة تلقائيًا.' : "Enter your vehicle and plate to check your warranty automatically.",
+                    isAr ? 'لم نجد ضمانًا ساريًا على هذه اللوحة — تأكد من الأرقام أو تابع كحجز جديد.' : "We couldn't find an active warranty for this plate — double-check the numbers, or continue as a new booking.",
+                  )}
                 </span>
               </div>
             )}
@@ -320,7 +370,8 @@ export function StepVehicle({
             )}
 
             <div className="mt-10">
-              <button onClick={onNext} disabled={!complete} data-cursor="hover" className={complete ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
+              <button onClick={onNext} disabled={!complete || maintenanceCheckFailed} data-cursor="hover"
+                className={complete && !maintenanceCheckFailed ? '' : 'pointer-events-none opacity-40 transition-opacity'}>
                 <PrimaryPill>{data.isMaintenance ? (isAr ? 'متابعة لطلب الصيانة' : 'Continue to service request') : t('step1.continue')}</PrimaryPill>
               </button>
             </div>

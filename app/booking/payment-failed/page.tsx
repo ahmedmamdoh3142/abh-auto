@@ -44,7 +44,7 @@ export default async function PaymentFailedPage({
             className="rounded-full border border-white/15 bg-white/[0.04] px-8 py-4 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-ivory backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.08]">
             {t('contactSupport')}
           </Link>
-          <Link href="/booking"
+          <Link href="/booking?retry=1"
             className="rounded-full px-8 py-4 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-obsidian transition-transform duration-300 hover:-translate-y-0.5"
             style={{ background: 'linear-gradient(135deg,#fff 0%,#cbcdcd 50%,#fff 100%)', boxShadow: '0 18px 60px -15px rgba(203,205,205,0.6)' }}>
             {t('tryAgain')}

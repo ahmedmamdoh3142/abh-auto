@@ -56,6 +56,7 @@ const StepMaintenanceConfirm = dynamic(() => import('./step-maintenance-confirm'
 const EASE = [0.16, 1, 0.3, 1] as const;
 const CINEMATIC = '/images/cta-bg.webp';
 const BOOKING_IMAGE = '/images/hero-bg.webp';
+const RETRY_STORAGE_KEY = 'abh_booking_retry_v1';
 
 export interface BookingState {
   brandId: string;
@@ -160,6 +161,27 @@ export function BookingFlow({
 
   // تتبّع: دخل صفحة الحجز (بداية القمع)
   useEffect(() => { trackBookingView(); }, []);
+
+  // (جديد) استرجاع الحجز بعد فشل الدفع: لو رجعنا من AlinmaPay بفشل ودخلنا
+  // بـ ?retry=1، نرجّع كل بيانات الحجز اللي كانت محفوظة ونروح مباشرة
+  // لخطوة التأكيد (04) بدل ما نرجّع العميل يبدأ الحجز من الصفر تاني.
+  useEffect(() => {
+    if (searchParams.get('retry') !== '1') return;
+    try {
+      const raw = typeof window !== 'undefined' ? sessionStorage.getItem(RETRY_STORAGE_KEY) : null;
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.data) {
+        setData(saved.data);
+        setStep(3);
+        setMaxReached(3);
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({ bookingStep: 3 }, '', window.location.pathname);
+        }
+      }
+    } catch { /* تجاهل */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const set = useCallback(
     (patch: Partial<BookingState>) => setData((d) => ({ ...d, ...patch })),
@@ -457,6 +479,14 @@ export function BookingFlow({
         });
         const initJson = await initRes.json();
         if (initJson?.ok && initJson.redirectUrl) {
+          // (جديد) نحفظ بيانات الحجز قبل ما نودّي العميل لصفحة AlinmaPay
+          // الخارجية — لو الدفع فشل هناك ورجع لصفحة الفشل، هنقدر نرجّعه
+          // لخطوة التأكيد بكل بياناته بدل ما يبدأ الحجز من الأول.
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem(RETRY_STORAGE_KEY, JSON.stringify({ data }));
+            }
+          } catch { /* تجاهل */ }
           window.location.href = initJson.redirectUrl;
           return true; // العميل غادر الصفحة لصفحة الدفع الخارجية
         }
@@ -470,6 +500,7 @@ export function BookingFlow({
     }
 
     // ── باقي طرق الدفع (cash) — نفس السلوك الحالي ──
+    try { if (typeof window !== 'undefined') sessionStorage.removeItem(RETRY_STORAGE_KEY); } catch { /* تجاهل */ }
     setReference(json.reference);
     trackBookingSuccess({
       reference: json.reference,
@@ -499,6 +530,7 @@ export function BookingFlow({
   }, [member, addBooking, data, total.grand, total.tow, effectiveBrands, isAr, trackedServices]);
 
   const reset = useCallback(() => {
+    try { if (typeof window !== 'undefined') sessionStorage.removeItem(RETRY_STORAGE_KEY); } catch { /* تجاهل */ }
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });
     setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null);
     if (typeof window !== 'undefined') window.history.replaceState({ bookingStep: 0 }, '', window.location.href);
@@ -512,7 +544,7 @@ export function BookingFlow({
       <section className="section relative pt-4 md:pt-8" id="booking">
         <div className="container">
           <StepRail step={step} maxReached={maxReached}
-            labels={STEP_KEYS.map((k) => t(`steps.${k}`))}
+            labels={STEP_KEYS.map((k, i) => (data.isMaintenance && i === 1) ? (isAr ? 'الصيانة' : 'Service') : t(`steps.${k}`))}
             onJump={(i) => i <= maxReached && !done && go(i)} />
 
           <div ref={consoleRef} className="spotlight glass relative mt-12 scroll-mt-28 rounded-[28px] border border-white/[0.08] md:mt-16">
@@ -534,7 +566,8 @@ export function BookingFlow({
                       colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
                       onAddCustomModel={onAddCustomModel}
                       maintenanceCovered={maintenanceCovered} onStartMaintenance={startMaintenance}
-                      maintenanceIntent={maintenanceIntent} />
+                      maintenanceIntent={maintenanceIntent}
+                      loggedIn={!!member} />
                   )}
                   {step === 1 && (
                     data.isMaintenance ? (
