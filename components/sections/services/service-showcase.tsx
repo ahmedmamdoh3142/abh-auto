@@ -128,24 +128,22 @@ export function ServiceShowcase({ services, categorySlug }: Props) {
                   tabIndex={0}
                 >
                   {services.map((service, index) => (
-                    <motion.div
-                      key={service.slug}
-                      ref={(el) => { itemRefs.current[index] = el; }}
-                      initial={{ opacity: 0, y: 16 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.16, 1, 0.3, 1] }}
-                      className="flex-shrink-0 scroll-mt-2 lg:flex-shrink"
-                      role="tab"
-                      aria-selected={index === safeIndex}
-                    >
-                      <ServiceCardCompact
-                        service={service}
-                        isActive={index === safeIndex}
-                        onClick={() => setActiveIndex(index)}
-                        index={index}
-                      />
-                    </motion.div>
-                  ))}
+                      <div
+                        key={service.slug}
+                        ref={(el) => { itemRefs.current[index] = el; }}
+                        style={{ animationDelay: `${index * 0.06}s` }}
+                        className="ss-card-in flex-shrink-0 scroll-mt-2 lg:flex-shrink"
+                        role="tab"
+                        aria-selected={index === safeIndex}
+                      >
+                        <ServiceCardCompact
+                          service={service}
+                          isActive={index === safeIndex}
+                          onClick={() => setActiveIndex(index)}
+                          index={index}
+                        />
+                      </div>
+                    ))}
                   {/* سبيسر نهاية — يضمن ظهور آخر كرت كامل في السكرول الأفقي */}
                   <div aria-hidden className="w-3 flex-shrink-0 lg:hidden" />
                 </div>
@@ -218,12 +216,16 @@ export function ServiceShowcase({ services, categorySlug }: Props) {
       </div>
 
       <style>{`
-        .atelier-scroll{ scrollbar-width: thin; scrollbar-color: rgba(203,205,205,0.3) transparent; }
-        .atelier-scroll::-webkit-scrollbar{ width: 5px; height: 5px; }
-        .atelier-scroll::-webkit-scrollbar-track{ background: transparent; }
-        .atelier-scroll::-webkit-scrollbar-thumb{ background: linear-gradient(rgba(203,205,205,0.38), rgba(203,205,205,0.12)); border-radius: 999px; }
-        .atelier-scroll::-webkit-scrollbar-thumb:hover{ background: rgba(203,205,205,0.55); }
-      `}</style>
+      .ss-card-in{opacity:0;transform:translateY(16px);animation:ssCardIn .45s cubic-bezier(.16,1,.3,1) forwards;}
+      @keyframes ssCardIn{to{opacity:1;transform:none}}
+      @media (prefers-reduced-motion: reduce){ .ss-card-in{animation:none;opacity:1;transform:none} }
+
+      .atelier-scroll{ scrollbar-width: thin; scrollbar-color: rgba(203,205,205,0.3) transparent; }
+      .atelier-scroll::-webkit-scrollbar{ width: 5px; height: 5px; }
+      .atelier-scroll::-webkit-scrollbar-track{ background: transparent; }
+      .atelier-scroll::-webkit-scrollbar-thumb{ background: linear-gradient(rgba(203,205,205,0.38), rgba(203,205,205,0.12)); border-radius: 999px; }
+      .atelier-scroll::-webkit-scrollbar-thumb:hover{ background: rgba(203,205,205,0.55); }
+    `}</style>
     </div>
   );
 }

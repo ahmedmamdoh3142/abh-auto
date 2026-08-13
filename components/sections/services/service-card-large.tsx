@@ -62,7 +62,7 @@ export function ServiceCardLarge({ service, index, total }: Props) {
             <CardImage
               src={service.image}
               alt={service.name.en}
-              sizes="(max-width: 768px) 100vw, 640px"
+              sizes="(max-width: 768px) 92vw, 640px"
               className="object-cover"
             />
           </div>

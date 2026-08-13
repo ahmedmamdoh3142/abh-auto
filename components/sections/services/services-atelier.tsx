@@ -13,10 +13,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
+import dynamic from 'next/dynamic';
 import { ServicesHero } from './services-hero';
 import { CategorySelector } from './category-selector';
 import { ServiceShowcase } from './service-showcase';
-import { ConciergeClose } from './concierge-close';
+
+const ConciergeClose = dynamic(
+  () => import('./concierge-close').then((m) => m.ConciergeClose),
+  { ssr: true, loading: () => <div className="h-[82svh] md:min-h-[620px]" /> }
+);
 import { TierToggle } from '@/components/shared/tier-toggle';
 import type { TierCode } from '@/lib/shared/tier';
 import type { Category, Service, CategorySlug } from '@/lib/services-data';
