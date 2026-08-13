@@ -73,6 +73,7 @@ export function StepVehicle({
   const complete = !!(data.brandId && data.model && data.colorKey && DIGITS_RE.test(data.plate || ''));
 
   const { digits, letters } = splitPlate(data.plate);
+  const plateComplete = digits.length >= 4;
   const [mode, setMode] = useState<'pick' | 'new'>(garage.length > 0 ? 'pick' : 'new');
 
   // (جديد) نموذج إضافة موديل يدوي لو مش موجود بالقائمة
@@ -113,11 +114,13 @@ export function StepVehicle({
           <div>
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.garageTitle')} sub={t('step1.garageHint')} />
 
-            {maintenanceIntent && !data.isMaintenance && (
+            {!data.isMaintenance && (
               <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
                 <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
                 <span className="text-[0.78rem] leading-relaxed text-ivory/85">
-                  {isAr ? 'اختر سيارتك من الجراج وهنتحقق من ضمان الصيانة تلقائيًا.' : "Pick your car from the garage and we'll check its warranty automatically."}
+                  {plateComplete && maintenanceCovered.length === 0
+                    ? (isAr ? 'لم نجد ضمانًا ساريًا على هذه السيارة — يمكنك المتابعة كحجز جديد.' : "We couldn't find an active warranty for this car — you can continue as a new booking.")
+                    : (isAr ? 'اختر سيارتك من الجراج وهنتحقق من ضمان الصيانة تلقائيًا.' : "Pick your car from the garage and we'll check its warranty automatically.")}
                 </span>
               </div>
             )}
@@ -182,11 +185,11 @@ export function StepVehicle({
           <div>
             <Heading index="01" label={t('steps.vehicle')} title={t('step1.heading')} sub={t('step1.subheading')} />
 
-            {maintenanceIntent && !data.isMaintenance && (
+            {!data.isMaintenance && (
               <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[#9fd4b0]/30 bg-[#9fd4b0]/[0.06] px-5 py-3.5">
                 <ShieldCheck className="h-4 w-4 flex-none text-[#9fd4b0]" strokeWidth={1.8} />
                 <span className="text-[0.78rem] leading-relaxed text-ivory/85">
-                  {digits.length > 0 && maintenanceCovered.length === 0
+                  {plateComplete && maintenanceCovered.length === 0
                     ? (isAr ? 'لم نجد ضمانًا ساريًا على هذه اللوحة — تأكد من الأرقام أو تابع كحجز جديد.' : "We couldn't find an active warranty for this plate — double-check the numbers, or continue as a new booking.")
                     : (isAr ? 'أدخل بيانات سيارتك ولوحتها للتحقق من ضمان الصيانة تلقائيًا.' : "Enter your vehicle and plate to check your warranty automatically.")}
                 </span>

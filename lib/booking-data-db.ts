@@ -110,7 +110,7 @@ const getCachedBaseCatalog = unstable_cache(
 
     // ── الخدمات + الأسعار الأساسية (بدون أي overlay خاص بالشريك) ──
     const rows = await query<any>(
-      `SELECT s.id, s.slug, c.slug AS category, s.card_image,
+      `SELECT s.id, s.slug, c.slug AS category, COALESCE(s.card_image, s.image) AS card_image,
               s.name AS name_raw, s.description AS desc_raw,
               s.is_on_request, s.is_featured, s.tier_code,
               s.duration AS duration_raw,

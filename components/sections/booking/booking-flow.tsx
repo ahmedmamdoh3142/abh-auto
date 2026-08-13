@@ -52,7 +52,6 @@ const StepMaintenance = dynamic(() => import('./step-maintenance').then((m) => m
 const StepDetails = dynamic(() => import('./step-details').then((m) => m.StepDetails), { loading: () => <StepSkeleton /> });
 const StepConfirm = dynamic(() => import('./step-confirm').then((m) => m.StepConfirm), { loading: () => <StepSkeleton /> });
 const StepMaintenanceConfirm = dynamic(() => import('./step-maintenance-confirm').then((m) => m.StepMaintenanceConfirm), { loading: () => <StepSkeleton /> });
-const JsCheckoutPanel = dynamic(() => import('./js-checkout-card').then((m) => m.JsCheckoutPanel), { loading: () => <StepSkeleton /> });
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const CINEMATIC = '/images/cta-bg.webp';
@@ -158,8 +157,6 @@ export function BookingFlow({
   const consoleRef = useRef<HTMLDivElement>(null);
   // (جديد) موديلات مؤقتة يضيفها العميل يدويًا — تتسجّل في القاعدة فورًا وتُستخدم لحساب السعر بحجمها.
   const [customModels, setCustomModels] = useState<Record<string, VehicleSize>>({});
-  // (جديد) بيانات الحجز اللي بنستنى دفع البطاقة بتاعه — بيظهر الفورم المدمج بدل خطوة التأكيد.
-  const [cardCheckout, setCardCheckout] = useState<{ bookingId: string; reference: string; amount: number } | null>(null);
 
   // تتبّع: دخل صفحة الحجز (بداية القمع)
   useEffect(() => { trackBookingView(); }, []);
@@ -254,17 +251,18 @@ export function BookingFlow({
     set({ isMaintenance: false, maintenanceWarranty: null, problemDescription: '' });
   }, [set]);
 
-  // (جديد) جاي من رابط «حجز صيانة» في الناف بار: بمجرد ما نلاقي ضمان ساري
-  // على اللوحة اللي كتبها، ندخّله في وضع الصيانة تلقائيًا بدل ما ينتظر يدوس على البانر.
+  // بمجرد ما نلاقي ضمان ساري على السيارة/اللوحة اللي دخلها العميل — من أي مكان
+  // دخل بيه صفحة الحجز — ندخّله في وضع الصيانة تلقائيًا (خطوة وصف العطل مباشرة،
+  // من غير خدمات، ثم بياناته، ثم تأكيد بدون أي دفع).
   useEffect(() => {
-    if (!maintenanceIntent || autoMaintenanceTried.current) return;
+    if (autoMaintenanceTried.current) return;
     if (data.isMaintenance) return;
     if (maintenanceCovered.length > 0) {
       autoMaintenanceTried.current = true;
       startMaintenance(maintenanceCovered[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maintenanceIntent, maintenanceCovered, data.isMaintenance]);
+  }, [maintenanceCovered, data.isMaintenance]);
 
   const [maintenanceReference, setMaintenanceReference] = useState<string | null>(null);
 
@@ -443,16 +441,10 @@ export function BookingFlow({
       return false;
     }
 
-    // ── مسار الدفع بالبطاقة (AlinmaPay JS Checkout) — مدمج جوّه نفس الصفحة ──
+    // ── الدفع بالبطاقة (ويشمل Apple Pay) — AlinmaPay Hosted Page ──
+    // العميل يتحوّل لصفحة AlinmaPay المستضافة (نفس آلية "لينك الدفع" في الأدمن)،
+    // وهناك بيختار كارت أو Apple Pay حسب جهازه، من غير أي فورم مدمج عندنا.
     if (data.payment === 'card') {
-      setCardCheckout({ bookingId: json.bookingId, reference: json.reference, amount: total.grand });
-      return true; // الفورم المدمج هيظهر بدل خطوة التأكيد؛ onSuccess بتاعه هو اللي يقفل الحجز
-    }
-
-    // ── مسار Apple Pay (AlinmaPay Hosted Page) — بيحوّل العميل لصفحتهم المستضافة،
-    // لأن Apple Pay بيحتاج شهادات لو اتعمل عن طريق JS Checkout المدمج، لكن مفيش
-    // أي شهادات مطلوبة منّا لو سبناه على الصفحة المستضافة (تأكيد AlinmaPay).
-    if (data.payment === 'applePay') {
       try {
         const initRes = await fetch('/api/payment/alinma/initiate', {
           method: 'POST',
@@ -466,7 +458,7 @@ export function BookingFlow({
         const initJson = await initRes.json();
         if (initJson?.ok && initJson.redirectUrl) {
           window.location.href = initJson.redirectUrl;
-          return true; // العميل غادر الصفحة
+          return true; // العميل غادر الصفحة لصفحة الدفع الخارجية
         }
         console.error('alinma initiate rejected:', initJson);
         trackBookingError(initJson?.error ?? 'gateway_init_failed');
@@ -505,10 +497,10 @@ export function BookingFlow({
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     return true;
   }, [member, addBooking, data, total.grand, total.tow, effectiveBrands, isAr, trackedServices]);
-  
+
   const reset = useCallback(() => {
     setData({ ...INITIAL, activeCat: categories[0]?.id ?? ('coatings' as CategoryId) });
-    setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null); setCardCheckout(null);
+    setStep(0); setMaxReached(0); setDone(false); setReference(null); setMaintenanceReference(null);
     if (typeof window !== 'undefined') window.history.replaceState({ bookingStep: 0 }, '', window.location.href);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [categories]);
@@ -559,25 +551,6 @@ export function BookingFlow({
                   {step === 3 && (
                     data.isMaintenance ? (
                       <StepMaintenanceConfirm isAr={isAr} data={data} onBack={() => go(2)} onSubmit={confirmMaintenance} />
-                    ) : cardCheckout ? (
-                      <JsCheckoutPanel
-                        bookingId={cardCheckout.bookingId}
-                        reference={cardCheckout.reference}
-                        amount={cardCheckout.amount}
-                        isAr={isAr}
-                        onBack={() => setCardCheckout(null)}
-                        onSuccess={() => {
-                          setReference(cardCheckout.reference);
-                          trackBookingSuccess({
-                            reference: cardCheckout.reference,
-                            value: cardCheckout.amount,
-                            services: trackedServices(),
-                            paymentMethod: 'card',
-                          });
-                          setDone(true);
-                          requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                        }}
-                      />
                     ) : (
                       <StepConfirm t={t} isAr={isAr} data={data} total={total} set={set}
                         services={SERVICES} onBack={() => go(2)} onConfirm={confirmBooking} />

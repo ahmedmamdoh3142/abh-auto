@@ -819,16 +819,6 @@ function PaymentRow({ method, on, title, desc, delay, onSelect, disabled, soonLa
 
 
 function PaymentMark({ method }: { method: PaymentMethod }) {
-  if (method === 'applePay') {
-    return (
-      <span className="grid h-10 w-14 flex-shrink-0 place-items-center rounded-lg border border-white/12 bg-gradient-to-b from-white/[0.06] to-white/[0.01]">
-        <span className="inline-flex items-center text-[0.62rem] font-semibold text-ivory">
-          <svg viewBox="0 0 24 24" className="me-px h-[11px] w-[11px] fill-ivory"><path d="M17.5 12.3c0-2 1.6-2.9 1.7-3-.9-1.3-2.4-1.5-2.9-1.5-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7 1 1.4 2 2.4 2 1 0 1.3-.6 2.5-.6s1.5.6 2.5.6 1.6-1 2.3-2c.7-1.1 1-2.1 1-2.2-.1 0-2.2-.9-2.2-3.6zM15.6 6.5c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.2 1.1-.5.5-.9 1.4-.8 2.3.9.1 1.8-.4 2.2-1z" /></svg>
-          Pay
-        </span>
-      </span>
-    );
-  }
   if (method === 'card') {
     return (
       <span className="grid h-10 w-14 flex-shrink-0 place-items-center rounded-lg border border-white/12 bg-gradient-to-b from-white/[0.06] to-white/[0.01]">
