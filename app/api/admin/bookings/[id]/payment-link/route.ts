@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
-import { createPayRequest, generateGatewayOrderId, ALINMA_STATUS } from "@/lib/alinmapay";
+import { ALINMA_STATUS } from "@/lib/alinmapay";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getAdminOrNull();
@@ -24,26 +24,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: false, error: "zero_amount" }, { status: 400 });
   }
 
-  const receiptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/alinma/callback`;
-  const orderId = generateGatewayOrderId(booking.reference);
 
   try {
-    const { transactionId, linkUrl } = await createPayRequest({
-      paymentType: "1",
-      orderId,
-      amount: Number(booking.total).toFixed(2),
-      currency: "SAR",
-      description: `ABH Auto booking ${booking.reference}`,
-      customer: { email: booking.customer_email, mobile: booking.customer_phone, addressCountry: "SA", addressCity: "Jeddah" },
-      receiptUrl,
-    });
-
-    await query(
-      `UPDATE bookings
-         SET gateway_order_id = $2, gateway_transaction_id = $3, payment_status = $4, payment_method_code = 'card'
-       WHERE id = $1`,
-      [booking.id, orderId, transactionId, ALINMA_STATUS.awaitingGateway]
-    );
+    // منولّدش معاملة عند AlinmaPay هنا خالص — اللينك اللي بيتبعت للعميل
+    // بقى ثابت على دومين بتاعنا، وهو اللي بيولّد المعاملة (نضيفة كل مرة)
+    // لحظة ما العميل يدخل عليه فعليًا. شوف app/pay/[reference]/route.ts
+    const linkUrl = `${process.env.NEXT_PUBLIC_APP_URL}/pay/${booking.reference}`;
 
     return NextResponse.json({ ok: true, linkUrl });
   } catch (err: any) {
