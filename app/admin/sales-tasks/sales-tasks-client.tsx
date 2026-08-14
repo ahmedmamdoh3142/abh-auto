@@ -32,6 +32,8 @@ type Task = {
   createdBy: string; createdName: string | null; createdAt: string; updatedAt: string;
   closeResult: "won" | "lost" | null; closeReason: string | null; closeNote: string | null;
   closedAt: string | null; notesCount: number; lastActivityAt: string | null;
+  followUpDate: string | null; followUpNote: string | null;
+  followUpCancelledAt: string | null; followUpCancelReason: string | null;
 };
 
 const STAGE_META: Record<Stage, { ar: string; en: string; color: string }> = {
@@ -87,6 +89,26 @@ const carIco = (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="
 const staleIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>);
 const userIco = (s = 11) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 const reportIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>);
+const calIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>);
+const chatIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
+
+function todayStr(): string { return new Date().toISOString().slice(0, 10); }
+function isFollowUpActive(t: Task): boolean { return !!t.followUpDate && !t.followUpCancelledAt; }
+function isFollowUpDue(t: Task): boolean { return isFollowUpActive(t) && t.followUpDate! <= todayStr(); }
+function fmtFollowUpLabel(dateStr: string, isAr: boolean): string {
+  const d = new Date(dateStr + "T00:00:00"); const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return isAr ? "متابعة اليوم" : "Due today";
+  if (diff < 0) return isAr ? `متأخر ${Math.abs(diff)} يوم` : `${Math.abs(diff)}d overdue`;
+  if (diff === 1) return isAr ? "متابعة غدًا" : "Due tomorrow";
+  return isAr ? `بعد ${diff} يوم` : `In ${diff}d`;
+}
+const FOLLOWUP_CANCEL_REASONS: { code: string; ar: string; en: string }[] = [
+  { code: "done", ar: "تم التواصل مع العميل", en: "Already contacted customer" },
+  { code: "no_answer", ar: "العميل ماردش خالص", en: "Customer unreachable" },
+  { code: "rescheduled", ar: "هتحدد متابعة تانية بدلها", en: "Rescheduling instead" },
+  { code: "other", ar: "سبب آخر", en: "Other reason" },
+];
 
 export default function SalesTasksClient({ locale, services, brands, staff, currentUserId, currentUserName, currentUserRole }: {
   locale?: string; services: Service[]; brands: Brand[]; staff: StaffMember[];
@@ -116,6 +138,15 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   const [statsLoading, setStatsLoading] = useState(false);
   const [pillCounts, setPillCounts] = useState<Record<string, number>>({});
 
+  // (جديد) المتابعات المجدولة
+  const [followUpMode, setFollowUpMode] = useState(false);
+  const [followUpTasks, setFollowUpTasks] = useState<Task[]>([]);
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [dueFollowUpCount, setDueFollowUpCount] = useState(0);
+  const [notesPeekTask, setNotesPeekTask] = useState<Task | null>(null);
+  const [followUpModalTask, setFollowUpModalTask] = useState<Task | null>(null);
+  const [followUpCancelTask, setFollowUpCancelTask] = useState<Task | null>(null);
+
   // (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
   const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
 
@@ -136,6 +167,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const statsAbortRef = useRef<AbortController | null>(null);
+  const followUpAbortRef = useRef<AbortController | null>(null);
 
   const load = async () => {
     loadAbortRef.current?.abort();
@@ -172,6 +204,29 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     }
   };
 
+  const loadFollowUps = async () => {
+    followUpAbortRef.current?.abort();
+    const controller = new AbortController();
+    followUpAbortRef.current = controller;
+    setFollowUpLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("scope", scope);
+      if (scope === "all" && assignedFilter) params.set("assignedTo", assignedFilter);
+      params.set("followUp", "all");
+      const j = await fetch(`/api/admin/sales-tasks?${params}`, { signal: controller.signal }).then((r) => r.json());
+      if (j?.ok) {
+        setFollowUpTasks(j.tasks);
+        setDueFollowUpCount(j.tasks.filter((t: Task) => isFollowUpDue(t)).length);
+      }
+    } catch (e: any) {
+      if (e?.name !== "AbortError") console.error(e);
+    } finally {
+      if (followUpAbortRef.current === controller) setFollowUpLoading(false);
+    }
+  };
+  const refreshAll = () => { load(); loadStats(); loadFollowUps(); };
+
   // (جديد) تصدير تقرير PDF بأسماء وأرقام وإيميلات العملاء المهتمين — لإعادة الاستهداف الإعلاني
   const exportReport = () => {
     const source = tasks.filter((t) => {
@@ -198,6 +253,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
   useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
+  useEffect(() => { loadFollowUps(); /* eslint-disable-next-line */ }, [scope, assignedFilter]);
   useEffect(() => {
     const t = setTimeout(() => { load(); loadStats(); }, 300);
     return () => clearTimeout(t);
@@ -236,6 +292,20 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
               <option value="hot" style={{ background: "#0c0d0e" }}>{T("مستعدين للشراء فقط", "Hot only")}</option>
             </select>
             <Ghost icon={() => reportIco(15)} onClick={exportReport}>{T("تقرير الاستهداف PDF", "Retargeting PDF")}</Ghost>
+            <span style={{ position: "relative" }}>
+              <button onClick={() => setFollowUpMode((v) => !v)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "9px 16px", fontSize: 12, cursor: "pointer",
+                  border: `1px solid ${followUpMode ? "rgba(255,255,255,.3)" : "rgba(255,255,255,.12)"}`,
+                  background: followUpMode ? "linear-gradient(135deg,#fff,#cbcdcd)" : "rgba(255,255,255,.03)",
+                  color: followUpMode ? "#000" : "var(--abh-ivory)", fontWeight: followUpMode ? 600 : 400 }}>
+                {calIco(14)} {T("المتابعات المجدولة", "Scheduled follow-ups")}
+              </button>
+              {dueFollowUpCount > 0 && (
+                <span style={{ position: "absolute", top: -6, insetInlineEnd: -6, background: "#e7b4b4", color: "#000", fontSize: 9.5, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, display: "grid", placeItems: "center", padding: "0 4px", boxShadow: "0 0 0 2px #0c0d0e" }}>
+                  {dueFollowUpCount}
+                </span>
+              )}
+            </span>
             <Pill icon={Ic.plus} onClick={() => setCreating(true)}>{T("تاسك جديد", "New task")}</Pill>
           </div>
         } />
@@ -266,6 +336,12 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         )}
       </div>
 
+      {followUpMode ? (
+        <FollowUpBoard tasks={followUpTasks} loading={followUpLoading} isAr={isAr} T={T} currentUserId={currentUserId}
+          onOpen={setOpenTaskId} onPeekNotes={setNotesPeekTask}
+          onSetFollowUp={setFollowUpModalTask} onCancelFollowUp={setFollowUpCancelTask} />
+      ) : (
+      <>
       {/* تبديل النطاق: تاسكاتي / كل التاسكات — للأدمن بس */}
       {isFullAccess && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
@@ -352,7 +428,8 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
                   <span className="abh-num" style={{ display: "inline-grid", placeItems: "center", minWidth: 22, height: 22, borderRadius: 999, fontSize: 11, fontWeight: 700, color: "#000", background: `linear-gradient(135deg, ${meta.color}, ${meta.color}bb)` }}>{items.length}</span>
                 </div>
                 <div className="abh-col" style={{ gap: 10 }}>
-                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} />)}
+                  {items.map((t) => <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId}
+                    onPeekNotes={setNotesPeekTask} onSetFollowUp={setFollowUpModalTask} onCancelFollowUp={setFollowUpCancelTask} />)}
                   {items.length === 0 && <div style={{ fontSize: 11.5, color: "var(--abh-steel)", textAlign: "center", padding: "24px 0" }}>{T("لا تاسكات", "No tasks")}</div>}
                 </div>
               </div>
@@ -361,22 +438,42 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
         </div>
       ) : (
         <div style={{ borderRadius: 20, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
-          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} />)}
+          {tasks.map((t, i) => <ListRow key={t.id} t={t} i={i} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={setOpenTaskId} onPeekNotes={setNotesPeekTask} />)}
           {tasks.length === 0 && <div style={{ padding: 48, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد تاسكات مطابقة.", "No matching tasks.")}</div>}
         </div>
+      )}
+      </>
       )}
 
       {creating && (
         <CreateTaskModal services={services} brands={brands} staff={staff} isAr={isAr} T={T} currentUserId={currentUserId} currentUserName={currentUserName}
           onClose={() => setCreating(false)}
-          onCreated={() => { setCreating(false); load(); loadStats(); }} />
+          onCreated={() => { setCreating(false); refreshAll(); }} />
       )}
 
       {openTask && (
         <TaskDrawer task={openTask} services={services} brands={brands} staff={staff} isAr={isAr} T={T}
           currentUserId={currentUserId} currentUserName={currentUserName}
           onClose={() => setOpenTaskId(null)}
-          onChanged={() => { load(); loadStats(); }} />
+          onChanged={refreshAll}
+          onScheduleFollowUp={() => setFollowUpModalTask(openTask)}
+          onCancelFollowUp={() => setFollowUpCancelTask(openTask)} />
+      )}
+
+      {notesPeekTask && (
+        <NotesPeekModal task={notesPeekTask} isAr={isAr} T={T}
+          onClose={() => setNotesPeekTask(null)}
+          onOpenFull={() => { setOpenTaskId(notesPeekTask.id); setNotesPeekTask(null); }} />
+      )}
+      {followUpModalTask && (
+        <FollowUpModal task={followUpModalTask} isAr={isAr} T={T}
+          onClose={() => setFollowUpModalTask(null)}
+          onSaved={() => { setFollowUpModalTask(null); refreshAll(); }} />
+      )}
+      {followUpCancelTask && (
+        <FollowUpCancelModal task={followUpCancelTask} isAr={isAr} T={T}
+          onClose={() => setFollowUpCancelTask(null)}
+          onCancelled={() => { setFollowUpCancelTask(null); refreshAll(); }} />
       )}
     </div>
   );
@@ -425,17 +522,21 @@ const Avatar = React.memo(function Avatar({ name, size = 34 }: { name: string; s
 });
 
 /* ═══════ كارت التاسك المفتوح ═══════ */
-const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, onOpen }: { t: Task; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void }) {
+const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, onOpen, onPeekNotes, onSetFollowUp, onCancelFollowUp }: {
+  t: Task; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void;
+  onPeekNotes?: (t: Task) => void; onSetFollowUp?: (t: Task) => void; onCancelFollowUp?: (t: Task) => void;
+}) {
   const q = t.quality ? QUALITY_META[t.quality] : null;
   const stale = isStale(t);
+  const followUpDue = isFollowUpDue(t);
   const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
-  const accent = stale ? "#e8cf9a" : q?.color ?? "rgba(255,255,255,.18)";
+  const accent = followUpDue ? "#e7b4b4" : stale ? "#e8cf9a" : q?.color ?? "rgba(255,255,255,.18)";
   return (
     <button onClick={() => onOpen(id)} className="abh-lift"
       style={{
         textAlign: isAr ? "right" : "left", display: "flex", flexDirection: "column", gap: 11,
-        borderRadius: 18, border: `1px solid ${stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.08)"}`,
-        background: stale ? "linear-gradient(160deg,rgba(232,207,154,.06),rgba(255,255,255,.02))" : "rgba(255,255,255,.022)",
+        borderRadius: 18, border: `1px solid ${followUpDue ? "rgba(231,180,180,.55)" : stale ? "rgba(232,207,154,.5)" : "rgba(255,255,255,.08)"}`,
+        background: followUpDue ? "linear-gradient(160deg,rgba(231,180,180,.07),rgba(255,255,255,.02))" : stale ? "linear-gradient(160deg,rgba(232,207,154,.06),rgba(255,255,255,.02))" : "rgba(255,255,255,.022)",
         boxShadow: "0 1px 3px rgba(0,0,0,.25)",
         padding: "15px 16px", cursor: "pointer", width: "100%", position: "relative", overflow: "hidden",
       }}>
@@ -461,6 +562,27 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
           </span>
         )}
       </div>
+
+      {(t.notesCount > 0 || isFollowUpActive(t)) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {t.notesCount > 0 && (
+            <span onClick={(e) => { e.stopPropagation(); onPeekNotes?.(t); }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, fontWeight: 600, borderRadius: 999, padding: "4px 10px", cursor: "pointer",
+                color: "#e8cf9a", border: "1px solid rgba(232,207,154,.55)", background: "rgba(232,207,154,.1)" }}>
+              {chatIco(10)} {t.notesCount}
+            </span>
+          )}
+          {isFollowUpActive(t) && (
+            <span onClick={(e) => { e.stopPropagation(); onSetFollowUp?.(t); }}
+              title={T("دوس لتعديل تاريخ المتابعة", "Tap to edit follow-up date")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, fontWeight: 600, borderRadius: 999, padding: "4px 10px", cursor: "pointer",
+                color: followUpDue ? "#e7b4b4" : "#9cc3e0", border: `1px solid ${followUpDue ? "rgba(231,180,180,.55)" : "rgba(156,195,224,.45)"}`,
+                background: followUpDue ? "rgba(231,180,180,.1)" : "rgba(156,195,224,.08)" }}>
+              {calIco(10)} {fmtFollowUpLabel(t.followUpDate!, isAr)}
+            </span>
+          )}
+        </div>
+      )}
 
       {createdByMe && (
         <span style={{ alignSelf: isAr ? "flex-end" : "flex-start", fontSize: 9.5, color: "#9cc3e0", borderRadius: 999, border: "1px solid rgba(156,195,224,.4)", background: "rgba(156,195,224,.1)", padding: "2px 9px" }}>
@@ -498,11 +620,19 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
           {userIco(10)}
           <strong style={{ color: t.assignedName ? "var(--abh-platinum)" : "#e8cf9a", fontWeight: 600 }}>{t.assignedName ?? T("غير موجّه", "Unassigned")}</strong>
         </span>
-        {stale ? (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, color: "#e8cf9a", fontWeight: 600 }}>{staleIco(11)}{T("راكد", "Stale")}</span>
-        ) : (
-          <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{fmtAgo(t.lastActivityAt ?? t.createdAt, isAr)}</span>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {t.stage !== "won" && t.stage !== "lost" && !isFollowUpActive(t) && (
+            <span onClick={(e) => { e.stopPropagation(); onSetFollowUp?.(t); }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, color: "var(--abh-steel)", cursor: "pointer" }}>
+              {calIco(10)}{T("حدد متابعة", "Set follow-up")}
+            </span>
+          )}
+          {stale ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, color: "#e8cf9a", fontWeight: 600 }}>{staleIco(11)}{T("راكد", "Stale")}</span>
+          ) : (
+            <span style={{ fontSize: 10, color: "var(--abh-steel)" }}>{fmtAgo(t.lastActivityAt ?? t.createdAt, isAr)}</span>
+          )}
+        </div>
       </div>
     </button>
   );
@@ -560,17 +690,29 @@ function ClosedGrid({ tasks, isAr, T, onOpen }: { tasks: Task[]; isAr: boolean; 
 }
 
 /* ═══════ صف عرض القائمة ═══════ */
-const ListRow = React.memo(function ListRow({ t, i, isAr, T, currentUserId, id, onOpen }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void }) {
+const ListRow = React.memo(function ListRow({ t, i, isAr, T, currentUserId, id, onOpen, onPeekNotes }: { t: Task; i: number; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string; id: string; onOpen: (id: string) => void; onPeekNotes?: (t: Task) => void }) {
   const meta = STAGE_META[t.stage];
   const stale = isStale(t);
+  const followUpDue = isFollowUpDue(t);
   const createdByMe = !!currentUserId && t.createdBy === currentUserId && t.assignedTo !== currentUserId;
   return (
-    <button onClick={() => onOpen(id)} style={{ width: "100%", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent", cursor: "pointer" }}>
+    <button onClick={() => onOpen(id)} style={{ width: "100%", textAlign: isAr ? "right" : "left", display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.05)", borderInlineStart: followUpDue ? "3px solid rgba(231,180,180,.6)" : "3px solid transparent", background: i % 2 ? "rgba(255,255,255,.012)" : "transparent", cursor: "pointer" }}>
       <span style={{ height: 8, width: 8, borderRadius: 999, background: meta.color, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 13.5, color: "var(--abh-ivory)" }}>{t.customerName}</span>
         <span dir="ltr" style={{ marginInlineStart: 10, fontSize: 11, color: "var(--abh-steel)" }}>{t.customerPhone}</span>
       </div>
+      {t.notesCount > 0 && (
+        <span onClick={(e) => { e.stopPropagation(); onPeekNotes?.(t); }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, borderRadius: 999, padding: "3px 9px", cursor: "pointer", color: "#e8cf9a", border: "1px solid rgba(232,207,154,.55)", background: "rgba(232,207,154,.1)", flexShrink: 0 }}>
+          {chatIco(10)}{t.notesCount}
+        </span>
+      )}
+      {isFollowUpActive(t) && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, color: followUpDue ? "#e7b4b4" : "#9cc3e0", flexShrink: 0 }}>
+          {calIco(10)}{fmtFollowUpLabel(t.followUpDate!, isAr)}
+        </span>
+      )}
       {createdByMe && <span style={{ fontSize: 9.5, color: "#9cc3e0", borderRadius: 999, border: "1px solid rgba(156,195,224,.4)", background: "rgba(156,195,224,.1)", padding: "2px 8px", flexShrink: 0 }}>{T("من إنشائك", "By you")}</span>}
       {stale && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, color: "#e8cf9a" }}>{staleIco(11)}{T("راكد", "Stale")}</span>}
       <span style={{ fontSize: 11.5, color: "var(--abh-platinum)", flexShrink: 0 }}>{isAr ? meta.ar : meta.en}</span>
@@ -758,10 +900,10 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /* ═══════ درج تفاصيل التاسك — بروفايل ثابت للعرض + بانل حالة/توجيه قابل للتعديل ═══════ */
-function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, currentUserName, onClose, onChanged }: {
+function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, currentUserName, onClose, onChanged, onScheduleFollowUp, onCancelFollowUp }: {
   task: Task; services: Service[]; brands: Brand[]; staff: StaffMember[]; isAr: boolean; T: (a: string, e: string) => string;
   currentUserId: string; currentUserName: string;
-  onClose: () => void; onChanged: () => void;
+  onClose: () => void; onChanged: () => void; onScheduleFollowUp: () => void; onCancelFollowUp: () => void;
 }) {
   const toast = useToast();
   const isClosed = task.stage === "won" || task.stage === "lost";
@@ -914,6 +1056,36 @@ function TaskDrawer({ task, services, brands, staff, isAr, T, currentUserId, cur
             </div>
           )}
 
+          {/* ── متابعة مجدولة ── */}
+          {!isClosed && (
+            <div style={{ borderRadius: 18, border: `1px solid ${isFollowUpActive(task) ? (isFollowUpDue(task) ? "rgba(231,180,180,.4)" : "rgba(156,195,224,.35)") : "rgba(255,255,255,.09)"}`,
+              background: isFollowUpActive(task) ? (isFollowUpDue(task) ? "rgba(231,180,180,.06)" : "rgba(156,195,224,.05)") : "rgba(255,255,255,.02)", padding: 20 }}>
+              <SectionTitle label={T("المتابعة", "Follow-up")} accent={isFollowUpActive(task)} />
+              {isFollowUpActive(task) ? (
+                <div className="abh-col" style={{ gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, color: isFollowUpDue(task) ? "#e7b4b4" : "#9cc3e0" }}>
+                    {calIco(14)} {fmtFollowUpLabel(task.followUpDate!, isAr)} · <span dir="ltr">{task.followUpDate}</span>
+                  </div>
+                  {task.followUpNote && <div style={{ fontSize: 12.5, color: "var(--abh-platinum)" }}>{task.followUpNote}</div>}
+                  <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+                    <Ghost onClick={onScheduleFollowUp}>{T("تعديل الموعد", "Reschedule")}</Ghost>
+                    <Ghost onClick={onCancelFollowUp}>{T("إلغاء المتابعة", "Cancel follow-up")}</Ghost>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <span style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{T("مفيش متابعة محددة لسه.", "No follow-up scheduled yet.")}</span>
+                  <Pill onClick={onScheduleFollowUp}>{T("تحديد متابعة", "Schedule follow-up")}</Pill>
+                </div>
+              )}
+              {task.followUpCancelledAt && task.followUpCancelReason && (
+                <div style={{ marginTop: 12, fontSize: 11, color: "var(--abh-steel)" }}>
+                  {T("آخر متابعة اتلغت — السبب:", "Last follow-up cancelled — reason:")} {task.followUpCancelReason}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* زراري الإغلاق */}
           {!isClosed && (
             <div style={{ display: "flex", gap: 10 }}>
@@ -1017,6 +1189,203 @@ function CloseReasonModal({ kind, taskId, isAr, T, onClose, onClosed }: {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/* ═══════ بوب-أب ملاحظات سريع (بيتفتح من الكارت) ═══════ */
+function NotesPeekModal({ task, isAr, T, onClose, onOpenFull }: {
+  task: Task; isAr: boolean; T: (a: string, e: string) => string; onClose: () => void; onOpenFull: () => void;
+}) {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/admin/sales-tasks/${task.id}/notes-list`).then((r) => r.json())
+      .then((j) => { if (alive && j?.ok) setNotes(j.notes); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [task.id]);
+
+  return (
+    <Modal title={T(`الملاحظات — ${task.customerName}`, `Notes — ${task.customerName}`)} onClose={onClose}>
+      <div className="abh-col" style={{ gap: 14 }}>
+        <div style={{ fontSize: 11, color: "var(--abh-steel)" }}>
+          {T("اقرأها قبل ما تكلم العميل — يمكن يكون فيه حاجة مهمة اتقالت قبل كده.", "Read these before calling — something important might already be noted.")}
+        </div>
+        {task.initialNote && (
+          <div style={{ borderRadius: 12, border: "1px solid rgba(232,207,154,.4)", background: "rgba(232,207,154,.08)", padding: 12 }}>
+            <div style={{ fontSize: 10.5, color: "#e8cf9a", marginBottom: 4, fontWeight: 600 }}>{T("ملاحظة الإنشاء", "Note at creation")}</div>
+            <div style={{ fontSize: 13, color: "var(--abh-ivory)" }}>{task.initialNote}</div>
+          </div>
+        )}
+        <div className="abh-col" style={{ gap: 8, maxHeight: 320, overflowY: "auto" }}>
+          {loading ? (
+            <div style={{ fontSize: 12, color: "var(--abh-steel)" }}>{T("جارٍ التحميل…", "Loading…")}</div>
+          ) : notes.length === 0 ? (
+            <div style={{ fontSize: 12, color: "var(--abh-steel)" }}>{T("لا ملاحظات بعد.", "No notes yet.")}</div>
+          ) : notes.slice().reverse().map((n) => (
+            <div key={n.id} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.012)", padding: 11, fontSize: 12.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ color: "var(--abh-platinum)", fontWeight: 600 }}>{n.authorName}</span>
+                <span style={{ color: "var(--abh-steel)", fontSize: 10.5 }}>{fmtFull(n.createdAt, isAr)}</span>
+              </div>
+              <div style={{ color: "var(--abh-ivory)", whiteSpace: "pre-line", lineHeight: 1.6 }}>{n.body}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Ghost onClick={onOpenFull}>{T("فتح التاسك بالكامل", "Open full task")}</Ghost>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ═══════ تحديد / إعادة جدولة متابعة ═══════ */
+function FollowUpModal({ task, isAr, T, onClose, onSaved }: {
+  task: Task; isAr: boolean; T: (a: string, e: string) => string; onClose: () => void; onSaved: () => void;
+}) {
+  const toast = useToast();
+  const todays = todayStr();
+  const [date, setDate] = useState(task.followUpDate && !task.followUpCancelledAt && task.followUpDate >= todays ? task.followUpDate : todays);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const presets = [
+    { label: T("غدًا", "Tomorrow"), days: 1 },
+    { label: T("بعد 3 أيام", "In 3 days"), days: 3 },
+    { label: T("الأسبوع الجاي", "Next week"), days: 7 },
+  ];
+  const applyPreset = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); setDate(d.toISOString().slice(0, 10)); };
+
+  const submit = async () => {
+    if (!date || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/sales-tasks/${task.id}/follow-up`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, note: note.trim() || null }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error();
+      toast(T("تم تحديد المتابعة", "Follow-up scheduled"));
+      onSaved();
+    } catch { toast(T("فشل تحديد المتابعة", "Failed to schedule follow-up"), "bad"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={T("تحديد تاريخ متابعة", "Schedule follow-up")} onClose={onClose}>
+      <div className="abh-col" style={{ gap: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--abh-steel)" }}>{task.customerName} · <span dir="ltr">{task.customerPhone}</span></div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {presets.map((p) => <button key={p.days} type="button" onClick={() => applyPreset(p.days)} style={quickBtnStyle}>{p.label}</button>)}
+        </div>
+        <Field label={T("تاريخ المتابعة", "Follow-up date")}>
+          <input type="date" value={date} min={todays} onChange={(e) => setDate(e.target.value)} dir="ltr" style={dateInputStyle} />
+        </Field>
+        <Field label={T("ملاحظة (اختياري)", "Note (optional)")}>
+          <Textarea rows={3} value={note} onChange={(e: any) => setNote(e.target.value)}
+            placeholder={T("مثال: العميل هيرد بعد ما يشاور مراته", "e.g. Customer will confirm with spouse first")} />
+        </Field>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
+          <Pill onClick={submit}>{busy ? T("جارٍ الحفظ…", "Saving…") : T("تحديد المتابعة", "Schedule")}</Pill>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ═══════ إلغاء متابعة بسبب ═══════ */
+function FollowUpCancelModal({ task, isAr, T, onClose, onCancelled }: {
+  task: Task; isAr: boolean; T: (a: string, e: string) => string; onClose: () => void; onCancelled: () => void;
+}) {
+  const toast = useToast();
+  const [reasonCode, setReasonCode] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!reasonCode || busy) return;
+    setBusy(true);
+    try {
+      const preset = FOLLOWUP_CANCEL_REASONS.find((r) => r.code === reasonCode);
+      const reasonText = reasonCode === "other" ? (note.trim() || T("سبب آخر", "Other")) : (isAr ? preset?.ar : preset?.en) ?? reasonCode;
+      const res = await fetch(`/api/admin/sales-tasks/${task.id}/follow-up`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reasonText }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error();
+      toast(T("تم إلغاء المتابعة", "Follow-up cancelled"));
+      onCancelled();
+    } catch { toast(T("فشل إلغاء المتابعة", "Failed to cancel follow-up"), "bad"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={T("إلغاء المتابعة", "Cancel follow-up")} onClose={onClose}>
+      <div className="abh-col" style={{ gap: 16 }}>
+        <Field label={T("السبب", "Reason")}>
+          <Selectbox value={reasonCode} onChange={setReasonCode}
+            options={FOLLOWUP_CANCEL_REASONS.map((r) => ({ value: r.code, label: isAr ? r.ar : r.en }))}
+            placeholder={T("اختر السبب", "Select reason")} />
+        </Field>
+        {reasonCode === "other" && (
+          <Field label={T("التفاصيل", "Details")}>
+            <Textarea rows={2} value={note} onChange={(e: any) => setNote(e.target.value)} />
+          </Field>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <Ghost onClick={onClose}>{T("تراجع", "Back")}</Ghost>
+          <Pill onClick={submit}>{busy ? T("جارٍ الإلغاء…", "Cancelling…") : T("تأكيد الإلغاء", "Confirm cancel")}</Pill>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ═══════ شاشة المتابعات المجدولة — متأخرة/اليوم أول حاجة ═══════ */
+function FollowUpBoard({ tasks, loading, isAr, T, currentUserId, onOpen, onPeekNotes, onSetFollowUp, onCancelFollowUp }: {
+  tasks: Task[]; loading: boolean; isAr: boolean; T: (a: string, e: string) => string; currentUserId?: string;
+  onOpen: (id: string) => void; onPeekNotes: (t: Task) => void; onSetFollowUp: (t: Task) => void; onCancelFollowUp: (t: Task) => void;
+}) {
+  const sorted = useMemo(() => tasks.slice().sort((a, b) => (a.followUpDate ?? "").localeCompare(b.followUpDate ?? "")), [tasks]);
+  const today = todayStr();
+  const due = sorted.filter((t) => (t.followUpDate ?? "") <= today);
+  const upcoming = sorted.filter((t) => (t.followUpDate ?? "") > today);
+
+  if (loading) return <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("جارٍ التحميل…", "Loading…")}</div>;
+  if (sorted.length === 0) return <div style={{ padding: 60, textAlign: "center", color: "var(--abh-steel)" }}>{T("لا توجد متابعات مجدولة حاليًا.", "No scheduled follow-ups right now.")}</div>;
+
+  const grid = (list: Task[]) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
+      {list.map((t) => (
+        <TaskCard key={t.id} t={t} isAr={isAr} T={T} currentUserId={currentUserId} id={t.id} onOpen={onOpen}
+          onPeekNotes={onPeekNotes} onSetFollowUp={onSetFollowUp} onCancelFollowUp={onCancelFollowUp} />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="abh-col" style={{ gap: 28 }}>
+      {due.length > 0 && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 11.5, fontWeight: 700, color: "#e7b4b4", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            {staleIco(13)} {T(`لازم تكلمهم النهارده (${due.length})`, `Due now (${due.length})`)}
+          </div>
+          {grid(due)}
+        </div>
+      )}
+      {upcoming.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--abh-platinum)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 12 }}>
+            {T(`قادمة (${upcoming.length})`, `Upcoming (${upcoming.length})`)}
+          </div>
+          {grid(upcoming)}
+        </div>
+      )}
+    </div>
   );
 }
 

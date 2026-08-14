@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const scope = url.searchParams.get("scope"); // "mine" | "all"
   const assignedTo = url.searchParams.get("assignedTo"); // staff id | "unassigned"
   const leadSource = url.searchParams.get("leadSource"); // facebook | tiktok | instagram | whatsapp
+  const followUp = url.searchParams.get("followUp"); // "due" | "all" | null
 
   const where: string[] = [];
   const params: any[] = [];
@@ -36,7 +37,15 @@ export async function GET(request: Request) {
     params.push(assignedTo);
   }
 
-  if (stage && stage !== "all") { where.push(`t.stage = $${i++}::sales_task_stage`); params.push(stage); }
+  // فلتر المتابعات بيتجاهل المرحلة ويستبعد التاسكات المُقفلة — مفيش داعي تتابع عميل خلص
+  if (followUp === "due" || followUp === "all") {
+    where.push(`t.stage NOT IN ('won','lost')`);
+    where.push(`t.follow_up_date IS NOT NULL`);
+    where.push(`t.follow_up_cancelled_at IS NULL`);
+    if (followUp === "due") where.push(`t.follow_up_date <= CURRENT_DATE`);
+  } else if (stage && stage !== "all") {
+    where.push(`t.stage = $${i++}::sales_task_stage`); params.push(stage);
+  }
   if (leadSource && leadSource !== "all") { where.push(`t.lead_source = $${i++}`); params.push(leadSource); }
   if (q) {
     where.push(`(t.customer_name ILIKE $${i} OR t.customer_phone ILIKE $${i})`);
@@ -52,6 +61,8 @@ export async function GET(request: Request) {
            t.stage, t.assigned_to, au.name AS assigned_name,
            t.created_by, t.created_at, t.updated_at,
            t.close_result, t.close_reason, t.close_note, t.closed_by, t.closed_at,
+           to_char(t.follow_up_date, 'YYYY-MM-DD') AS follow_up_date,
+           t.follow_up_note, t.follow_up_cancelled_at, t.follow_up_cancel_reason,
            cu.name AS created_name,
            (SELECT count(*)::int FROM sales_task_notes n WHERE n.task_id = t.id) AS notes_count,
            (SELECT max(n.created_at) FROM sales_task_notes n WHERE n.task_id = t.id) AS last_activity_at
@@ -91,6 +102,10 @@ export async function GET(request: Request) {
       closeNote: r.close_note,
       closedBy: r.closed_by,
       closedAt: r.closed_at,
+      followUpDate: r.follow_up_date,
+      followUpNote: r.follow_up_note,
+      followUpCancelledAt: r.follow_up_cancelled_at,
+      followUpCancelReason: r.follow_up_cancel_reason,
       notesCount: r.notes_count,
       lastActivityAt: r.last_activity_at,
     }));
