@@ -91,6 +91,8 @@ const userIco = (s = 11) => (<svg width={s} height={s} viewBox="0 0 24 24" fill=
 const reportIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>);
 const calIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>);
 const chatIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
+const noteIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M9 3a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2"/><path d="M8 12h8M8 16h5"/></svg>);
+function truncateNote(str: string, n: number): string { return str.length > n ? str.slice(0, n).trimEnd() + "…" : str; }
 
 function todayStr(): string { return new Date().toISOString().slice(0, 10); }
 function isFollowUpActive(t: Task): boolean { return !!t.followUpDate && !t.followUpCancelledAt; }
@@ -563,6 +565,17 @@ const TaskCard = React.memo(function TaskCard({ t, isAr, T, currentUserId, id, o
         )}
       </div>
 
+      {t.initialNote && (
+        <div onClick={(e) => { e.stopPropagation(); onPeekNotes?.(t); }}
+          style={{ display: "flex", alignItems: "flex-start", gap: 8, borderRadius: 12, cursor: "pointer",
+            border: "1px solid rgba(232,207,154,.45)", background: "rgba(232,207,154,.1)", padding: "8px 10px" }}>
+          <span style={{ color: "#e8cf9a", flexShrink: 0, marginTop: 1 }}>{noteIco(13)}</span>
+          <span style={{ fontSize: 11.5, color: "var(--abh-ivory)", lineHeight: 1.5, textAlign: isAr ? "right" : "left" }}>
+            {truncateNote(t.initialNote, 90)}
+          </span>
+        </div>
+      )}
+
       {(t.notesCount > 0 || isFollowUpActive(t)) && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {t.notesCount > 0 && (
@@ -702,6 +715,14 @@ const ListRow = React.memo(function ListRow({ t, i, isAr, T, currentUserId, id, 
         <span style={{ fontSize: 13.5, color: "var(--abh-ivory)" }}>{t.customerName}</span>
         <span dir="ltr" style={{ marginInlineStart: 10, fontSize: 11, color: "var(--abh-steel)" }}>{t.customerPhone}</span>
       </div>
+      {t.initialNote && (
+        <span onClick={(e) => { e.stopPropagation(); onPeekNotes?.(t); }} title={t.initialNote}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, borderRadius: 999, padding: "3px 9px", cursor: "pointer",
+            color: "#e8cf9a", border: "1px solid rgba(232,207,154,.55)", background: "rgba(232,207,154,.1)", flexShrink: 0,
+            maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {noteIco(10)} {t.initialNote}
+        </span>
+      )}
       {t.notesCount > 0 && (
         <span onClick={(e) => { e.stopPropagation(); onPeekNotes?.(t); }}
           style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 600, borderRadius: 999, padding: "3px 9px", cursor: "pointer", color: "#e8cf9a", border: "1px solid rgba(232,207,154,.55)", background: "rgba(232,207,154,.1)", flexShrink: 0 }}>
