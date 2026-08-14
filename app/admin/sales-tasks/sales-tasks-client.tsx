@@ -1285,7 +1285,7 @@ function FollowUpModal({ task, isAr, T, onClose, onSaved }: {
         </Field>
         <Field label={T("ملاحظة (اختياري)", "Note (optional)")}>
           <Textarea rows={3} value={note} onChange={(e: any) => setNote(e.target.value)}
-            placeholder={T("مثال: العميل هيرد بعد ما يشاور مراته", "e.g. Customer will confirm with spouse first")} />
+            placeholder={T("مثال: العميل هيرد بعد ما يفكر ", "e.g. Customer will confirm with spouse first")} />
         </Field>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Ghost onClick={onClose}>{T("إلغاء", "Cancel")}</Ghost>
