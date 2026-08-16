@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { card, Ghost, Pill, Ic, EGP, Modal, Textarea, useToast, PageHeader, carImg } from "@/components/admin/ui";
 import { printBookingInvoice } from "@/lib/admin/invoice-print";
 import { printBookingWarranty } from "@/lib/admin/warranty-print";
+import { printBookingsFullReport } from "@/lib/admin/bookings-full-export-print";
 import { brandImg } from "@/lib/brand-image";
 
 /* ───────── هوك media query (للتفرقة بين اللمس واللاب) ───────── */
@@ -1408,6 +1409,16 @@ async function addFollowupNote(id: string, channel: string, note: string) {
     URL.revokeObjectURL(url);
   };
 
+  // (جديد) تصدير PDF تفصيلي — كل بيانات الحجوزات المعروضة حاليًا (بعد الفلاتر) في تقرير واحد
+  const exportPdf = () => {
+    try {
+      printBookingsFullReport(filtered, { isAr, ccy });
+    } catch (e) {
+      console.error("full report print failed:", e);
+      toast(T("تعذّر تجهيز تقرير الـPDF", "Couldn't prepare the PDF report"), "bad");
+    }
+  };
+
   const stats = [
     { label: T("إجمالي الحجوزات", "Total bookings"), value: String(list.length) },
     { label: T("قيد التنفيذ", "In progress"), value: String(counts.active || 0), accent: "#f5993d" },
@@ -1462,6 +1473,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Ghost sm icon={() => I.download(14)} onClick={exportCsv}>{T("تصدير CSV", "Export CSV")}</Ghost>
+          <Ghost sm icon={() => I.pdf(14)} onClick={exportPdf}>{T("تصدير PDF", "Export PDF")}</Ghost>
           <div style={{ display: "flex", gap: 4, borderRadius: 999, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", padding: 4 }}>
             <button onClick={() => setView("grid")} title="Grid" style={{ display: "grid", placeItems: "center", height: 32, width: 36, borderRadius: 999, color: view === "grid" ? "#000" : "var(--abh-steel)", background: view === "grid" ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", border: "none", cursor: "pointer" }}>{I.grid(15)}</button>
             <button onClick={() => setView("list")} title="List" style={{ display: "grid", placeItems: "center", height: 32, width: 36, borderRadius: 999, color: view === "list" ? "#000" : "var(--abh-steel)", background: view === "list" ? "linear-gradient(135deg,#fff,#cbcdcd)" : "transparent", border: "none", cursor: "pointer" }}>{I.rows(15)}</button>
