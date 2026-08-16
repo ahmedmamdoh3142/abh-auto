@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { card, Pill, Ghost, Field, Input, Textarea, Selectbox, Chip, Modal, useToast, Ic, PageHeader, ImageCard, carImg } from "@/components/admin/ui";
 import { PhoneInput, isValidPhone } from "@/components/admin/phone-input";
-import { printSalesTasksReport } from "@/lib/admin/sales-tasks-print";
+import { printSalesTasksReport, printSalesTaskDetailedReport } from "@/lib/admin/sales-tasks-print";
 
 type Stage = "new" | "contacted" | "follow_up" | "negotiating" | "won" | "lost";
 type Quality = "hot" | "warm" | "cold" | null;
@@ -149,8 +149,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   const [followUpModalTask, setFollowUpModalTask] = useState<Task | null>(null);
   const [followUpCancelTask, setFollowUpCancelTask] = useState<Task | null>(null);
 
-  // (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
+// (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
   const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
+  const [detailedExporting, setDetailedExporting] = useState(false);
 
   // withStage=true لتحميل الليست المعروضة (بتتفلتر بالمرحلة).
   // withStage=false لحساب الأرقام والإحصائيات — البحث/المصدر/التاريخ بيفضلوا شغالين، المرحلة نفسها لأ،
@@ -253,6 +254,27 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     });
   };
 
+  // (جديد) تقرير PDF تفصيلي كامل — كل التاسكات المعروضة حاليًا بكل بياناتها وكل الكومنتات
+  const exportDetailedReport = async () => {
+    if (detailedExporting) return;
+    setDetailedExporting(true);
+    try {
+      const params = buildParams(true);
+      const j = await fetch(`/api/admin/sales-tasks/full-export?${params}`).then((r) => r.json());
+      if (!j?.ok) throw new Error();
+      printSalesTaskDetailedReport({
+        isAr,
+        title: T("تقرير تفصيلي لتاسكات المبيعات", "Detailed Sales Tasks Report"),
+        subtitle: T("كل التفاصيل وكل الكومنتات لكل تاسك", "Full details and all comments for every task"),
+        tasks: j.tasks,
+      });
+    } catch {
+      toast(T("فشل تجهيز التقرير التفصيلي", "Failed to prepare detailed report"), "bad");
+    } finally {
+      setDetailedExporting(false);
+    }
+  };
+
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [fStage, sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
   useEffect(() => { loadStats(); /* eslint-disable-next-line */ }, [sourceFilter, dateFrom, dateTo, scope, assignedFilter]);
   useEffect(() => { loadFollowUps(); /* eslint-disable-next-line */ }, [scope, assignedFilter]);
@@ -294,6 +316,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
               <option value="hot" style={{ background: "#0c0d0e" }}>{T("مستعدين للشراء فقط", "Hot only")}</option>
             </select>
             <Ghost icon={() => reportIco(15)} onClick={exportReport}>{T("تقرير الاستهداف PDF", "Retargeting PDF")}</Ghost>
+            <Ghost icon={() => reportIco(15)} onClick={exportDetailedReport}>
+              {detailedExporting ? T("جارٍ التجهيز…", "Preparing…") : T("تقرير تفصيلي PDF", "Detailed PDF")}
+            </Ghost>
             <span style={{ position: "relative" }}>
               <button onClick={() => setFollowUpMode((v) => !v)}
                 style={{ display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "9px 16px", fontSize: 12, cursor: "pointer",
