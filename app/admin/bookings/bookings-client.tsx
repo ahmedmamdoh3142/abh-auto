@@ -1206,7 +1206,11 @@ export default function BookingsClient({ initial, locale, isSuperAdmin }: { init
       const matchQ = q === "" || `${b.customer} ${b.vehicle} ${b.reference} ${b.plate} ${b.phone}`.toLowerCase().includes(q.toLowerCase());
       return matchTab && matchQ;
     });
-    if (sort === "soonest") r = [...r].sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+    if (sort === "soonest") {
+      const todayIso = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD بتوقيت الجهاز
+      r = r.filter((b) => (b.date || "") >= todayIso);
+      r = [...r].sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+    }
     else if (sort === "highest") r = [...r].sort((a, b) => (Number(b.total) || 0) - (Number(a.total) || 0));
     return r;
   }, [list, tab, q, sort]);
