@@ -64,6 +64,71 @@ function waNumber(phone: string | null): string | null {
   return d;
 }
 
+/**
+ * يبني رسالة واتساب احترافية جاهزة للإرسال — العميل يضغط «إرسال» بنفسه فقط.
+ * تشمل: ترحيب باسم العميل، كود الخصم، قيمته، تاريخ انتهائه، ورابط الموقع.
+ */
+type WaMsgInput = {
+  code: string; kind: PromoKind; discountPercent: number; fixedAmount: number;
+  expiresAt: string | null; minOrder: number; servicesCount: number; recipientName: string | null;
+};
+
+/**
+ * يبني رسالة واتساب احترافية جاهزة للإرسال — العميل يضغط «إرسال» بنفسه فقط.
+ * مبنية على أفضل ممارسات الرسائل التسويقية على واتساب: أهم معلومة (قيمة العرض)
+ * في أول سطرين، تنسيق واضح (Bold/monospace)، إيموجي قليل وموظّف، شخصنة بالاسم
+ * الأول، شفافية في الشروط (حد أدنى الطلب)، إلحاح لطيف بعدد الأيام المتبقية،
+ * ونداء واحد واضح للفعل.
+ */
+function buildPromoWaMessage(
+  d: WaMsgInput, T: (a: string, e: string) => string, ccy: string, isAr: boolean,
+  fmtDate: (s: string | null) => string
+): string {
+  const firstName = (d.recipientName ?? "").trim().split(/\s+/)[0] || "";
+  const name = firstName || T("عميلنا العزيز", "there");
+
+  const valueLabel = d.kind === "fixed"
+    ? `${EGP(d.fixedAmount)} ${ccy}`
+    : d.kind === "gift_service"
+      ? T("خدمة مجانية بالكامل", "one complimentary service")
+      : d.kind === "service_each"
+        ? T(`خصم خاص على ${d.servicesCount} من خدماتنا المختارة`, `a special discount on ${d.servicesCount} selected services`)
+        : `${d.discountPercent}%`;
+
+  const daysLeft = d.expiresAt ? Math.ceil((new Date(d.expiresAt).getTime() - Date.now()) / 86400000) : null;
+  const expiryLine = !d.expiresAt
+    ? T("بلا حد أقصى", "no expiry")
+    : daysLeft != null && daysLeft >= 0 && daysLeft <= 14
+      ? T(`${fmtDate(d.expiresAt)} (باقي ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} ⏳)`, `${fmtDate(d.expiresAt)} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left ⏳)`)
+      : fmtDate(d.expiresAt);
+
+  const minLine = d.minOrder > 0
+    ? T(`🧾 حد أدنى للطلب: ${EGP(d.minOrder)} ${ccy}\n`, `🧾 Minimum order: ${EGP(d.minOrder)} ${ccy}\n`)
+    : "";
+
+  const linesAr = [
+    `مرحبًا ${name} 👋`, ``,
+    `🎁 كود خصم خاص بيك من *ABH Auto*: *${valueLabel}* على حجزك الجاي`, ``,
+    `الكود: \`\`\`${d.code}\`\`\``,
+    minLine + `⏳ صالح حتى: ${expiryLine}`, ``,
+    `الكود شخصي وباسمك — احجز دلوقتي من هنا:`,
+    `https://abh-auto.com`, ``,
+    `بانتظارك 🚗`,
+    `فريق ABH Auto`,
+  ];
+  const linesEn = [
+    `Hi ${name} 👋`, ``,
+    `🎁 A special code from *ABH Auto*: *${valueLabel}* off your next booking`, ``,
+    `Code: \`\`\`${d.code}\`\`\``,
+    minLine + `⏳ Valid until: ${expiryLine}`, ``,
+    `This code is personal and reserved for you — book now:`,
+    `https://abh-auto.com`, ``,
+    `See you soon 🚗`,
+    `The ABH Auto Team`,
+  ];
+  return (isAr ? linesAr : linesEn).join("\n");
+}
+
 export default function PromosClient({ services, locale }: { services: ServiceLite[]; locale: string }) {
   const isAr = locale !== "en";
   const T = (ar: string, en: string) => (isAr ? ar : en);
@@ -110,7 +175,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
     if (filter === "active") l = l.filter((p) => p.isActive && !isExpired(p));
     else if (filter === "paused") l = l.filter((p) => !p.isActive);
     else if (filter === "expired") l = l.filter((p) => isExpired(p));
-    else if (filter === "targeted") l = l.filter((p) => !!p.recipient);
+        else if (filter === "targeted") l = l.filter((p) => !!p.recipient && !isExpired(p));
     else if (filter === "commission") l = l.filter((p) => p.commissionPercent != null);
     return l;
   }, [list, q, filter]);
@@ -143,7 +208,7 @@ export default function PromosClient({ services, locale }: { services: ServiceLi
   const filters: { id: typeof filter; label: string; n: number }[] = [
     { id: "all", label: T("الكل", "All"), n: list.length },
     { id: "active", label: T("نشطة", "Active"), n: list.filter((p) => p.isActive && !isExpired(p)).length },
-    { id: "targeted", label: T("موجّهة لعميل", "Targeted"), n: list.filter((p) => !!p.recipient).length },
+        { id: "targeted", label: T("موجّه لعميل (سارٍ)", "Targeted (active)"), n: list.filter((p) => !!p.recipient && !isExpired(p)).length },
     { id: "commission", label: T("عمولة مؤثر", "Affiliate"), n: list.filter((p) => p.commissionPercent != null).length },
     { id: "paused", label: T("موقوفة", "Paused"), n: list.filter((p) => !p.isActive).length },
     { id: "expired", label: T("منتهية", "Expired"), n: list.filter((p) => isExpired(p)).length },
@@ -329,12 +394,27 @@ function PromoCard({ p, i, T, ccy, isAr, fmtDate, expired, onToggle, onEdit, onD
               {rec.phone && <div dir="ltr" className="abh-num" style={{ fontSize: 11.5, color: "var(--abh-steel)", textAlign: align, marginTop: 2 }}>{rec.phone}</div>}
             </div>
             {wa && (
-              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title={T("تواصل واتساب", "WhatsApp")}
-                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.1)", padding: "7px 12px", fontSize: 11.5, color: "#9fd4b0", textDecoration: "none", whiteSpace: "nowrap" }}>
+                            <a href={`https://wa.me/${wa}?text=${encodeURIComponent(buildPromoWaMessage({ code: p.code, kind: p.kind, discountPercent: p.discountPercent, fixedAmount: p.fixedAmount, expiresAt: p.expiresAt, minOrder: p.minOrder, servicesCount: p.services.length, recipientName: rec.name ?? null }, T, ccy, isAr, fmtDate))}`} target="_blank" rel="noopener noreferrer" title={T("تواصل واتساب برسالة جاهزة", "WhatsApp with ready message")}                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.1)", padding: "7px 12px", fontSize: 11.5, color: "#9fd4b0", textDecoration: "none", whiteSpace: "nowrap" }}>
                 <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 01-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 4.54 0 8.23 3.69 8.23 8.23s-3.69 8.24-8.24 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.31-.02-.47-.02-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z" /></svg>
                 {T("واتساب", "Chat")}
               </a>
-            )}
+                        )}
+          </div>
+
+          {/* ── (جديد) تاريخ الإنشاء مقابل تاريخ الانتهاء — تفريق واضح وبروفشنال ── */}
+          <div style={{ display: "flex", gap: 14, marginTop: 12, paddingTop: 10, borderTop: "1px dashed rgba(255,255,255,.08)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                <Ic.plus s={10} />{T("أُنشئ في", "Created")}
+              </div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 12, color: "var(--abh-platinum)", marginTop: 3, textAlign: align }}>{fmtDate(p.createdAt)}</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                <Ic.clock s={10} />{T("ينتهي في", "Expires")}
+              </div>
+              <div className="abh-num" dir="ltr" style={{ fontSize: 12, color: expired ? "#e7b4b4" : "var(--abh-ivory)", marginTop: 3, textAlign: align }}>{p.expiresAt ? fmtDate(p.expiresAt) : T("بلا انتهاء", "Never")}</div>
+            </div>
           </div>
         </div>
       )}
@@ -685,7 +765,7 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
       ) : (
         <div className="abh-col" style={{ gap: 20 }}>
           {/* ── (جديد) بطاقة المستلِم: الكود رايح لمين + استخدمه ولا لسه ── */}
-          {rec && (
+                    {rec && (
             <div style={{ borderRadius: 18, border: "1px solid rgba(203,205,205,.25)", background: "linear-gradient(160deg,rgba(203,205,205,.06),rgba(255,255,255,.015))", padding: 18 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--abh-platinum)" }}>
@@ -706,13 +786,29 @@ function StatsModal({ promoId, T, ccy, isAr, loc, fmtDate, onClose }: {
                     <div style={{ fontSize: 11, color: "#9fd4b0", marginTop: 8, textAlign: align }}>{T("استخدمه في", "Redeemed on")} {fmtDT(rec.lastUsedAt)}</div>
                   )}
                 </div>
-                {wa && (
-                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"
+                                {wa && (
+                  <a href={`https://wa.me/${wa}?text=${encodeURIComponent(buildPromoWaMessage({ code: data.promo.code, kind: data.promo.kind, discountPercent: data.promo.discountPercent, fixedAmount: data.promo.fixedAmount, expiresAt: data.promo.expiresAt, minOrder: data.promo.minOrder, servicesCount: data.services.length, recipientName: rec.name ?? null }, T, ccy, isAr, fmtDate))}`} target="_blank" rel="noopener noreferrer"
                     style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 12, border: "1px solid rgba(159,212,176,.35)", background: "rgba(159,212,176,.1)", padding: "10px 16px", fontSize: 13, color: "#9fd4b0", textDecoration: "none" }}>
                     <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 01-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 4.54 0 8.23 3.69 8.23 8.23s-3.69 8.24-8.24 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.31-.02-.47-.02-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z" /></svg>
                     {T("تواصل واتساب", "WhatsApp")}
                   </a>
                 )}
+              </div>
+
+              {/* تاريخ الإنشاء مقابل تاريخ الانتهاء — نفس تفريق كارت الشبكة، بروفشنال وواضح */}
+              <div style={{ display: "flex", gap: 14, marginTop: 14, paddingTop: 12, borderTop: "1px dashed rgba(255,255,255,.08)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                    <Ic.plus s={10} />{T("أُنشئ في", "Created")}
+                  </div>
+                  <div className="abh-num" dir="ltr" style={{ fontSize: 12.5, color: "var(--abh-platinum)", marginTop: 3, textAlign: align }}>{fmtDate(data.promo.createdAt)}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--abh-steel)" }}>
+                    <Ic.clock s={10} />{T("ينتهي في", "Expires")}
+                  </div>
+                  <div className="abh-num" dir="ltr" style={{ fontSize: 12.5, color: data.promo.expiresAt && new Date(data.promo.expiresAt).getTime() < Date.now() ? "#e7b4b4" : "var(--abh-ivory)", marginTop: 3, textAlign: align }}>{data.promo.expiresAt ? fmtDate(data.promo.expiresAt) : T("بلا انتهاء", "Never")}</div>
+                </div>
               </div>
             </div>
           )}
