@@ -15,6 +15,7 @@ import { query } from "@/lib/db";
 import { getAdminOrNull } from "@/lib/admin/guard";
 import { confirmRedemptionForBooking, voidRedemptionForBooking } from "@/lib/promo";
 import { matchBankBin } from "@/lib/bank-discount";
+import { recordPayment, isPaymentMethod, type PaymentMethod } from "@/lib/payments";
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -42,16 +43,16 @@ export async function PATCH(request: Request) {
         [id]
       );
       if (!cur[0]) return bad("not_found", 404);
-      const wasPaid = cur[0].payment_status === "paid";
+      const wasPaid = cur[0].payment_status === "paid" || cur[0].payment_status === "partial";
 
       const rows = await query<any>(
         `UPDATE bookings
             SET status='cancelled',
                 cancel_reason=$2,
                 -- لو كان مدفوعًا: نعتبره مُسترَدًّا. غير كده نسيبه زي ما هو.
-                payment_status = CASE WHEN payment_status = 'paid'::public.payment_status
-                                      THEN 'refunded'::public.payment_status
-                                      ELSE payment_status END,
+                payment_status = CASE WHEN payment_status IN ('paid'::public.payment_status,'partial'::public.payment_status)
+                      THEN 'refunded'::public.payment_status
+                      ELSE payment_status END,
                 updated_at=now()
           WHERE id=$1
         RETURNING status, stage, cancel_reason, payment_status`,
@@ -182,43 +183,68 @@ export async function PATCH(request: Request) {
        الخصم (يدوي/بنكي) بيتطبّق مسبقًا عن طريق أكشن set_discount تحت،
        وهنا بس بنأكّد إن الفلوس استلمت فعلًا. ── */
     if (action === "confirm_pay") {
-      const cur = await query<any>(`SELECT payment_status FROM bookings WHERE id = $1`, [id]);
-      if (!cur[0]) return bad("not_found", 404);
-      const already = cur[0].payment_status === "paid";
+  const cur = await query<any>(
+    `SELECT total, amount_paid, payment_status FROM bookings WHERE id = $1`,
+    [id]
+  );
+  if (!cur[0]) return bad("not_found", 404);
 
-      const rows = await query<any>(
-        `UPDATE bookings
-            SET payment_status='paid'::public.payment_status,
-                updated_at=now()
-          WHERE id=$1
-        RETURNING payment_status, status, stage, total, manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason`,
-        [id]
-      );
-      if (!rows[0]) return bad("not_found", 404);
+  const total = Number(cur[0].total) || 0;
+  const already = Number(cur[0].amount_paid) || 0;
+  const remaining = Math.max(0, total - already);
+  if (remaining <= 0.01) return bad("already_paid");
 
-      // تأكيد استخدام البرومو لهذا الحجز (لو كان معلّقًا) — دلوقتي بس يُحتسب.
-      if (!already) {
-        await confirmRedemptionForBooking(id).catch((e) => console.error("confirmRedemption failed:", e));
-      }
+  const rawMethod = String(b.method ?? "");
+  // isPaymentMethod بترفض "gateway" هنا عمدًا — الأدمن يسجّل كاش/كارت/تحويل/أخرى بس،
+  // "gateway" مخصوصة للدفعات الجاية من AlinmaPay تلقائيًا.
+  let method: PaymentMethod = "cash";
+  if (rawMethod !== "gateway" && isPaymentMethod(rawMethod)) {
+    method = rawMethod;
+  }
+  // لو ماجاش مبلغ في الطلب → يدفع كل المتبقي (سلوك «تأكيد الدفع» القديم)
+  const requested = b.amount != null ? Math.round((Number(b.amount) || 0) * 100) / 100 : remaining;
+  if (!(requested > 0)) return bad("amount_required");
+  if (requested > remaining + 0.01) return bad("amount_exceeds_remaining");
+  const note = b.note ? String(b.note).trim().slice(0, 300) : null;
 
-      await query(
-        `INSERT INTO booking_status_history (booking_id, status, stage, note)
-         VALUES ($1,$2,$3,$4)`,
-        [id, rows[0].status, rows[0].stage ?? 0, `تأكيد الدفع بواسطة ${admin.name}`]
-      ).catch(() => {});
+  let result;
+  try {
+    result = await recordPayment({ bookingId: id, amount: requested, method, note, receivedBy: admin.id });
+  } catch (e: any) {
+    return bad(e?.message || "payment_failed");
+  }
 
-      return NextResponse.json({
-        ok: true,
-        booking: {
-          payment: rows[0].payment_status,
-          total: Number(rows[0].total) || 0,
-          manualDiscountKind: rows[0].manual_discount_kind || "",
-          manualDiscountValue: rows[0].manual_discount_value != null ? Number(rows[0].manual_discount_value) : 0,
-          manualDiscountAmount: Number(rows[0].manual_discount_amount) || 0,
-          manualDiscountReason: rows[0].manual_discount_reason || "",
-        },
-      });
-    }
+  const rows = await query<any>(
+    `SELECT status, stage, total, manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason
+       FROM bookings WHERE id = $1`,
+    [id]
+  );
+
+  await query(
+    `INSERT INTO booking_status_history (booking_id, status, stage, note)
+     VALUES ($1,$2,$3,$4)`,
+    [
+      id, rows[0].status, rows[0].stage ?? 0,
+      result.paymentStatus === "paid"
+        ? `تأكيد سداد كامل بواسطة ${admin.name} (${requested.toFixed(2)} ريال)`
+        : `تسجيل دفعة جزئية بواسطة ${admin.name} — ${requested.toFixed(2)} ريال (متبقي ${result.remaining.toFixed(2)})`,
+    ]
+  ).catch(() => {});
+
+  return NextResponse.json({
+    ok: true,
+    booking: {
+      payment: result.paymentStatus,
+      amountPaid: result.amountPaid,
+      remaining: result.remaining,
+      total: Number(rows[0].total) || 0,
+      manualDiscountKind: rows[0].manual_discount_kind || "",
+      manualDiscountValue: rows[0].manual_discount_value != null ? Number(rows[0].manual_discount_value) : 0,
+      manualDiscountAmount: Number(rows[0].manual_discount_amount) || 0,
+      manualDiscountReason: rows[0].manual_discount_reason || "",
+    },
+  });
+}
 
     /* ── (جديد) تطبيق/تعديل/إزالة خصم على حجز موجود — بدون تأكيد دفع.
        يسمح بخصم يدوي (نسبة/مبلغ) أو خصم بنك العميل (BIN) — يستبدل أي خصم
@@ -226,12 +252,12 @@ export async function PATCH(request: Request) {
        الموظف طلع لينك دفع بعدها يبقى بالمبلغ الصح. ── */
     if (action === "set_discount") {
       const cur = await query<any>(
-        `SELECT subtotal, towing_cost, total, promo_discount, manual_discount_amount, bank_discount_amount, payment_status
-           FROM bookings WHERE id = $1`,
-        [id]
-      );
-      if (!cur[0]) return bad("not_found", 404);
-      if (cur[0].payment_status === "paid") return bad("already_paid");
+  `SELECT subtotal, towing_cost, total, promo_discount, manual_discount_amount, bank_discount_amount, payment_status, amount_paid
+     FROM bookings WHERE id = $1`,
+  [id]
+);
+if (!cur[0]) return bad("not_found", 404);
+if (cur[0].payment_status === "paid" || Number(cur[0].amount_paid) > 0) return bad("already_paid");
 
       const beforePromo = (Number(cur[0].subtotal) || 0) + (Number(cur[0].towing_cost) || 0);
       const promoDiscount = Number(cur[0].promo_discount) || 0;

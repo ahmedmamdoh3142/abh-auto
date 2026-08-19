@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { query } from "@/lib/db";
 import { ALINMA_STATUS } from "@/lib/alinmapay";
+import { recordPayment } from "@/lib/payments";
 
 const MERCHANT_KEY = process.env.ALINMA_MERCHANT_KEY!;
 
@@ -31,9 +32,8 @@ export async function POST(request: Request) {
   const transactionId = payload.transactionId;
   const success = responseCode === "000" && payload.result === "SUCCESS";
 
-  // (معدّل) البحث بقى بـ gateway_order_id مش reference
   const rows = await query<any>(
-    `SELECT id, total, payment_status FROM bookings WHERE gateway_order_id = $1 LIMIT 1`,
+    `SELECT id, total, amount_paid, payment_status FROM bookings WHERE gateway_order_id = $1 LIMIT 1`,
     [orderId]
   );
   const booking = rows[0];
@@ -46,30 +46,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const amountMatches = Math.abs(Number(booking.total) - Number(amount)) < 0.01;
-  const finalStatus = success && amountMatches ? ALINMA_STATUS.paid : ALINMA_STATUS.failed;
+  // (معدّل) نفس منطق الـ callback — المتبقي الفعلي وقتها هو المرجع للمطابقة.
+  const total = Number(booking.total) || 0;
+  const amountPaidBefore = Number(booking.amount_paid) || 0;
+  const remainingExpected = Math.max(0, total - amountPaidBefore);
+  const amountMatches = Math.abs(remainingExpected - Number(amount)) < 0.01;
 
-  await query(
-    `UPDATE bookings
-       SET payment_status = $2, gateway_transaction_id = $3, gateway_response_code = $4
-     WHERE id = $1`,
-    [booking.id, finalStatus, transactionId, responseCode]
-  );
-
-  if (finalStatus === ALINMA_STATUS.paid) {
+  if (!success || !amountMatches) {
     await query(
-      `UPDATE promo_redemptions SET paid_at = now() WHERE booking_id = $1 AND paid_at IS NULL`,
-      [booking.id]
-    ).catch((e) => console.error("promo_redemptions update failed:", e));
+      `UPDATE bookings
+          SET payment_status = CASE WHEN payment_status = 'awaiting_gateway'::public.payment_status
+                                     THEN (CASE WHEN $2 > 0 THEN 'partial'::public.payment_status ELSE 'pending'::public.payment_status END)
+                                     ELSE payment_status END,
+              gateway_transaction_id = $3,
+              gateway_response_code = $4
+        WHERE id = $1`,
+      [booking.id, amountPaidBefore, transactionId, responseCode]
+    );
+    await query(
+      `INSERT INTO work_order_events (booking_id, event, meta) VALUES ($1, 'gateway_webhook_failed', $2)`,
+      [booking.id, JSON.stringify({ transactionId, responseCode, amount, orderId, source: "webhook" })]
+    ).catch((e) => console.error("work_order_events insert failed:", e));
+
+    return NextResponse.json({ ok: true });
+  }
+
+  try {
+    await recordPayment({
+      bookingId: booking.id,
+      amount: Math.min(remainingExpected, Number(amount) || remainingExpected),
+      method: "gateway",
+      gatewayTransactionId: transactionId,
+      gatewayOrderId: orderId,
+    });
+  } catch (e) {
+    console.error("alinma webhook: recordPayment failed", e);
+    await query(
+      `UPDATE bookings SET gateway_transaction_id = $2, gateway_response_code = $3 WHERE id = $1`,
+      [booking.id, transactionId, responseCode]
+    ).catch(() => {});
   }
 
   await query(
-    `INSERT INTO work_order_events (booking_id, event, meta) VALUES ($1, $2, $3)`,
-    [
-      booking.id,
-      finalStatus === ALINMA_STATUS.paid ? "gateway_webhook_success" : "gateway_webhook_failed",
-      JSON.stringify({ transactionId, responseCode, amount, orderId, source: "webhook" }),
-    ]
+    `UPDATE promo_redemptions SET paid_at = now() WHERE booking_id = $1 AND paid_at IS NULL`,
+    [booking.id]
+  ).catch((e) => console.error("promo_redemptions update failed:", e));
+
+  await query(
+    `INSERT INTO work_order_events (booking_id, event, meta) VALUES ($1, 'gateway_webhook_success', $2)`,
+    [booking.id, JSON.stringify({ transactionId, responseCode, amount, orderId, source: "webhook" })]
   ).catch((e) => console.error("work_order_events insert failed:", e));
 
   return NextResponse.json({ ok: true });

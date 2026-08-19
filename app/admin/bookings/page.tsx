@@ -31,6 +31,14 @@ export default async function BookingsPage() {
             md.name AS manual_discount_by_name,
             b.bank_discount_amount, b.bank_code, b.bank_bin_matched,
             b.followup_status, b.followup_outcome, b.followup_closed_at,
+            b.amount_paid,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                      'id', p.id, 'amount', p.amount, 'method', p.method,
+                      'kind', p.kind, 'note', p.note, 'createdAt', p.created_at
+                    ) ORDER BY p.created_at ASC)
+              FROM booking_payments p WHERE p.booking_id = b.id
+            ), '[]') AS payments,
             b.created_at,
             -- بيانات العميل المُدخَلة في الحجز لها الأولوية (تدعم «احجز لصاحبك»)،
             -- ونرجع لبيانات المستخدم المسجّل فقط لو الحجز ما فيهوش بيانات عميل.
@@ -151,6 +159,12 @@ export default async function BookingsPage() {
     followupStatus: b.followup_status || "none",
     followupOutcome: b.followup_outcome || "",
     followupClosedAt: b.followup_closed_at ? new Date(b.followup_closed_at).toISOString() : "",
+    amountPaid: Number(b.amount_paid) || 0,
+remaining: Math.max(0, (Number(b.total) || 0) - (Number(b.amount_paid) || 0)),
+payments: (Array.isArray(b.payments) ? b.payments : []).map((p: any) => ({
+  id: p.id, amount: Number(p.amount) || 0, method: p.method, kind: p.kind,
+  note: p.note || "", createdAt: p.createdAt,
+})),
     followups: (Array.isArray(b.followups) ? b.followups : []).map((f: any) => ({
       id: f.id,
       channel: f.channel,

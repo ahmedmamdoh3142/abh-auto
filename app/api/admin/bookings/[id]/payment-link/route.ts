@@ -11,18 +11,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const rows = await query<any>(
-    `SELECT id, reference, total, payment_status, customer_email, customer_phone
-       FROM bookings WHERE id = $1 LIMIT 1`,
-    [id]
-  );
-  const booking = rows[0];
-  if (!booking) return NextResponse.json({ ok: false, error: "booking_not_found" }, { status: 404 });
-  if (booking.payment_status === ALINMA_STATUS.paid) {
-    return NextResponse.json({ ok: false, error: "already_paid" }, { status: 400 });
-  }
-  if (Number(booking.total) <= 0) {
-    return NextResponse.json({ ok: false, error: "zero_amount" }, { status: 400 });
-  }
+  `SELECT id, reference, total, amount_paid, payment_status, customer_email, customer_phone
+     FROM bookings WHERE id = $1 LIMIT 1`,
+  [id]
+);
+const booking = rows[0];
+if (!booking) return NextResponse.json({ ok: false, error: "booking_not_found" }, { status: 404 });
+
+const remaining = Math.max(0, (Number(booking.total) || 0) - (Number(booking.amount_paid) || 0));
+if (booking.payment_status === ALINMA_STATUS.paid || remaining <= 0.01) {
+  return NextResponse.json({ ok: false, error: "already_paid" }, { status: 400 });
+}
 
 
   try {
