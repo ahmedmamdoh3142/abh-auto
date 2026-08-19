@@ -285,7 +285,7 @@ export function StepServices({
           )}
         </div>
       </motion.div>
-      <style>{`
+            <style>{`
         .dossier-shimmer{background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,0.06) 50%,transparent 60%);background-size:280% 100%;animation:dossierSweep 7s ease-in-out infinite;}
         @keyframes dossierSweep{0%{background-position:140% 0}100%{background-position:-140% 0}}
 
@@ -297,6 +297,15 @@ export function StepServices({
         .fx-lite .svc-card:hover{ transform:none !important; }
         .fx-lite .svc-img{ transform:none !important; transition:none !important; }
         .fx-lite .svc-reveal{ background:rgba(8,9,11,0.94) !important; }
+
+        .promo-shimmer{
+          background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%);
+          background-size:250% 100%;
+          animation:promoSweep 3.2s ease-in-out infinite;
+        }
+        @keyframes promoSweep{0%{background-position:160% 0}100%{background-position:-160% 0}}
+        @media (prefers-reduced-motion: reduce){ .promo-shimmer{ animation:none; } }
+        .fx-lite .promo-shimmer{ display:none !important; }
       `}</style>
 
       <div className="mt-9 grid grid-cols-1 gap-11 lg:grid-cols-[1.55fr_1fr]">
@@ -669,11 +678,17 @@ function PromoInline({ t, isAr, data, set, services }: {
           {error && <p className="mt-2 text-[0.66rem] tracking-wide text-[#c98a8a]">{error}</p>}
         </div>
       ) : (
-        <button data-cursor="hover" onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-2.5 text-[0.66rem] uppercase tracking-[0.16em] text-platinum/70 transition-colors hover:border-platinum/40 hover:text-ivory">
-          <Tag className="h-3.5 w-3.5" strokeWidth={1.8} />
-          {isAr ? 'معايا كود خصم' : 'I have a promo code'}
-        </button>
+        <motion.button
+          data-cursor="hover" onClick={() => setOpen(true)}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+          className="promo-cta group relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl border border-[#d9b25f]/50 bg-gradient-to-br from-[#d9b25f]/[0.16] via-[#d9b25f]/[0.06] to-transparent py-3.5 text-[0.74rem] font-semibold uppercase tracking-[0.16em] text-[#f0dfae] shadow-[0_18px_50px_-20px_rgba(217,178,95,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#d9b25f]/80 hover:shadow-[0_22px_60px_-18px_rgba(217,178,95,0.7)]"
+        >
+          <span aria-hidden className="promo-shimmer pointer-events-none absolute inset-0" />
+          <span className="relative grid h-6 w-6 flex-none place-items-center rounded-full bg-[#d9b25f]/20 text-[#f0dfae]">
+            <Tag className="h-3.5 w-3.5" strokeWidth={2} />
+          </span>
+          <span className="relative">{isAr ? 'معايا كود خصم 🎁' : 'I have a promo code'}</span>
+        </motion.button>
       )}
     </div>
   );

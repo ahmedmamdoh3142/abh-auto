@@ -87,47 +87,62 @@ function buildPromoWaMessage(
   const firstName = (d.recipientName ?? "").trim().split(/\s+/)[0] || "";
   const name = firstName || T("عميلنا العزيز", "there");
 
-  const valueLabel = d.kind === "fixed"
-    ? `${EGP(d.fixedAmount)} ${ccy}`
-    : d.kind === "gift_service"
-      ? T("خدمة مجانية بالكامل", "one complimentary service")
-      : d.kind === "service_each"
-        ? T(`خصم خاص على ${d.servicesCount} من خدماتنا المختارة`, `a special discount on ${d.servicesCount} selected services`)
-        : `${d.discountPercent}%`;
+  const isGift = d.kind === "gift_service";
 
-  const daysLeft = d.expiresAt ? Math.ceil((new Date(d.expiresAt).getTime() - Date.now()) / 86400000) : null;
-  const expiryLine = !d.expiresAt
-    ? T("بلا حد أقصى", "no expiry")
-    : daysLeft != null && daysLeft >= 0 && daysLeft <= 14
-      ? T(`${fmtDate(d.expiresAt)} (باقي ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} ⏳)`, `${fmtDate(d.expiresAt)} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left ⏳)`)
-      : fmtDate(d.expiresAt);
+const valueLabel = d.kind === "fixed"
+  ? `${EGP(d.fixedAmount)} ${ccy}`
+  : isGift
+    ? T("مفاجأة مستنياك", "a surprise waiting for you")
+    : d.kind === "service_each"
+      ? T(`خصم خاص على ${d.servicesCount} من خدماتنا المختارة`, `a special discount on ${d.servicesCount} selected services`)
+      : `${d.discountPercent}%`;
 
-  const minLine = d.minOrder > 0
-    ? T(`🧾 حد أدنى للطلب: ${EGP(d.minOrder)} ${ccy}\n`, `🧾 Minimum order: ${EGP(d.minOrder)} ${ccy}\n`)
-    : "";
+const daysLeft = d.expiresAt ? Math.ceil((new Date(d.expiresAt).getTime() - Date.now()) / 86400000) : null;
+const expiryLine = !d.expiresAt
+  ? T("بلا حد أقصى", "no expiry")
+  : daysLeft != null && daysLeft >= 0 && daysLeft <= 14
+    ? T(`${fmtDate(d.expiresAt)} (باقي ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"})`, `${fmtDate(d.expiresAt)} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left)`)
+    : fmtDate(d.expiresAt);
 
-  const linesAr = [
-    `مرحبًا ${name} 👋`, ``,
-    `🎁 كود خصم خاص بيك من *ABH Auto*: *${valueLabel}* على حجزك الجاي`, ``,
-    `الكود: \`\`\`${d.code}\`\`\``,
-    minLine + `⏳ صالح حتى: ${expiryLine}`, ``,
-    `الكود شخصي وباسمك — احجز دلوقتي من هنا:`,
-    `https://abh-auto.com`, ``,
-    `بانتظارك 🚗`,
-    `فريق ABH Auto`,
-  ];
-  const linesEn = [
-    `Hi ${name} 👋`, ``,
-    `🎁 A special code from *ABH Auto*: *${valueLabel}* off your next booking`, ``,
-    `Code: \`\`\`${d.code}\`\`\``,
-    minLine + `⏳ Valid until: ${expiryLine}`, ``,
-    `This code is personal and reserved for you — book now:`,
-    `https://abh-auto.com`, ``,
-    `See you soon 🚗`,
-    `The ABH Auto Team`,
-  ];
-  return (isAr ? linesAr : linesEn).join("\n");
-}
+const minLine = d.minOrder > 0
+  ? T(`حد أدنى للطلب: ${EGP(d.minOrder)} ${ccy}\n`, `Minimum order: ${EGP(d.minOrder)} ${ccy}\n`)
+  : "";
+
+// عنوان الرسالة يختلف لو الكود هدية — من غير ما نوضح إنها "خدمة مجانية"
+const introLineAr = isGift
+  ? `عندنا هدية خاصة بيك من *ABH Auto* — تعال اكتشف هي إيه`
+  : `كود خصم خاص بيك من *ABH Auto*: *${valueLabel}* على حجزك الجاي`;
+const introLineEn = isGift
+  ? `We have a special gift for you from *ABH Auto* — come discover what it is`
+  : `A special code from *ABH Auto*: *${valueLabel}* off your next booking`;
+
+const closingLineAr = isGift
+  ? `الكود شخصي وباسمك — احجز أو تشرفنا في الفرع عشان تعرف مفاجأتك:`
+  : `الكود شخصي وباسمك — احجز دلوقتي من هنا:`;
+const closingLineEn = isGift
+  ? `This code is personal and reserved for you — book, or visit us at the branch to find out:`
+  : `This code is personal and reserved for you — book now:`;
+
+const linesAr = [
+  `مرحبًا ${name}`, ``,
+  introLineAr, ``,
+  `الكود: \`\`\`${d.code}\`\`\``,
+  minLine + `صالح حتى: ${expiryLine}`, ``,
+  closingLineAr,
+  `https://abh-auto.com/booking`, ``,
+  `بانتظارك`,
+  `فريق ABH Auto`,
+];
+const linesEn = [
+  `Hi ${name}`, ``,
+  introLineEn, ``,
+  `Code: \`\`\`${d.code}\`\`\``,
+  minLine + `Valid until: ${expiryLine}`, ``,
+  closingLineEn,
+  `https://abh-auto.com/booking`, ``,
+  `See you soon`,
+  `The ABH Auto Team`,
+];
 
 export default function PromosClient({ services, locale }: { services: ServiceLite[]; locale: string }) {
   const isAr = locale !== "en";

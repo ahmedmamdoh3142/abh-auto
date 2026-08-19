@@ -83,7 +83,7 @@ export function StepVehicle({
   const color = palette.find((c) => c.key === data.colorKey);
 
   const { digits, letters } = splitPlate(data.plate);
-  const plateComplete = digits.length >= 4;
+const plateComplete = digits.length >= 1;
   // (إصلاح) مكتمل = ماركة + موديل + لون + لوحة كاملة (4 أرقام) — كان الشرط
   // القديم بيكتفي برقم واحد بس، فكان العميل يقدر يدوس "متابعة" قبل ما فحص
   // الضمان (اللي بيحتاج 4 أرقام) ياخد فرصته، فيفوّت المنع أو يكمل بلوحة ناقصة.
