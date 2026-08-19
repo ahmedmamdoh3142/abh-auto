@@ -143,6 +143,8 @@ const linesEn = [
   `See you soon`,
   `The ABH Auto Team`,
 ];
+return (isAr ? linesAr : linesEn).join("\n");
+}
 
 export default function PromosClient({ services, locale }: { services: ServiceLite[]; locale: string }) {
   const isAr = locale !== "en";
