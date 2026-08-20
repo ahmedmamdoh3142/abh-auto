@@ -38,12 +38,37 @@ export async function POST(request: Request) {
 
   const success = responseCode === "000";
 
-  const rows = await query<any>(
+  // (جديد) الأولوية للمطابقة الدقيقة بـ gateway_order_id، لكن لو مش لاقيها
+  // (لأن محاولة دفع تانية بعد كده كتبت فوق العمود ده على نفس الحجز)،
+  // نرجع نستخرج مرجع الحجز من نفس الـ orderId — الصيغة دايمًا
+  // "{reference}-{suffix}" والـ suffix حروف/أرقام بس من غير شرطة،
+  // فأي حاجة قبل آخر شرطة هي الـ reference الحقيقي.
+  let rows = await query<any>(
     `SELECT id, reference, total, amount_paid, payment_status
        FROM bookings WHERE gateway_order_id = $1 LIMIT 1`,
     [orderId]
   );
-  const booking = rows[0];
+  let booking = rows[0];
+
+  if (!booking) {
+    const refGuess = String(orderId || "").replace(/-[a-z0-9]+$/i, "");
+    if (refGuess) {
+      const fallbackRows = await query<any>(
+        `SELECT id, reference, total, amount_paid, payment_status
+           FROM bookings WHERE reference = $1 LIMIT 1`,
+        [refGuess]
+      );
+      booking = fallbackRows[0];
+      if (booking) {
+        console.warn("alinma callback: matched booking via reference fallback", {
+          orderId,
+          refGuess,
+          bookingId: booking.id,
+        });
+      }
+    }
+  }
+
   if (!booking) {
     console.error("alinma callback: booking not found for order", orderId);
     return NextResponse.redirect(`${appUrl}/booking/payment-failed`);

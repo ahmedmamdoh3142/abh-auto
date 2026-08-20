@@ -32,11 +32,32 @@ export async function POST(request: Request) {
   const transactionId = payload.transactionId;
   const success = responseCode === "000" && payload.result === "SUCCESS";
 
-  const rows = await query<any>(
+  // (جديد) نفس منطق الـ callback — fallback بالـ reference لو gateway_order_id
+  // اتكتب فوقه بمحاولة دفع تانية بعد ما اتولّدت المعاملة دي.
+  let rows = await query<any>(
     `SELECT id, total, amount_paid, payment_status FROM bookings WHERE gateway_order_id = $1 LIMIT 1`,
     [orderId]
   );
-  const booking = rows[0];
+  let booking = rows[0];
+
+  if (!booking) {
+    const refGuess = String(orderId || "").replace(/-[a-z0-9]+$/i, "");
+    if (refGuess) {
+      const fallbackRows = await query<any>(
+        `SELECT id, total, amount_paid, payment_status FROM bookings WHERE reference = $1 LIMIT 1`,
+        [refGuess]
+      );
+      booking = fallbackRows[0];
+      if (booking) {
+        console.warn("alinma webhook: matched booking via reference fallback", {
+          orderId,
+          refGuess,
+          bookingId: booking.id,
+        });
+      }
+    }
+  }
+
   if (!booking) {
     console.error("alinma webhook: booking not found", orderId);
     return NextResponse.json({ ok: true });

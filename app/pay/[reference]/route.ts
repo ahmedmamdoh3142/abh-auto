@@ -8,7 +8,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ refe
   const { reference } = await params;
 
   const rows = await query<any>(
-    `SELECT id, reference, total, amount_paid, payment_status, customer_email, customer_phone
+    `SELECT id, reference, total, amount_paid, payment_status, customer_email, customer_phone,
+            gateway_order_id, updated_at
        FROM bookings WHERE reference = $1 LIMIT 1`,
     [reference]
   );
@@ -20,18 +21,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ refe
 
   const total = Number(booking.total) || 0;
   const amountPaid = Number(booking.amount_paid) || 0;
-  // (معدّل) المتبقي الفعلي — بيتحسب من amount_paid مش من payment_status بس،
-  // عشان يعكس أي دفعات جزئية (كاش/تحويل) اتسجّلت من لوحة الأدمن.
   const remaining = Math.max(0, total - amountPaid);
 
-  // لو مفيش حاجة مستحقة أصلًا (اتدفع بالكامل من أي مصدر) - نوقف هنا.
   if (booking.payment_status === ALINMA_STATUS.paid || remaining <= 0.01) {
     return NextResponse.redirect(`${appUrl}/booking/payment-success?ref=${booking.reference}`);
   }
 
-  // كل زيارة = معاملة جديدة (orderId جديد) عند AlinmaPay، عشان ما نصطدمش
-  // بمعاملة قديمة "مفتوحة" علّقها العميل قبل كده. والمبلغ بقى دايمًا
-  // "المتبقي الفعلي" لحظة الدخول، مش إجمالي الحجز الثابت.
+  // (جديد) لو فيه معاملة اتولّدت من أقل من دقيقتين ولسه awaiting_gateway،
+  // منولدش وحدة جديدة — نوريه إنه لسه قيد المعالجة بدل ما نكسر التتبع
+  // بكتابة gateway_order_id جديد فوق القديم اللي رد الـ callback بتاعه
+  // ممكن يكون في الطريق.
+  const secondsSinceUpdate = booking.updated_at
+    ? (Date.now() - new Date(booking.updated_at).getTime()) / 1000
+    : Infinity;
+  if (
+    booking.payment_status === ALINMA_STATUS.awaitingGateway &&
+    booking.gateway_order_id &&
+    secondsSinceUpdate < 120
+  ) {
+    return NextResponse.redirect(`${appUrl}/booking/payment-pending?ref=${booking.reference}`);
+  }
+
   const receiptUrl = `${appUrl}/api/payment/alinma/callback`;
   const orderId = generateGatewayOrderId(booking.reference);
 
@@ -51,9 +61,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ refe
       receiptUrl,
     });
 
-    // (معدّل) status بيتحوّل لـ awaiting_gateway بس لو لسه ملوش دفعات —
-    // لو فيه دفعات جزئية سابقة، نسيب الحالة partial لحد ما الجيت واي يرد
-    // فعليًا (عشان الفلاتر في اللوحة تفضل صح لو العميل قفل الصفحة من غير دفع).
     await query(
       `UPDATE bookings
          SET gateway_order_id = $2,
