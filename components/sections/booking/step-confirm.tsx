@@ -1,18 +1,12 @@
 'use client';
 
 /**
- * StepConfirm — act 04. الخدمات من القاعدة + كود خصم متعدّد الأنواع.
- * التحقق من الكود يرسل بنود الطلب (serviceId + السعر) فيحسب الخادم الخصم الصحيح
- * حسب نوع الكود (إجمالي/مبلغ/خدمات محددة) ويرجّع الخصم لكل خدمة.
+ * StepConfirm — act 03 (بعد إلغاء خطوة بيانات العميل المنفصلة).
+ * الخدمات من القاعدة + كود خصم متعدّد الأنواع.
  *
- * (عروض) أُضيف عرض الهدايا في الدوسيه وفي التفصيل (breakdown) — مجانًا أو بخصم.
- * (جديد) كوبون هدية عجلة الحظ (gift_service): يضيف خدمة مجانًا — يظهر في صندوق
- *   الكود كـ«هديتك … مجانًا»، والخدمة نفسها تتسجّل في الخادم وقت تأكيد الحجز.
- *
- * (جديد) سطر «الإجمالي قبل الخصم» (أصل الأسعار) يظهر مشطوبًا فوق «وفرت».
- * (جديد) هدية الكود (gift_service) تظهر في دوسيه «هداياك» وفي التفصيل مجانًا.
- * ملاحظة: حقل الكود يُطبَّق الآن بدري في خطوة الخدمات؛ هنا يظهر كـ«مطبَّق»
- *   ويمكن تعديله. لو دخل العميل هذه الخطوة بكود مطبَّق مسبقًا يظهر جاهزًا.
+ * (تحديث) شيل عرض اللون واللوحة والإيميل (لم تعد تُجمع). أُضيف تشيك إجباري
+ * للموافقة على الشروط والأحكام وسياسة الاسترجاع قبل تفعيل زر «تأكيد الحجز» —
+ * بالضغط على رابط «الشروط والأحكام» يفتح مودال (كونتينر) بنص السياسة كاملًا.
  */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,6 +31,28 @@ const SIZE_LABELS: Record<VehicleSize, { ar: string; en: string; tier: string }>
   large: { ar: 'كبيرة', en: 'Large', tier: 'Tier III' },
 };
 
+/* ── نص الشروط والأحكام / سياسة الاسترجاع (مطابق لنص الفاتورة) ── */
+const TERMS_AR = [
+  'يحق للعميل طلب استرجاع المبلغ المدفوع خلال 7 أيام عمل من تاريخ الدفع، شريطة أن يكون الطلب قبل تنفيذ الخدمة.',
+  'لا يُقبل أي طلب استرجاع بعد تنفيذ الخدمة أو بعد انتهاء فترة الاسترجاع المنصوص عليها، وذلك بصرف النظر عن السبب.',
+  'يُعاد المبلغ المستحق إلى حساب العميل عبر وسيلة الدفع الأصلية خلال مدة لا تتجاوز 15 يوم عمل من تاريخ قبول الطلب.',
+  'يحق للعميل استبدال الخدمة المحجوزة بخدمة أخرى قبل استلام المركبة، وفي حال كانت الخدمة البديلة أعلى سعرًا يلزم العميل بسداد فرق السعر.',
+  'تسري صلاحية الحجز لمدة 3 أشهر من تاريخ الدفع، وفي حال انقضت المدة دون تنفيذ الخدمة يتم استرجاع مبلغ العميل بعد استقطاع ضريبة القيمة المضافة إلى حسابه البنكي أو محفظته الإلكترونية.',
+  'لا تخضع المشتريات التي تمت بالقسائم الشرائية أو رموز الخصم لسياسة الاسترجاع بأي حال من الأحوال.',
+  'لا تخضع العروض والباقات الخاصة للاسترجاع، ويُتاح الاستبدال بباقة مماثلة أو أعلى مع سداد فرق السعر.',
+  'تُعد هذه السياسة جزءًا لا يتجزأ من عقد الخدمة، وإتمام الدفع يُعد قبولًا صريحًا لجميع بنودها.',
+];
+const TERMS_EN = [
+  'A refund of the paid amount may be requested within 7 business days from the payment date, provided the request is made before the service is performed.',
+  'No refund request is accepted after the service is performed or after the stated refund period ends, regardless of the reason.',
+  'The due amount is returned to the customer via the original payment method within no more than 15 business days from the date the request is accepted.',
+  'The customer may exchange the booked service for another before the vehicle is handed over; if the alternative service is of higher price, the customer pays the difference.',
+  'The booking is valid for 3 months from the payment date. If the period lapses without the service being performed, the amount is refunded — after deducting VAT — to the customer\'s bank account or e-wallet.',
+  'Purchases made with vouchers or discount codes are not subject to the refund policy under any circumstances.',
+  'Special offers and packages are non-refundable; exchange is available for an equal or higher package with payment of the price difference.',
+  'This policy is an integral part of the service contract, and completing payment is an explicit acceptance of all its terms.',
+];
+
 export function StepConfirm({
   t, isAr, data, total, set, services: SERVICES, onBack, onConfirm,
 }: {
@@ -50,16 +66,16 @@ export function StepConfirm({
 }) {
   const [processing, setProcessing] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [termsOpen, setTermsOpen] = useState(false);
   const brand = BRANDS.find((b) => b.id === data.brandId);
   const szL = SIZE_LABELS[data.size] ?? SIZE_LABELS.large;
   const sizeChip = `${isAr ? szL.ar : szL.en} · ${szL.tier}`;
   const gifts = data.gifts ?? [];
 
-  // هدية الكود (gift_service) — بند مجاني مستقل عن هدايا البندل.
   const hasGiftCode = data.promoKind === 'gift_service' && !!data.giftServiceSlug;
 
   const confirm = () => {
-    if (!data.payment) return;
+    if (!data.payment || !data.agreedToTerms) return;
     setProcessing(true);
     setPayError(null);
     setTimeout(async () => {
@@ -73,8 +89,8 @@ export function StepConfirm({
     }, 1100);
   };
 
-  // هل نعرض سطر «الإجمالي قبل الخصم»؟ فقط لو فيه وفر فعلي.
   const showOriginal = total.originalTotal > total.grand && (total.saved > 0 || total.promoCut > 0);
+  const canConfirm = !!data.payment && data.agreedToTerms;
 
   return (
     <div>
@@ -93,9 +109,7 @@ export function StepConfirm({
               {brand?.name} <span className="text-platinum">{data.model}</span>
             </h3>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <BannerChip>{t(`colors.${data.colorKey}`)}</BannerChip>
               <BannerChip>{sizeChip}</BannerChip>
-              {data.plate && <BannerChip mono>{data.plate}</BannerChip>}
             </div>
           </div>
           <div className="flex items-center gap-2.5 rounded-full border border-platinum/25 bg-obsidian/40 px-4 py-2 backdrop-blur-sm">
@@ -108,9 +122,8 @@ export function StepConfirm({
       <div className="mt-9 grid gap-10 lg:grid-cols-[1fr_1fr] lg:gap-12">
         <div className="space-y-5">
           <DossierCard icon={Car} title={t('step4.vehicleTitle')}>
-            <Row k={`${brand?.name ?? ''}`} v={data.model} />
-            <Row k={t('step1.color')} v={t(`colors.${data.colorKey}`)} />
-            <Row k={t('step1.plate')} v={data.plate} mono />
+            <Row k={t('step1.brand')} v={brand?.name ?? ''} />
+            <Row k={t('step1.model')} v={data.model} />
           </DossierCard>
 
           <DossierCard icon={Wrench} title={t('step4.servicesTitle')}>
@@ -135,7 +148,6 @@ export function StepConfirm({
             )}
           </DossierCard>
 
-          {/* (عروض) هداياك — هدايا البندل + هدية الكود */}
           {(gifts.length > 0 || hasGiftCode) && (
             <DossierCard icon={Gift} title={isAr ? 'هداياك' : 'Your gifts'}>
               {hasGiftCode && (
@@ -156,7 +168,6 @@ export function StepConfirm({
           <DossierCard icon={UserRound} title={t('step4.detailsTitle')}>
             <Row k={t('step3.fullName')} v={data.name} />
             <Row k={t('step3.phone')} v={data.phone} mono />
-            <Row k={t('step3.email')} v={data.email} mono />
             <Row k={t('step4.branch')} v={branchLabel(data.branch, isAr)} />
             <Row k={t('step4.dateTime')} v={`${data.date} · ${data.time}`} mono />
           </DossierCard>
@@ -183,10 +194,8 @@ export function StepConfirm({
               })}
             </div>
 
-            {/* ── كود الخصم ── */}
             <PromoField isAr={isAr} data={data} set={set} services={SERVICES} t={t} />
 
-            {/* ── (جديد) خصم بنك العميل — تحت كود الخصم مباشرة ── */}
             <BankDiscountField isAr={isAr} data={data} set={set} t={t} />
 
             <div className="mt-7 rounded-3xl border border-platinum/25 bg-gradient-to-b from-platinum/[0.07] to-white/[0.01] p-5 md:p-6">
@@ -227,7 +236,6 @@ export function StepConfirm({
                           <span dir="ltr" className="font-display text-platinum tabular-nums">{currencyFmt(total.tow)}</span>
                         </div>
                       )}
-                      {/* هدية الكود (gift_service) في التفصيل */}
                       {hasGiftCode && (
                         <div className="flex justify-between gap-3 py-1.5 text-[0.82rem] text-ivory/82">
                           <span className="inline-flex items-center gap-1.5">
@@ -237,7 +245,6 @@ export function StepConfirm({
                           <span dir="ltr" className="font-display tabular-nums text-[#e8d6a8]">{isAr ? 'مجانًا' : 'Free'}</span>
                         </div>
                       )}
-                      {/* (عروض) سطور هدايا البندل */}
                       {gifts.map((g) => {
                         const svc = SERVICES.find((s) => s.slug === g.slug);
                         if (!svc) return null;
@@ -258,7 +265,6 @@ export function StepConfirm({
 
               <div className="my-3.5 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
 
-              {/* (جديد) الإجمالي قبل أي خصم — أصل الأسعار (مشطوب) */}
               {showOriginal && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="text-platinum/60">{isAr ? 'الإجمالي قبل الخصم' : 'Subtotal'}</span>
@@ -273,7 +279,6 @@ export function StepConfirm({
                 </div>
               )}
 
-              {/* سطر خصم الكود — يعتمد على القيمة المحسوبة من الخادم */}
               {data.promoCode && total.promoCut > 0 && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="inline-flex items-center gap-1.5 text-platinum">
@@ -284,7 +289,6 @@ export function StepConfirm({
                 </div>
               )}
 
-              {/* (جديد) خصم بنك العميل */}
               {data.bankVerified && total.bankCut > 0 && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="inline-flex items-center gap-1.5 text-[#9fd4b0]">
@@ -295,7 +299,6 @@ export function StepConfirm({
                 </div>
               )}
 
-              {/* سطر هدية الكوبون (مجانًا) */}
               {data.promoCode && data.promoKind === 'gift_service' && (
                 <div className="mb-2.5 flex items-center justify-between text-[0.78rem]">
                   <span className="inline-flex items-center gap-1.5 text-[#e8d6a8]">
@@ -325,19 +328,23 @@ export function StepConfirm({
                 </span>
               </div>
 
-              {/* (جديد) ملاحظة الضريبة — كل الأسعار شاملة ض.ق.م */}
               <p className="mt-4 border-t border-white/[0.06] pt-3 text-center text-[0.62rem] leading-relaxed text-steel/70">
                 {isAr ? 'جميع الأسعار شاملة ضريبة القيمة المضافة (15%)' : 'All prices are inclusive of VAT (15%)'}
               </p>
-
             </div>
 
+            {/* ── تشيك الموافقة على الشروط والأحكام ── */}
+            <TermsConsent isAr={isAr} checked={data.agreedToTerms} onChange={(v) => set({ agreedToTerms: v })} onOpen={() => setTermsOpen(true)} />
+
             {!data.payment && <p className="mt-3 text-[0.7rem] text-steel">{t('step4.selectPayment')}</p>}
+            {data.payment && !data.agreedToTerms && (
+              <p className="mt-3 text-[0.7rem] text-steel">{isAr ? 'يجب الموافقة على الشروط والأحكام للمتابعة' : 'Please agree to the terms to continue'}</p>
+            )}
             {payError && <p className="mt-3 text-[0.7rem] text-[#e7b4b4]">{payError}</p>}
 
             <div className="mt-7 flex flex-col gap-3">
-              <button onClick={confirm} disabled={!data.payment || processing} data-cursor="hover"
-                className={data.payment && !processing ? '' : 'pointer-events-none opacity-40'}>
+              <button onClick={confirm} disabled={!canConfirm || processing} data-cursor="hover"
+                className={canConfirm && !processing ? '' : 'pointer-events-none opacity-40'}>
                 <PrimaryPill full>{processing ? t('step4.processing') : t('step4.confirm')}</PrimaryPill>
               </button>
               <button onClick={onBack} data-cursor="hover" className="self-center"><GhostPill>{t('step4.back')}</GhostPill></button>
@@ -345,7 +352,67 @@ export function StepConfirm({
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {termsOpen && (
+          <TermsModal isAr={isAr} onClose={() => setTermsOpen(false)}
+            onAgree={() => { set({ agreedToTerms: true }); setTermsOpen(false); }} />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/* ── تشيك + مودال الشروط والأحكام ── */
+function TermsConsent({ isAr, checked, onChange, onOpen }: {
+  isAr: boolean; checked: boolean; onChange: (v: boolean) => void; onOpen: () => void;
+}) {
+  return (
+    <label
+      data-cursor="hover"
+      className={['mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 transition-colors duration-300',
+        checked ? 'border-platinum/40 bg-platinum/[0.06]' : 'border-white/12 bg-white/[0.02] hover:border-white/25'].join(' ')}>
+      <span className={['mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-md border transition-all duration-300',
+        checked ? 'border-transparent bg-gradient-to-br from-white to-platinum text-obsidian' : 'border-white/25'].join(' ')}>
+        {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+      </span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        className="sr-only" aria-label={isAr ? 'الموافقة على الشروط والأحكام' : 'Terms agreement'} />
+      <span className="text-[0.8rem] leading-relaxed text-platinum/80">
+        {isAr ? 'أوافق على ' : 'I agree to the '}
+        <button type="button" data-cursor="hover" onClick={(e) => { e.preventDefault(); onOpen(); }}
+          className="text-ivory underline decoration-platinum/50 underline-offset-4 transition-colors hover:text-platinum">
+          {isAr ? 'الشروط والأحكام وسياسة الاسترجاع' : 'Terms & Conditions and Refund Policy'}
+        </button>
+      </span>
+    </label>
+  );
+}
+
+function TermsModal({ isAr, onClose, onAgree }: { isAr: boolean; onClose: () => void; onAgree: () => void }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/12 bg-[#0c0d0e] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <h3 className="font-display text-lg uppercase text-ivory">{isAr ? 'الشروط والأحكام' : 'Terms & Conditions'}</h3>
+          <button data-cursor="hover" onClick={onClose} aria-label="close"
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/15 text-platinum/70 transition-colors hover:border-white/30 hover:text-ivory">
+            <X className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <ol className="list-decimal space-y-2.5 ps-5 text-[0.82rem] leading-relaxed text-platinum/80">
+            {(isAr ? TERMS_AR : TERMS_EN).map((line, i) => <li key={i}>{line}</li>)}
+          </ol>
+        </div>
+        <div className="border-t border-white/10 p-5">
+          <button onClick={onAgree} data-cursor="hover"><PrimaryPill full>{isAr ? 'أوافق ومتابعة' : 'I Agree & Continue'}</PrimaryPill></button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -354,11 +421,9 @@ function promoLabel(isAr: boolean, data: BookingState): string {
   const code = data.promoCode ?? '';
   if (data.promoKind === 'percentage') return isAr ? `خصم الكود (${code}) −${data.promoPercent}%` : `Promo (${code}) −${data.promoPercent}%`;
   if (data.promoKind === 'fixed') return isAr ? `خصم الكود (${code})` : `Promo (${code})`;
-  // أنواع الخدمات
   return isAr ? `خصم الكود (${code}) على خدمات محددة` : `Promo (${code}) — selected services`;
 }
 
-/* ── كود الخصم: تذكرة عرض تلقائية فاخرة + إدخال + تحقق ── */
 const promoFmt = (n: number) => new Intl.NumberFormat('en-US').format(Math.round(n));
 
 type AutoPromo = {
@@ -376,7 +441,6 @@ function PromoField({ isAr, data, set, services, t }: {
 }) {
   const ccy = t('currency');
   const { member } = useAuth();
-  // الشركاء (partner) عندهم أسعار وخصومات خاصة بيهم أصلاً — من غير تذكرة العرض التلقائية.
   const isPartner = member?.role === 'partner';
   const [code, setCode] = useState(data.promoCode ?? '');
   const [checking, setChecking] = useState(false);
@@ -386,7 +450,7 @@ function PromoField({ isAr, data, set, services, t }: {
   const applied = !!data.promoCode && (data.promoDiscount > 0 || data.promoKind === 'gift_service');
 
   useEffect(() => {
-    if (isPartner) return; // مفيش تذكرة تلقائية لحساب الشريك
+    if (isPartner) return;
     let alive = true;
     (async () => {
       try {
@@ -583,7 +647,7 @@ function PromoField({ isAr, data, set, services, t }: {
     </div>
   );
 }
-/* ── خصم بنك العميل: تحقق BIN، تحت كود الخصم مباشرة ── */
+
 function BankDiscountField({ isAr, data, set, t }: {
   isAr: boolean; data: BookingState; set: (p: Partial<BookingState>) => void;
   t: ReturnType<typeof useTranslations>;
@@ -623,7 +687,6 @@ function BankDiscountField({ isAr, data, set, t }: {
     setDigits(''); setError(null);
   };
 
-  // ── حالة: تم التحقق ──
   if (data.bankVerified) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}
@@ -652,7 +715,6 @@ function BankDiscountField({ isAr, data, set, t }: {
     );
   }
 
-  // ── حالة: مفتوح (بيكتب رقم الكارت) ──
   if (open) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}
@@ -698,7 +760,6 @@ function BankDiscountField({ isAr, data, set, t }: {
     );
   }
 
-  // ── حالة: بانر العرض المغلق ──
   return (
     <>
       <motion.button
@@ -742,7 +803,7 @@ function Heading({ t }: { t: ReturnType<typeof useTranslations> }) {
   return (
     <div>
       <div className="mb-4 flex items-center gap-3.5">
-        <span className="font-display text-base text-platinum tabular-nums">04</span>
+        <span className="font-display text-base text-platinum tabular-nums">03</span>
         <span className="h-px w-8 bg-platinum/40" />
         <span className="text-[0.55rem] uppercase tracking-[0.3em] text-steel">{t('steps.payment')}</span>
       </div>
@@ -815,8 +876,6 @@ function PaymentRow({ method, on, title, desc, delay, onSelect, disabled, soonLa
     </motion.button>
   );
 }
-
-
 
 function PaymentMark({ method }: { method: PaymentMethod }) {
   if (method === 'card') {

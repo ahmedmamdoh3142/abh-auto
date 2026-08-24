@@ -3,6 +3,13 @@
 /**
  * BookingFlow — the /booking experience. (DB-driven services + promo code + colors)
  *
+ * (تحديث) بعد إلغاء خطوة بيانات العميل المنفصلة ودمجها داخل خطوة السيارة،
+ * وشيل اللون واللوحة بالكامل، أصبحت رحلة الحجز 3 خطوات فقط:
+ *   01 السيارة + بيانات التواصل والموعد
+ *   02 الخدمات (أو الصيانة)
+ *   03 التأكيد والدفع (فيها تشيك الموافقة على الشروط والأحكام)
+ * الفرع أصبح تلقائيًا (فرع واحد فقط: tahlia).
+ *
  * ── إصلاح أداء/تعليق الموبايل (مهم) ─────────────────────────────────────────
  *  1) جُزيئات الهيرو (20) كانت motion.span بأنيميشن repeat:Infinity تعمل على
  *     الـmain thread دائمًا. حُوِّلت إلى CSS keyframes (compositor) وتُخفى تمامًا
@@ -13,9 +20,6 @@
  *
  * ── (جديد) كود الخصم في خطوة الخدمات ────────────────────────────────────────
  *  • حقل الكود اتنقل لخطوة الخدمات (StepServices). العميل يقدر يطبّق كوده بدري.
- *  • كود الهدية (gift_service): الخدمة المجانية تُضاف تلقائيًا وتظهر في الدوك.
- *    giftServiceSlug + giftServiceName يُخزّنان لعرضها.
- *  • قاعدة العبور: يكفي كود هدية صالح لوحده، أو خدمة مدفوعة واحدة على الأقل.
  *
  * ── (جديد) الإجمالي قبل الخصم ───────────────────────────────────────────────
  *  • total.originalTotal = أصل الأسعار (قبل أي خصم إعلاني) — يظهر مشطوبًا فوق «وفرت».
@@ -32,7 +36,7 @@ import { ArrowUpRight, ArrowLeft, Check } from 'lucide-react';
 
 import {
   COLORS, PAYMENT_METHODS, BRANDS as LIB_BRANDS, sizeForModel,
-  currencyFmt, TOWING_COST,
+  currencyFmt, TOWING_COST, BRANCHES,
   type VehicleSize, type CategoryId, type TowingMode, type PaymentMethod, type Category, type Brand,
 } from '@/lib/booking-data';
 import { dbPriceFor, dbOldPriceFor, type DbServiceMeta } from '@/lib/booking-pricing';
@@ -45,11 +49,9 @@ import {
 
 import { StepVehicle } from './step-vehicle';
 
-// (جديد) تحميل باقي الخطوات lazy — بيقلل حجم الجافاسكريبت الأولي بشكل كبير،
-// لأن العميل غالبًا هيقضي وقت في خطوة السيارة قبل ما يحتاج كود بقية الخطوات.
+// (جديد) تحميل باقي الخطوات lazy — بيقلل حجم الجافاسكريبت الأولي بشكل كبير.
 const StepServices = dynamic(() => import('./step-services').then((m) => m.StepServices), { loading: () => <StepSkeleton /> });
 const StepMaintenance = dynamic(() => import('./step-maintenance').then((m) => m.StepMaintenance), { loading: () => <StepSkeleton /> });
-const StepDetails = dynamic(() => import('./step-details').then((m) => m.StepDetails), { loading: () => <StepSkeleton /> });
 const StepConfirm = dynamic(() => import('./step-confirm').then((m) => m.StepConfirm), { loading: () => <StepSkeleton /> });
 const StepMaintenanceConfirm = dynamic(() => import('./step-maintenance-confirm').then((m) => m.StepMaintenanceConfirm), { loading: () => <StepSkeleton /> });
 
@@ -104,6 +106,8 @@ export interface BookingState {
   problemDescription: string;
   /** (جديد) قراءة العداد الحالية كما أدخلها العميل — تُستخدم لفحص سقف الضمان بالكيلومترات. */
   odometerKm: string;
+  /** (جديد) موافقة العميل على الشروط والأحكام وسياسة الاسترجاع — لازمة لتفعيل زر التأكيد. */
+  agreedToTerms: boolean;
 }
 
 /** (جديد) شكل موحّد لتغطية الضمان — تايب مستقل بسطر واحد عشان يبقى آمن مع النسخ/اللصق. */
@@ -114,7 +118,7 @@ const INITIAL: BookingState = {
   tier: 'signature',
   services: [], activeCat: 'coatings' as CategoryId, towing: false, towingMode: null,
   towingLat: null, towingLng: null, towingAddress: '',
-  name: '', phone: '', email: '', city: '', branch: '', date: '', time: '',
+  name: '', phone: '', email: '', city: '', branch: BRANCHES[0], date: '', time: '',
   payment: null, showBreakdown: false, calMonth: null,
   promoCode: null, promoPercent: 0, promoKind: null, promoDiscount: 0,
   promoServiceIds: [], promoPerService: {},
@@ -123,16 +127,17 @@ const INITIAL: BookingState = {
   gifts: [],
   bankVerified: false, bankCardDigits: null, bankCode: null, bankDiscountPercent: 0,
   isMaintenance: false, maintenanceWarranty: null, problemDescription: '', odometerKm: '',
+  agreedToTerms: false,
 };
 
-const STEP_KEYS = ['vehicle', 'services', 'customer', 'payment'] as const;
+// (جديد) 3 خطوات فقط بعد دمج بيانات العميل داخل خطوة السيارة وإلغاء الخطوة المنفصلة لها.
+const STEP_KEYS = ['vehicle', 'services', 'payment'] as const;
 
 export function BookingFlow({
   categories,
   services: SERVICES,
   brands,
   modelSizes,
-  colors,
 }: {
   categories: Category[];
   services: DbServiceMeta[];
@@ -164,7 +169,7 @@ export function BookingFlow({
 
   // (جديد) استرجاع الحجز بعد فشل الدفع: لو رجعنا من AlinmaPay بفشل ودخلنا
   // بـ ?retry=1، نرجّع كل بيانات الحجز اللي كانت محفوظة ونروح مباشرة
-  // لخطوة التأكيد (04) بدل ما نرجّع العميل يبدأ الحجز من الصفر تاني.
+  // لخطوة التأكيد (03) بدل ما نرجّع العميل يبدأ الحجز من الصفر تاني.
   useEffect(() => {
     if (searchParams.get('retry') !== '1') return;
     try {
@@ -173,10 +178,10 @@ export function BookingFlow({
       const saved = JSON.parse(raw);
       if (saved?.data) {
         setData(saved.data);
-        setStep(3);
-        setMaxReached(3);
+        setStep(2);
+        setMaxReached(2);
         if (typeof window !== 'undefined') {
-          window.history.replaceState({ bookingStep: 3 }, '', window.location.pathname);
+          window.history.replaceState({ bookingStep: 2 }, '', window.location.pathname);
         }
       }
     } catch { /* تجاهل */ }
@@ -243,6 +248,9 @@ export function BookingFlow({
   }, [sizeOf]);
 
   // ── (جديد) صيانة الضمان: تحقّق من تغطية اللوحة الحالية كل ما تتغيّر ──
+  // ملاحظة: بعد إلغاء حقل اللوحة من الواجهة، data.plate تفضل فاضية دائمًا،
+  // فالتحقق هنا عمليًا مش هيرجّع أي نتيجة — الكود اتسيب كما هو لعدم كسر أي
+  // استدعاء تاني، لكن ميزة اكتشاف الصيانة تلقائيًا بقت غير فعّالة حاليًا.
   const [maintenanceCovered, setMaintenanceCovered] = useState<WarrantyCoverage[]>([]);
   useEffect(() => {
     let alive = true;
@@ -273,9 +281,6 @@ export function BookingFlow({
     set({ isMaintenance: false, maintenanceWarranty: null, problemDescription: '' });
   }, [set]);
 
-  // بمجرد ما نلاقي ضمان ساري على السيارة/اللوحة اللي دخلها العميل — من أي مكان
-  // دخل بيه صفحة الحجز — ندخّله في وضع الصيانة تلقائيًا (خطوة وصف العطل مباشرة،
-  // من غير خدمات، ثم بياناته، ثم تأكيد بدون أي دفع).
   useEffect(() => {
     if (autoMaintenanceTried.current) return;
     if (data.isMaintenance) return;
@@ -316,7 +321,6 @@ export function BookingFlow({
 
   const revalidatePromo = useCallback(async (state: BookingState) => {
     if (!state.promoCode) return;
-    // كود الهدية لا يحتاج إعادة حساب خصم (قيمته صفر) — نتركه كما هو.
     if (state.promoKind === 'gift_service') return;
     const lines = state.services
       .map((slug) => {
@@ -355,30 +359,27 @@ export function BookingFlow({
   const total = useMemo(() => {
     let onReq = false;
     let saved = 0;
-    let servicesOriginal = 0; // أصل الأسعار قبل أي خصم إعلاني
+    let servicesOriginal = 0;
     const services = data.services.reduce((sum, slug) => {
       const meta = SERVICES.find((s) => s.slug === slug);
       if (!meta) return sum;
       if (meta.onRequest) { onReq = true; return sum; }
       const old = dbOldPriceFor(meta, data.size);
       const now = dbPriceFor(meta, data.size);
-      servicesOriginal += old || now; // أصل السعر (القديم لو موجود، وإلا الحالي)
+      servicesOriginal += old || now;
       if (old) saved += old - now;
       return sum + now;
     }, 0);
     const tow = data.towing && data.towingMode ? TOWING_COST[data.towingMode] : 0;
     const beforePromo = services + tow;
     const giftsCharge = (data.gifts ?? []).reduce((s, g) => s + (g.unit || 0), 0);
-    // الإجمالي قبل أي خصم = أصل أسعار الخدمات + النقل + هدايا البندل المدفوعة
     const originalTotal = servicesOriginal + tow + giftsCharge;
-    // (جديد) خصم بنك العميل يلغي أي خصم كود تمامًا
     const bankCut = data.bankVerified ? Math.round((beforePromo * data.bankDiscountPercent) / 100) : 0;
     const promoCut = data.bankVerified ? 0 : Math.min(data.promoDiscount || 0, beforePromo);
     const grand = Math.max(0, beforePromo - promoCut - bankCut) + giftsCharge;
     return { services, tow, beforePromo, promoCut, bankCut, grand, onReq, saved, originalTotal };
   }, [data.services, data.size, data.towing, data.towingMode, data.promoDiscount, data.gifts, data.bankVerified, data.bankDiscountPercent, SERVICES]);
 
-  // قائمة الخدمات المختارة بصيغة التتبّع (اسم + سعر)
   const trackedServices = useCallback(() => data.services.map((slug) => {
     const m = SERVICES.find((s) => s.slug === slug);
     return { name: m?.name ?? slug, price: m && !m.onRequest ? dbPriceFor(m, data.size) : 0 };
@@ -386,18 +387,20 @@ export function BookingFlow({
 
   const go = useCallback((to: number) => {
     // تتبّع قمع الحجز حسب الخطوة اللي رايحين لها
-    if (to === 1) { trackVehicleInfo({ brand: data.brandId, model: data.model, size: data.size }); trackBeginCheckout(); }
-    else if (to === 2) { trackSelectServices(trackedServices(), total.grand); }
-    else if (to === 3) { trackCustomerInfo(); trackSchedule({ branch: data.branch, date: data.date, time: data.time }); }
+    if (to === 1) {
+      trackVehicleInfo({ brand: data.brandId, model: data.model, size: data.size });
+      trackCustomerInfo();
+      trackSchedule({ branch: data.branch, date: data.date, time: data.time });
+      trackBeginCheckout();
+    } else if (to === 2) {
+      trackSelectServices(trackedServices(), total.grand);
+    }
     setStep(to);
     setMaxReached((m) => Math.max(m, to));
-    // (جديد) نسجّل الخطوة في الـhistory عشان زر رجوع المتصفح يرجع خطوة
-    // خطوة بدل ما يقفل الصفحة أو يقفز لأول خطوة على طول.
     if (typeof window !== 'undefined') window.history.pushState({ bookingStep: to }, '', window.location.href);
     requestAnimationFrame(() => consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [data.brandId, data.model, data.size, data.branch, data.date, data.time, total.grand, trackedServices]);
 
-  // (جديد) دعم زر رجوع/تقدّم في المتصفح لخطوات الحجز.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.history.replaceState({ bookingStep: 0 }, '', window.location.href);
@@ -415,7 +418,7 @@ export function BookingFlow({
     const brand = effectiveBrands.find((b) => b.id === data.brandId);
     const vehicleLabel = `${brand?.name ?? ''} ${data.model}`.trim();
 
-    trackBookingSubmit(); // ضغط «تأكيد» (محاولة)
+    trackBookingSubmit();
 
     let json: any = null;
     try {
@@ -463,9 +466,6 @@ export function BookingFlow({
       return false;
     }
 
-    // ── الدفع بالبطاقة (ويشمل Apple Pay) — AlinmaPay Hosted Page ──
-    // العميل يتحوّل لصفحة AlinmaPay المستضافة (نفس آلية "لينك الدفع" في الأدمن)،
-    // وهناك بيختار كارت أو Apple Pay حسب جهازه، من غير أي فورم مدمج عندنا.
     if (data.payment === 'card') {
       try {
         const initRes = await fetch('/api/payment/alinma/initiate', {
@@ -479,16 +479,13 @@ export function BookingFlow({
         });
         const initJson = await initRes.json();
         if (initJson?.ok && initJson.redirectUrl) {
-          // (جديد) نحفظ بيانات الحجز قبل ما نودّي العميل لصفحة AlinmaPay
-          // الخارجية — لو الدفع فشل هناك ورجع لصفحة الفشل، هنقدر نرجّعه
-          // لخطوة التأكيد بكل بياناته بدل ما يبدأ الحجز من الأول.
           try {
             if (typeof window !== 'undefined') {
               sessionStorage.setItem(RETRY_STORAGE_KEY, JSON.stringify({ data }));
             }
           } catch { /* تجاهل */ }
           window.location.href = initJson.redirectUrl;
-          return true; // العميل غادر الصفحة لصفحة الدفع الخارجية
+          return true;
         }
         console.error('alinma initiate rejected:', initJson);
         trackBookingError(initJson?.error ?? 'gateway_init_failed');
@@ -499,7 +496,6 @@ export function BookingFlow({
       return false;
     }
 
-    // ── باقي طرق الدفع (cash) — نفس السلوك الحالي ──
     try { if (typeof window !== 'undefined') sessionStorage.removeItem(RETRY_STORAGE_KEY); } catch { /* تجاهل */ }
     setReference(json.reference);
     trackBookingSuccess({
@@ -562,8 +558,8 @@ export function BookingFlow({
                   className="p-6 md:p-10 lg:p-14"
                 >
                   {step === 0 && (
-                    <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} brands={effectiveBrands}
-                      colors={colors} bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
+                    <StepVehicle t={t} isAr={isAr} data={data} onChange={onVehicleChange} set={set} brands={effectiveBrands}
+                      bookingImage={BOOKING_IMAGE} garage={member?.vehicles ?? []} onNext={() => go(1)}
                       onAddCustomModel={onAddCustomModel}
                       maintenanceCovered={maintenanceCovered} onStartMaintenance={startMaintenance}
                       maintenanceIntent={maintenanceIntent}
@@ -579,14 +575,11 @@ export function BookingFlow({
                     )
                   )}
                   {step === 2 && (
-                    <StepDetails t={t} isAr={isAr} data={data} set={set} onBack={() => go(1)} onNext={() => go(3)} />
-                  )}
-                  {step === 3 && (
                     data.isMaintenance ? (
-                      <StepMaintenanceConfirm isAr={isAr} data={data} onBack={() => go(2)} onSubmit={confirmMaintenance} />
+                      <StepMaintenanceConfirm isAr={isAr} data={data} onBack={() => go(1)} onSubmit={confirmMaintenance} />
                     ) : (
                       <StepConfirm t={t} isAr={isAr} data={data} total={total} set={set}
-                        services={SERVICES} onBack={() => go(2)} onConfirm={confirmBooking} />
+                        services={SERVICES} onBack={() => go(1)} onConfirm={confirmBooking} />
                     )
                   )}
                 </motion.div>
@@ -606,14 +599,10 @@ function BookingHero({ t }: { t: ReturnType<typeof useTranslations> }) {
   return (
     <section className="relative isolate overflow-hidden pb-4 pt-36 text-center md:pb-8 md:pt-44">
       <style>{`
-        /* جُزيئات الهيرو على الـcompositor (كانت framer infinite) — مخفية على اللمس */
         .bk-particle{opacity:0;animation-name:bkRise;animation-timing-function:ease-out;animation-iteration-count:infinite;will-change:transform,opacity;}
         @keyframes bkRise{0%{opacity:0;transform:translateY(10px)}20%{opacity:.8}60%{opacity:.5}100%{opacity:0;transform:translateY(-110px)}}
-        @media (hover:none),(pointer:coarse),(prefers-reduced-motion:reduce){.bk-particle{display:none!important}}
+        @media (hover:none),(pointer:coarse),(prefers-reduced-motion: reduce){.bk-particle{display:none!important}}
 
-        /* ── منع تعليق/اسوداد الموبايل ──
-           تعطيل backdrop-filter (يطرد طبقات GPU على iOS عند السكرول) على glass
-           الأب وكل backdrop-blur، وإخفاء البلور الثقيل. يسري على صفحة الحجز فقط. */
         @media (hover:none),(pointer:coarse),(max-width:820px){
           .glass,.spotlight{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
           .glass{background:rgba(10,11,12,0.92)!important;}

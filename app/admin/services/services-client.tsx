@@ -183,9 +183,9 @@ export default function ServicesClient({ initial, categories, sizes, partners, l
     const cats = categories.filter((c) => cat === 0 || c.id === cat);
     const sizeCodes = (sizes.length ? sizes : SIZE_ORDER.map((c) => ({ code: c, label: c })));
 
-    const groups: PriceGroup[] = cats.map((c) => {
+        const groups: PriceGroup[] = cats.map((c) => {
       const rows = list
-        .filter((s) => s.categoryId === c.id)
+        .filter((s) => s.categoryId === c.id && s.active)
         .map((s) => {
           const cells: Record<string, { price: number; old?: number; commission?: number }> = {};
           for (const sz of sizeCodes) {

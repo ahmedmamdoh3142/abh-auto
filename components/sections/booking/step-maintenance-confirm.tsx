@@ -29,7 +29,7 @@ export function StepMaintenanceConfirm({
   return (
     <div>
       <div className="mb-4 flex items-center gap-3.5">
-        <span className="font-display text-base text-platinum tabular-nums">04</span>
+        <span className="font-display text-base text-platinum tabular-nums">03</span>
         <span className="h-px w-8 bg-platinum/40" />
         <span className="text-[0.55rem] uppercase tracking-[0.3em] text-steel">{isAr ? 'مراجعة الطلب' : 'Review'}</span>
       </div>
