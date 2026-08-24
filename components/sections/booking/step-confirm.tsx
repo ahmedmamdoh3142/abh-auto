@@ -9,6 +9,7 @@
  * بالضغط على رابط «الشروط والأحكام» يفتح مودال (كونتينر) بنص السياسة كاملًا.
  */
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { useTranslations } from 'next-intl';
 import { Car, Wrench, UserRound, MapPin, Check, ChevronDown, ShieldCheck, Tag, X, Loader2, Gift, Sparkles, CreditCard } from 'lucide-react';
@@ -390,7 +391,22 @@ function TermsConsent({ isAr, checked, onChange, onOpen }: {
 }
 
 function TermsModal({ isAr, onClose, onAgree }: { isAr: boolean; onClose: () => void; onAgree: () => void }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }}
@@ -412,7 +428,8 @@ function TermsModal({ isAr, onClose, onAgree }: { isAr: boolean; onClose: () => 
           <button onClick={onAgree} data-cursor="hover"><PrimaryPill full>{isAr ? 'أوافق ومتابعة' : 'I Agree & Continue'}</PrimaryPill></button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 }
 
