@@ -226,35 +226,38 @@ function InquiryModal({ m, isAr, T, fmtDate, fmtDateShort, onClose, onStatus, on
   const refId = m.id.replace(/-/g, "").slice(0, 8).toUpperCase();
   const currentIdx = STATUS_ORDER.indexOf(m.status);
 
+  const contactRows = [
+    { label: T("الإيميل", "Email"), value: m.email || "—" },
+    { label: T("الموبايل", "Phone"), value: m.phone || "—" },
+  ];
+  const detailRows = [
+    { label: T("الغرض", "Intent"), value: m.intent || "—" },
+    { label: T("السيارة", "Vehicle"), value: m.vehicle || "—" },
+    { label: T("تاريخ الإرسال", "Received"), value: fmtDate(m.createdAt) },
+    { label: T("لغة الرسالة", "Message language"), value: m.msgLocale === "en" ? "English" : "عربي" },
+    { label: T("الموافقة على التواصل", "Consent to contact"), value: m.consent ? T("موافق", "Given") : T("غير موافق", "Not given") },
+    { label: T("الرقم المرجعي", "Reference"), value: `#${refId}` },
+  ];
+
   return (
     <Modal title={m.name} onClose={onClose} wide>
       <div className="abh-col" style={{ gap: 22 }}>
-        {/* ترويسة: الاسم، الحالة، الرقم المرجعي، تاريخ الإرسال */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, paddingBottom: 18, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ display: "grid", placeItems: "center", height: 44, width: 44, borderRadius: 999, flexShrink: 0, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02))" }}>
-              <span className="abh-display" style={{ fontSize: 17, color: "var(--abh-platinum)" }}>{(m.name || "?")[0]?.toUpperCase()}</span>
-            </span>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 15.5, color: "var(--abh-ivory)", fontWeight: 600 }}>{m.name}</span>
-                <Chip tone={sm.tone}>{isAr ? sm.ar : sm.en}</Chip>
-              </div>
-              <div style={{ fontSize: 11, color: "var(--abh-steel)", marginTop: 2, direction: "ltr", textAlign: isAr ? "right" : "left" }}>
-                #{refId} · {fmtDate(m.createdAt)}
-              </div>
-            </div>
-          </div>
+        {/* حالة الاستفسار */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 18, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <Chip tone={sm.tone}>{isAr ? sm.ar : sm.en}</Chip>
+          <span style={{ fontSize: 11, color: "var(--abh-steel)" }}>#{refId} · {fmtDate(m.createdAt)}</span>
         </div>
 
         {/* بيانات التواصل */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16 }}>
-          <InfoRow label={T("الإيميل", "Email")} value={m.email || "—"} />
-          <InfoRow label={T("الموبايل", "Phone")} value={m.phone || "—"} />
-          <InfoRow label={T("الغرض", "Intent")} value={m.intent || "—"} />
-          <InfoRow label={T("السيارة", "Vehicle")} value={m.vehicle || "—"} />
-          <InfoRow label={T("لغة الرسالة", "Message language")} value={m.msgLocale === "en" ? "English" : "عربي"} />
-          <InfoRow label={T("الموافقة على التواصل", "Consent to contact")} value={m.consent ? T("موافق", "Given") : T("غير موافق", "Not given")} />
+        <div>
+          <SectionLabel>{T("بيانات التواصل", "Contact information")}</SectionLabel>
+          <DetailCard rows={contactRows} />
+        </div>
+
+        {/* تفاصيل الطلب */}
+        <div>
+          <SectionLabel>{T("تفاصيل الطلب", "Request details")}</SectionLabel>
+          <DetailCard rows={detailRows} />
         </div>
 
         {/* الرسالة */}
@@ -350,11 +353,16 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--abh-platinum)", marginBottom: 10 }}>{children}</div>;
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+/* كارت تفاصيل بصفوف label/value ثابتة المحاذاة — بديل الـ grid عشان القيمة تفضل دايمًا جنب عنوانها */
+function DetailCard({ rows }: { rows: { label: string; value: string }[] }) {
   return (
-    <div>
-      <div style={{ fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--abh-steel)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 13, color: "var(--abh-ivory)" }} dir="auto">{value}</div>
+    <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.02)", overflow: "hidden" }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "11px 16px", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,.06)" }}>
+          <span style={{ fontSize: 12, color: "var(--abh-steel)", flexShrink: 0 }}>{r.label}</span>
+          <span style={{ fontSize: 13, color: "var(--abh-ivory)", textAlign: "end", direction: "ltr" }} dir="auto">{r.value}</span>
+        </div>
+      ))}
     </div>
   );
 }
