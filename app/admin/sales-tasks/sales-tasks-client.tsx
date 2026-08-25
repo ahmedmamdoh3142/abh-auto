@@ -89,6 +89,7 @@ const carIco = (s = 13) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="
 const staleIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>);
 const userIco = (s = 11) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 const reportIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>);
+const xlsIco = (s = 14) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="m9 12 6 6"/><path d="m15 12-6 6"/></svg>);
 const calIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>);
 const chatIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
 const noteIco = (s = 12) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M9 3a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2"/><path d="M8 12h8M8 16h5"/></svg>);
@@ -150,8 +151,9 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
   const [followUpCancelTask, setFollowUpCancelTask] = useState<Task | null>(null);
 
 // (جديد) نطاق تقرير إعادة الاستهداف — يصدّر بناءً على القائمة المعروضة حاليًا (بعد أي فلاتر)
-  const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
+    const [reportScope, setReportScope] = useState<"all" | "hot_warm" | "hot">("all");
   const [detailedExporting, setDetailedExporting] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
 
   // withStage=true لتحميل الليست المعروضة (بتتفلتر بالمرحلة).
   // withStage=false لحساب الأرقام والإحصائيات — البحث/المصدر/التاريخ بيفضلوا شغالين، المرحلة نفسها لأ،
@@ -254,7 +256,7 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
     });
   };
 
-  // (جديد) تقرير PDF تفصيلي كامل — كل التاسكات المعروضة حاليًا بكل بياناتها وكل الكومنتات
+    // (جديد) تقرير PDF تفصيلي كامل — كل التاسكات المعروضة حاليًا بكل بياناتها وكل الكومنتات
   const exportDetailedReport = async () => {
     if (detailedExporting) return;
     setDetailedExporting(true);
@@ -272,6 +274,72 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
       toast(T("فشل تجهيز التقرير التفصيلي", "Failed to prepare detailed report"), "bad");
     } finally {
       setDetailedExporting(false);
+    }
+  };
+
+  // (جديد) تصدير Excel (CSV) — نفس بيانات التقرير التفصيلي، كل التاسكات المعروضة حاليًا بعد الفلاتر
+  const exportExcel = async () => {
+    if (excelExporting) return;
+    setExcelExporting(true);
+    try {
+      const params = buildParams(true);
+      const j = await fetch(`/api/admin/sales-tasks/full-export?${params}`).then((r) => r.json());
+      if (!j?.ok) throw new Error();
+
+      const head = [
+        "customerName", "customerPhone", "customerEmail", "customerCity",
+        "quality", "stage", "priceObjection",
+        "leadSource", "vehicleBrand", "vehicleModel", "vehicleSize",
+        "services", "initialNote",
+        "assignedName", "createdName", "createdAt", "updatedAt",
+        "closeResult", "closeReason", "closeNote", "closedAt",
+        "followUpDate", "followUpNote", "followUpCancelledAt", "followUpCancelReason",
+        "notesCount", "notesDetail",
+      ];
+
+      const closeResultLabel = (r: string | null) =>
+        r === "won" ? T("محجوز", "Won") : r === "lost" ? T("مرفوض", "Lost") : "";
+
+      const rows = (j.tasks as any[]).map((t) => {
+        const stageMeta = STAGE_META[t.stage as Stage];
+        const qMeta = t.quality ? QUALITY_META[t.quality] : null;
+        const srcMeta = t.leadSource ? LEAD_SOURCE_META[t.leadSource] : null;
+        const sizeMeta = t.vehicleSize ? SIZE_META[t.vehicleSize as VehicleSize] : null;
+        const reasonMeta = t.closeReason ? LOST_REASONS.find((r) => r.code === t.closeReason) : null;
+        const notesDetail = (t.notes || [])
+          .map((n: any) => `${n.authorName}: ${n.body}`.replace(/\n/g, " "))
+          .join(" || ");
+
+        return [
+          t.customerName, t.customerPhone, t.customerEmail || "", t.customerCity || "",
+          qMeta ? (isAr ? qMeta.ar : qMeta.en) : "",
+          stageMeta ? (isAr ? stageMeta.ar : stageMeta.en) : t.stage,
+          t.priceObjection ? T("نعم", "Yes") : T("لا", "No"),
+          srcMeta ? (isAr ? srcMeta.ar : srcMeta.en) : "",
+          t.vehicleBrandName || "", t.vehicleModel || "",
+          sizeMeta ? (isAr ? sizeMeta.ar : sizeMeta.en) : "",
+          (t.services || []).map((s: any) => s.name).join(" | "),
+          t.initialNote || "",
+          t.assignedName || "", t.createdName || "", t.createdAt || "", t.updatedAt || "",
+          closeResultLabel(t.closeResult),
+          reasonMeta ? (isAr ? reasonMeta.ar : reasonMeta.en) : (t.closeReason || ""),
+          t.closeNote || "", t.closedAt || "",
+          t.followUpDate || "", t.followUpNote || "", t.followUpCancelledAt || "", t.followUpCancelReason || "",
+          (t.notes || []).length, notesDetail,
+        ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
+      });
+
+      const csv = "\uFEFF" + [head.join(","), ...rows].join("\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `abh-sales-tasks-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast(T("فشل تصدير Excel", "Failed to export Excel"), "bad");
+    } finally {
+      setExcelExporting(false);
     }
   };
 
@@ -315,9 +383,12 @@ export default function SalesTasksClient({ locale, services, brands, staff, curr
               <option value="hot_warm" style={{ background: "#0c0d0e" }}>{T("مستعدين + مهتمين", "Hot + warm")}</option>
               <option value="hot" style={{ background: "#0c0d0e" }}>{T("مستعدين للشراء فقط", "Hot only")}</option>
             </select>
-            <Ghost icon={() => reportIco(15)} onClick={exportReport}>{T("تقرير الاستهداف PDF", "Retargeting PDF")}</Ghost>
+                        <Ghost icon={() => reportIco(15)} onClick={exportReport}>{T("تقرير الاستهداف PDF", "Retargeting PDF")}</Ghost>
             <Ghost icon={() => reportIco(15)} onClick={exportDetailedReport}>
               {detailedExporting ? T("جارٍ التجهيز…", "Preparing…") : T("تقرير تفصيلي PDF", "Detailed PDF")}
+            </Ghost>
+            <Ghost icon={() => xlsIco(15)} onClick={exportExcel}>
+              {excelExporting ? T("جارٍ التصدير…", "Exporting…") : T("تصدير Excel", "Export Excel")}
             </Ghost>
             <span style={{ position: "relative" }}>
               <button onClick={() => setFollowUpMode((v) => !v)}
