@@ -207,12 +207,17 @@ export async function PATCH(request: Request) {
   if (requested > remaining + 0.01) return bad("amount_exceeds_remaining");
   const note = b.note ? String(b.note).trim().slice(0, 300) : null;
 
-  let result;
+    let result;
   try {
     result = await recordPayment({ bookingId: id, amount: requested, method, note, receivedBy: admin.id });
   } catch (e: any) {
     return bad(e?.message || "payment_failed");
   }
+
+  // (إصلاح) تأكيد استخدام الكود المرتبط بالحجز دلوقتي — قبل كده الدالة دي
+  // كانت مستوردة بس مش متنادية هنا، فأي كود (خصوصًا كود عجلة الحظ max_uses=1)
+  // كان يفضل «معلّق» للأبد ومينفعش نمنع استخدامه تاني حتى بعد تأكيد الدفع فعليًا.
+  await confirmRedemptionForBooking(id).catch((e) => console.error("confirmRedemptionForBooking failed:", e));
 
   const rows = await query<any>(
     `SELECT status, stage, total, manual_discount_kind, manual_discount_value, manual_discount_amount, manual_discount_reason

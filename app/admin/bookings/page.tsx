@@ -52,7 +52,7 @@ export default async function BookingsPage() {
             u.role AS account_role,
             pt.company_name AS via_partner_company,
             -- العناصر + علم «هدية» (لو الخدمة موجودة في booking_bundle_gifts لنفس الحجز)
-            COALESCE((
+                        COALESCE((
               SELECT json_agg(json_build_object(
                        'name', bi.name_snapshot,
                        'slug', bi.service_slug,
@@ -61,6 +61,16 @@ export default async function BookingsPage() {
                          SELECT 1 FROM booking_bundle_gifts g
                          WHERE g.booking_id = bi.booking_id
                            AND g.gift_service_id = bi.service_id
+                       ),
+                       -- (جديد) الهدية دي جاية من كود خصم (gift_service) مش من
+                       -- عرض بندل تلقائي — نميّزها بـ bundle_id IS NULL، لأن
+                       -- هدية كود الخصم بتتسجّل في booking_bundle_gifts بـ
+                       -- bundle_id = NULL (راجع app/api/booking/route.ts).
+                       'giftFromPromo', EXISTS (
+                         SELECT 1 FROM booking_bundle_gifts g
+                         WHERE g.booking_id = bi.booking_id
+                           AND g.gift_service_id = bi.service_id
+                           AND g.bundle_id IS NULL
                        ),
                        'warrantyMonths', bi.warranty_months,
                        'warrantyKmLimit', bi.warranty_km_limit,
@@ -176,14 +186,17 @@ payments: (Array.isArray(b.payments) ? b.payments : []).map((p: any) => ({
       name: pick(r.name, locale) || "",
       rollNo: r.rollNo || "",
     })).filter((r: any) => r.rollNo),
-   services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
+      services: (Array.isArray(b.items) ? b.items : []).map((it: any) => ({
       name: pick(it.name, locale) || it.slug || "",
       price: Number(it.price) || 0,
       isGift: !!it.isGift,
+      // (جديد) الهدية دي طالعة من كود خصم — تُستخدم في الواجهة لعرض الكود
+      // جنب اسم الخدمة المجانية.
+      giftFromPromo: !!it.giftFromPromo,
       warrantyMonths: it.warrantyMonths != null ? Number(it.warrantyMonths) : null,
       warrantyKmLimit: it.warrantyKmLimit != null ? Number(it.warrantyKmLimit) : null,
       warrantyExpiresAt: it.warrantyExpiresAt ? new Date(it.warrantyExpiresAt).toISOString() : null,
-    })).filter((s: any) => s.name), 
+    })).filter((s: any) => s.name),
   }));
 
   return <BookingsClient initial={bookings} locale={locale} isSuperAdmin={admin.isSuperAdmin} />;

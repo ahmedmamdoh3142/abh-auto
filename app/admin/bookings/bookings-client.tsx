@@ -339,10 +339,14 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, gridColumn: "1 / -1" }}><Ic.pin s={12} />{b.branch} · {b.time}</span>
         </div>
 
-        {b.services?.some((s: any) => s.isGift) && (
+                {b.services?.some((s: any) => s.isGift) && (
           <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 5 }}>
             {b.services.filter((s: any) => s.isGift).slice(0, 2).map((s: any, j: number) => (
-              <span key={j} style={giftChipStyle()}>{I.gift(10)}{s.name}</span>
+              <span key={j} style={giftChipStyle()}>
+                {I.gift(10)}{s.name}
+                {/* (جديد) لو الهدية دي طالعة من كود خصم، نبيّن الكود جنبها */}
+                {s.giftFromPromo && b.promoCode ? <span dir="ltr" style={{ opacity: .75 }}>· {b.promoCode}</span> : null}
+              </span>
             ))}
           </div>
         )}
@@ -821,13 +825,21 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
               {b.services.length > 0 && (
                 <>
                   <SectionLabel>{Ic.sparkle({ s: 13 })} {T("الخدمات", "Services")}</SectionLabel>
-                  <div className="abh-col" style={{ gap: 8 }}>
+                                    <div className="abh-col" style={{ gap: 8 }}>
                     {b.services.map((s: any, idx: number) => (
                       <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 14, border: `1px solid ${s.isGift ? "rgba(217,178,95,.35)" : "rgba(255,255,255,.07)"}`, background: s.isGift ? "rgba(217,178,95,.06)" : "rgba(255,255,255,.02)", padding: "12px 15px" }}>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>
-                          {s.isGift ? <span style={{ color: GIFT_GOLD, display: "inline-flex" }}>{I.gift(14)}</span> : Ic.sparkle({ s: 14 })}
-                          {s.name}
-                          {s.isGift && <span style={{ borderRadius: 999, padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.4)", letterSpacing: ".04em" }}>{T("هدية", "Gift")}</span>}
+                        <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 14, color: "var(--abh-ivory)" }}>
+                            {s.isGift ? <span style={{ color: GIFT_GOLD, display: "inline-flex" }}>{I.gift(14)}</span> : Ic.sparkle({ s: 14 })}
+                            {s.name}
+                            {s.isGift && <span style={{ borderRadius: 999, padding: "2px 8px", fontSize: 9.5, color: GIFT_GOLD, background: "rgba(217,178,95,.12)", border: "1px solid rgba(217,178,95,.4)", letterSpacing: ".04em" }}>{T("هدية", "Gift")}</span>}
+                          </span>
+                          {/* (جديد) لو الهدية دي جاية من كود خصم، نوريه صراحةً هنا */}
+                          {s.isGift && s.giftFromPromo && b.promoCode && (
+                            <span dir="ltr" style={{ fontSize: 10.5, color: "var(--abh-steel)" }}>
+                              {T("بالكود", "via code")}: <span className="abh-num" style={{ color: GIFT_GOLD }}>{b.promoCode}</span>
+                            </span>
+                          )}
                         </span>
                         <span dir="ltr" className="abh-num" style={{ fontSize: 14, color: s.isGift ? GIFT_GOLD : "var(--abh-platinum)" }}>
                           {s.isGift && s.price === 0 ? T("مجانية", "Free") : (s.price > 0 ? `${EGP(s.price)} ${ccy}` : T("حسب الطلب", "On request"))}

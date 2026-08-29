@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { decryptFinalResponse, verifyResponseSignature, ALINMA_STATUS } from "@/lib/alinmapay";
 import { query } from "@/lib/db";
 import { recordPayment } from "@/lib/payments";
+import { confirmRedemptionForBooking } from "@/lib/promo";
 
 export async function POST(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -119,10 +120,11 @@ export async function POST(request: Request) {
     ).catch(() => {});
   }
 
-  await query(
-    `UPDATE promo_redemptions SET paid_at = now() WHERE booking_id = $1 AND paid_at IS NULL`,
-    [booking.id]
-  ).catch((e) => console.error("promo_redemptions update failed:", e));
+    // (إصلاح) بدل ما نحدّث paid_at بس يدويًا، بننادي confirmRedemptionForBooking
+  // اللي بتحدّث paid_at وكمان تزوّد used_count على promo_codes — ده اللي كان
+  // ناقص هنا وخلّى كود عجلة الحظ (max_uses=1) قابل للاستخدام من غير حد حتى مع
+  // الدفع الناجح أونلاين.
+  await confirmRedemptionForBooking(booking.id).catch((e) => console.error("confirmRedemptionForBooking failed:", e));
 
   await query(
     `INSERT INTO work_order_events (booking_id, event, meta)

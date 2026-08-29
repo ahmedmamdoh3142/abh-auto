@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { query } from "@/lib/db";
 import { ALINMA_STATUS } from "@/lib/alinmapay";
 import { recordPayment } from "@/lib/payments";
+import { confirmRedemptionForBooking } from "@/lib/promo";
 
 const MERCHANT_KEY = process.env.ALINMA_MERCHANT_KEY!;
 
@@ -108,10 +109,9 @@ export async function POST(request: Request) {
     ).catch(() => {});
   }
 
-  await query(
-    `UPDATE promo_redemptions SET paid_at = now() WHERE booking_id = $1 AND paid_at IS NULL`,
-    [booking.id]
-  ).catch((e) => console.error("promo_redemptions update failed:", e));
+    // (إصلاح) نفس إصلاح الـcallback — نستخدم confirmRedemptionForBooking عشان
+  // used_count يتحدّث فعليًا مش paid_at بس.
+  await confirmRedemptionForBooking(booking.id).catch((e) => console.error("confirmRedemptionForBooking failed:", e));
 
   await query(
     `INSERT INTO work_order_events (booking_id, event, meta) VALUES ($1, 'gateway_webhook_success', $2)`,
