@@ -1606,7 +1606,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(330px,1fr))", gap: mobile ? 14 : 18 }}>
           {filtered.map((b, i) => (
-            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} onDiscount={setDiscountId} />
+            <BookingCard key={b.id} b={b} i={i} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} onReceive={goReceive} onWorkOrder={goWorkOrder} onReport={goReport} onConfirmPay={openConfirmPay} onPrint={printInvoice} onPrintWarranty={printWarranty} onFollowUp={setFollowupId} onGenLink={genPaymentLink} linkBusy={linkBusyId === b.id} onDiscount={setDiscountId} />
           ))}
         </div>
       ) : (
@@ -1614,7 +1614,7 @@ async function addFollowupNote(id: string, channel: string, note: string) {
           {filtered.map((b, i) => <BookingRow key={b.id} b={b} i={i} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onOpen={setDetailId} />)}
         </div>
       )}
-      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onCall={call} onWhats={whats} onPrint={printInvoice} onPrintWarranty={printWarranty} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} onDiscount={() => setDiscountId(detail.id)} isSuperAdmin={isSuperAdmin} onOpenDanger={() => setDangerZoneId(detail.id)} />}
+      {detail && <DetailModal b={detail} busy={busy} isAr={isAr} ccy={ccy} fmtDate={fmtDate} onClose={() => setDetailId(null)} onMutate={mutate} onPrint={printInvoice} onPrintWarranty={printWarranty} onConfirmPay={openConfirmPay} onGenLink={genPaymentLink} linkBusy={linkBusyId === detail.id} onDiscount={() => setDiscountId(detail.id)} isSuperAdmin={isSuperAdmin} onOpenDanger={() => setDangerZoneId(detail.id)} />}
       {confirmPayBooking && (
   <RecordPaymentModal b={confirmPayBooking} busy={busy} isAr={isAr} ccy={ccy}
     onClose={() => setConfirmPayId(null)} onConfirm={confirmPayment} />
