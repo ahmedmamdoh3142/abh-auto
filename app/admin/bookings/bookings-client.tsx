@@ -411,8 +411,6 @@ function BookingCard({ b, i, busy, isAr, ccy, fmtDate, onOpen, onReceive, onWork
             <span style={{ position: "absolute", top: -3, insetInlineEnd: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: followupColor, color: "#0b0c0e", fontSize: 8.5, fontWeight: 700, display: "grid", placeItems: "center", border: "1.5px solid #0b0c0e" }}>{b.followups.length}</span>
           )}
         </span>
-        {b.phone && <button onClick={(e) => stop(e, () => onWhats(b.phone))} style={qIcon("#25D366")} title="WhatsApp">{I.whats(14)}</button>}
-        {b.phone && <button onClick={(e) => stop(e, () => onCall(b.phone))} style={qIcon()} title={isAr ? "اتصال" : "Call"}>{I.phone(13)}</button>}
       </div>
     </div>
   );
@@ -434,7 +432,6 @@ function BookingRow({ b, i, isAr, ccy, fmtDate, onOpen }: any) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, color: "var(--abh-platinum)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.customer}</div>
-        {b.phone && <div dir="ltr" style={{ fontSize: 11, color: "var(--abh-steel)" }}>{b.phone}</div>}
       </div>
       <div style={{ fontSize: 12, color: "var(--abh-platinum)" }}>{fmtDate(b.date)}<div style={{ fontSize: 11, color: "var(--abh-steel)" }}>{b.time} · {b.branch}</div></div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
@@ -800,16 +797,9 @@ function DetailModal({ b, busy, isAr, ccy, fmtDate, onClose, onMutate, onCall, o
               <SectionLabel>{I.user(13)} {T("بيانات العميل", "Customer")}</SectionLabel>
               <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginBottom: 16 }}>
                 <InfoTile isAr={isAr} icon={I.user(14)} label={T("الاسم", "Name")} value={b.customer} />
-                <InfoTile isAr={isAr} icon={I.phone(14)} label={T("التليفون", "Phone")} value={b.phone || "—"} ltr href={b.phone ? `tel:${b.phone}` : undefined} />
                 <InfoTile isAr={isAr} icon={I.mail(14)} label={T("الإيميل", "Email")} value={b.email || "—"} ltr href={b.email ? `mailto:${b.email}` : undefined} />
                 <InfoTile isAr={isAr} icon={I.city(14)} label={T("المدينة", "City")} value={b.city || "—"} />
               </div>
-              {b.phone && (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Ghost sm icon={() => I.whats(14)} onClick={() => onWhats(b.phone)}>WhatsApp</Ghost>
-                  <Ghost sm icon={() => I.phone(14)} onClick={() => onCall(b.phone)}>{T("اتصال", "Call")}</Ghost>
-                </div>
-              )}
             </div>
           )}
 
@@ -1440,8 +1430,6 @@ async function addFollowupNote(id: string, channel: string, note: string) {
     finally { setBusy(false); }
   }
 
-  const call = (phone: string) => { window.location.href = `tel:${phone}`; };
-  const whats = (phone: string) => { const p = String(phone).replace(/[^\d]/g, ""); window.open(`https://wa.me/${p}`, "_blank"); };
 
   const printInvoice = (b: any, size: "a4" | "receipt" = "a4") => {
     try {
